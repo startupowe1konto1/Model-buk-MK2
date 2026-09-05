@@ -1,0 +1,275 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Odds Snapshotter — workflow",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy",
+        "label": "Sciezka glowna",
+        "focus": [
+          "plan",
+          "due",
+          "gate",
+          "fetch",
+          "settle",
+          "pairs"
+        ],
+        "note": "Od harmonogramu do gotowej pary cena-wynik."
+      },
+      {
+        "id": "budget",
+        "label": "Bramka budzetowa",
+        "focus": [
+          "due",
+          "gate",
+          "skip"
+        ],
+        "note": "Limit 100 req/dzien zatrzymuje pobieranie i zapisuje powod."
+      },
+      {
+        "id": "storage",
+        "label": "Magazyn",
+        "focus": [
+          "queue",
+          "raw",
+          "pairs"
+        ],
+        "note": "Append-only surowe payloady plus manifest."
+      }
+    ],
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "backend": {
+          "label": "Krok pipeline"
+        },
+        "security": {
+          "label": "Bramka budzetowa"
+        },
+        "messagebus": {
+          "label": "Wywolanie API"
+        },
+        "database": {
+          "label": "Magazyn"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "work",
+      "label": "Pobieranie"
+    },
+    {
+      "id": "budget",
+      "label": "Bramka budzetowa",
+      "variant": "exception"
+    },
+    {
+      "id": "store",
+      "label": "Magazyn"
+    }
+  ],
+  "phases": [
+    {
+      "id": "planning",
+      "label": "Planowanie",
+      "fromCol": 0,
+      "toCol": 0
+    },
+    {
+      "id": "capture",
+      "label": "Zdjecia kursow",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "closing",
+      "label": "Domkniecie petli",
+      "fromCol": 3,
+      "toCol": 4
+    }
+  ],
+  "mainPath": [
+    "plan",
+    "due",
+    "gate",
+    "fetch",
+    "settle",
+    "pairs"
+  ],
+  "nodes": [
+    {
+      "id": "plan",
+      "lane": "work",
+      "col": 0,
+      "type": "backend",
+      "label": "Plan zdjec",
+      "sublabel": "GH Actions 1h",
+      "width": 140
+    },
+    {
+      "id": "queue",
+      "lane": "store",
+      "col": 0,
+      "type": "database",
+      "label": "Kolejka",
+      "sublabel": "T-48/24/6/1h",
+      "width": 140
+    },
+    {
+      "id": "due",
+      "lane": "work",
+      "col": 1,
+      "type": "backend",
+      "label": "Co wymagalne",
+      "sublabel": "ostatnia godzina",
+      "width": 140
+    },
+    {
+      "id": "gate",
+      "lane": "budget",
+      "col": 1,
+      "type": "security",
+      "label": "Bramka budzetu",
+      "sublabel": "limit 100/dzien",
+      "width": 140
+    },
+    {
+      "id": "fetch",
+      "lane": "work",
+      "col": 2,
+      "type": "messagebus",
+      "label": "GET /odds",
+      "sublabel": "6 bookow",
+      "width": 140
+    },
+    {
+      "id": "skip",
+      "lane": "budget",
+      "col": 2,
+      "type": "security",
+      "label": "NO CAPTURE",
+      "sublabel": "powod zapisany",
+      "width": 140
+    },
+    {
+      "id": "raw",
+      "lane": "store",
+      "col": 3,
+      "type": "database",
+      "label": "Surowe .json.gz",
+      "sublabel": "append-only",
+      "width": 140
+    },
+    {
+      "id": "settle",
+      "lane": "work",
+      "col": 3,
+      "type": "backend",
+      "label": "Domkniecie",
+      "sublabel": "wynik + staty",
+      "width": 140
+    },
+    {
+      "id": "pairs",
+      "lane": "store",
+      "col": 4,
+      "type": "database",
+      "label": "Para cena-wynik",
+      "sublabel": "do backtestu",
+      "width": 140
+    }
+  ],
+  "edges": [
+    {
+      "id": "e2",
+      "from": "plan",
+      "to": "queue",
+      "label": "zapis planu",
+      "role": "branch"
+    },
+    {
+      "id": "e3",
+      "from": "plan",
+      "to": "due",
+      "role": "main"
+    },
+    {
+      "id": "e4",
+      "from": "due",
+      "to": "gate",
+      "label": "ile zostalo",
+      "role": "main"
+    },
+    {
+      "id": "e5",
+      "from": "gate",
+      "to": "fetch",
+      "label": "w limicie",
+      "role": "main"
+    },
+    {
+      "id": "e6",
+      "from": "gate",
+      "to": "skip",
+      "label": "limit wyczerpany",
+      "role": "error"
+    },
+    {
+      "id": "e7",
+      "from": "fetch",
+      "to": "raw",
+      "label": "surowy payload",
+      "role": "branch"
+    },
+    {
+      "id": "e8",
+      "from": "fetch",
+      "to": "settle",
+      "label": "po kickoffie",
+      "role": "main"
+    },
+    {
+      "id": "e9",
+      "from": "settle",
+      "to": "pairs",
+      "label": "wynik meczu",
+      "role": "main"
+    },
+    {
+      "id": "e10",
+      "from": "raw",
+      "to": "pairs",
+      "label": "join fixture_id",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Budzet",
+      "items": [
+        "3 planowanie + ~40 zdjecia + ~10 domkniecie = ~53 ze 100 req/dzien; przy wyczerpaniu priorytet ma T-1h"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Zapis",
+      "items": [
+        "Append-only, zero transformacji, dedupe po hashu. Pusta odpowiedz tez sie zapisuje - brak rynku to fakt"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Dlaczego pilne",
+      "items": [
+        "Zbiera wylacznie do przodu: 686 meczow x 4 zdjecia = ~10,5 mln kursow po sezonie. Historii nie da sie odzyskac"
+      ]
+    }
+  ]
+}

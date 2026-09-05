@@ -1,0 +1,393 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Model Buk — Value Engine Architecture",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1380,
+      540
+    ],
+    "views": [
+      {
+        "id": "acquisition",
+        "label": "Acquisition",
+        "focus": [
+          "providers",
+          "books",
+          "snapshotter",
+          "landing",
+          "canonical"
+        ],
+        "note": "How raw data enters and becomes replayable, on a clock independent of prediction."
+      },
+      {
+        "id": "reproducibility",
+        "label": "Reproducibility spine",
+        "focus": [
+          "pit",
+          "features",
+          "models",
+          "evaluation"
+        ],
+        "note": "Everything downstream reads as_of(t); backtest and production share one code path."
+      },
+      {
+        "id": "funnel",
+        "label": "Cost funnel and decision",
+        "focus": [
+          "scanner",
+          "gate",
+          "frozen"
+        ],
+        "note": "Tiered narrowing under a budget cap, ending in an immutable BET / NO BET record."
+      },
+      {
+        "id": "product",
+        "label": "Product surface",
+        "focus": [
+          "frozen",
+          "serving",
+          "evaluation"
+        ],
+        "note": "The frozen register is both the anti-hindsight control and the public credibility layer."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "providers",
+      "type": "external",
+      "label": "Data Providers",
+      "sublabel": "stats · odds",
+      "pos": [
+        60,
+        36
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "books",
+      "type": "external",
+      "label": "Bookmaker Sites",
+      "sublabel": "prop odds",
+      "pos": [
+        60,
+        172
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "ToS risk"
+    },
+    {
+      "id": "snapshotter",
+      "type": "backend",
+      "label": "Odds Snapshotter",
+      "sublabel": "1h → 5m clock",
+      "pos": [
+        330,
+        104
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "landing",
+      "type": "database",
+      "label": "Raw Landing Zone",
+      "sublabel": "append-only",
+      "pos": [
+        600,
+        104
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "canonical",
+      "type": "backend",
+      "label": "Canonical Entities",
+      "sublabel": "teams · markets",
+      "pos": [
+        870,
+        104
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "pit",
+      "type": "database",
+      "label": "Point-in-Time Store",
+      "sublabel": "bitemporal",
+      "pos": [
+        1140,
+        104
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "features",
+      "type": "backend",
+      "label": "Feature Engine",
+      "sublabel": "C0 · C2 tiers",
+      "pos": [
+        1140,
+        268
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "models",
+      "type": "backend",
+      "label": "Model Layer",
+      "sublabel": "3 families",
+      "pos": [
+        870,
+        268
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "scanner",
+      "type": "backend",
+      "label": "Cost-Aware Scanner",
+      "sublabel": "Tier 0 → 3",
+      "pos": [
+        600,
+        268
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "Decision Gate",
+      "sublabel": "edge · net EV",
+      "pos": [
+        330,
+        268
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "frozen",
+      "type": "database",
+      "label": "Frozen Predictions",
+      "sublabel": "write-once",
+      "pos": [
+        330,
+        428
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "serving",
+      "type": "frontend",
+      "label": "Product Surface",
+      "sublabel": "on-demand · feed",
+      "pos": [
+        60,
+        428
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "evaluation",
+      "type": "backend",
+      "label": "Evaluation",
+      "sublabel": "walk-forward",
+      "pos": [
+        870,
+        428
+      ],
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "as_of(t) reads only",
+      "wraps": [
+        "pit"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Reproducible core · versioned artifacts",
+      "wraps": [
+        "features",
+        "models",
+        "evaluation"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "providers-capture",
+      "from": "providers",
+      "to": "snapshotter",
+      "label": "feeds"
+    },
+    {
+      "id": "books-scrape",
+      "from": "books",
+      "to": "snapshotter",
+      "label": "scraped",
+      "variant": "security"
+    },
+    {
+      "id": "capture-landing",
+      "from": "snapshotter",
+      "to": "landing",
+      "label": "raw + meta",
+      "variant": "emphasis"
+    },
+    {
+      "id": "landing-canonical",
+      "from": "landing",
+      "to": "canonical",
+      "label": "replay"
+    },
+    {
+      "id": "canonical-pit",
+      "from": "canonical",
+      "to": "pit",
+      "label": "facts"
+    },
+    {
+      "id": "pit-features",
+      "from": "pit",
+      "to": "features",
+      "label": "as_of(t)",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "features-models",
+      "from": "features",
+      "to": "models",
+      "label": "vectors"
+    },
+    {
+      "id": "models-scanner",
+      "from": "models",
+      "to": "scanner",
+      "label": "calibrated p"
+    },
+    {
+      "id": "scanner-gate",
+      "from": "scanner",
+      "to": "gate",
+      "label": "shortlist"
+    },
+    {
+      "id": "scanner-enrich",
+      "from": "scanner",
+      "to": "snapshotter",
+      "label": "Tier 2/3 fetch",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "gate-frozen",
+      "from": "gate",
+      "to": "frozen",
+      "label": "BET / NO BET / NO PREDICTION",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "frozen-serving",
+      "from": "frozen",
+      "to": "serving",
+      "label": "receipts"
+    },
+    {
+      "id": "frozen-eval",
+      "from": "frozen",
+      "to": "evaluation",
+      "label": "settlement"
+    },
+    {
+      "id": "eval-models",
+      "from": "evaluation",
+      "to": "models",
+      "label": "keep / remove",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Acquisition runs on its own clock",
+      "items": [
+        "The snapshotter never blocks on the model — odds capture is the compounding asset"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Reproducibility is enforced, not documented",
+      "items": [
+        "as_of(t) is the only read; backtest and production share one feature code path"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Cost funnel",
+      "items": [
+        "Tier 0 scans the universe from cache; budget exhaustion returns NO PREDICTION"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Economics live in the gate",
+      "items": [
+        "Net EV = p x o x (1 - tax) - 1, against the best reachable price, under stake limits"
+      ]
+    }
+  ]
+}
