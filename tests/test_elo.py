@@ -58,11 +58,18 @@ class TestNoLeakage(unittest.TestCase):
     """Rdzen dyscypliny z [[11 - Czas predykcji i leakage]]: predykcja dla meczu
     nie moze zalezec od jego wyniku ani od zadnego pozniejszego meczu."""
 
-    def test_first_ever_match_is_predicted_from_default_ratings(self):
+    def test_reads_are_pure_and_only_update_mutates(self):
+        """Poprzednia wersja tego testu byla pusta: porownywala floata
+        zapamietanego PRZED update'em, wiec przechodzila nawet gdyby update
+        byl pusta funkcja. Tu sprawdzamy wlasnosc, o ktora chodzilo: odczyt
+        nie zmienia tabeli, a jedynym zrodlem zmiany jest update."""
         t = EloTable(home_adv=0.0)
-        before = t.expected_home("A", "B")
+        first = t.expected_home("A", "B")
+        self.assertAlmostEqual(first, 0.5, places=12)
+        for _ in range(3):
+            self.assertAlmostEqual(t.expected_home("A", "B"), first, places=12)
         t.update("A", "B", "H")
-        self.assertAlmostEqual(before, 0.5, places=12)
+        self.assertGreater(t.expected_home("A", "B"), first)
 
     def test_prediction_depends_only_on_earlier_updates(self):
         a = EloTable()
