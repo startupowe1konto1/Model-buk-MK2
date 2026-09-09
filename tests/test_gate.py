@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from backtest.gate import (
@@ -83,3 +84,38 @@ class TestDecide(unittest.TestCase):
     def test_edge_is_model_minus_market(self):
         d = decide(0.55, 2.0, TAU["pl_standard"], p_market=0.50)
         self.assertAlmostEqual(d.edge, 0.05, places=12)
+
+
+class TestBoundarySemantics(unittest.TestCase):
+    """Granice sa obserwowalne i celowo niesymetryczne: edge musi byc scisle
+    wiekszy od progu, a ev_net rowny progowi juz przechodzi. Bez tych testow
+    zamiana '<' na '<=' w decide() przeszlaby niezauwazona."""
+
+    def test_edge_exactly_at_minimum_is_rejected(self):
+        d = decide(0.50, 2.00, TAU["betclic_notax"], p_market=0.50)
+        self.assertAlmostEqual(d.edge, 0.0, places=12)
+        self.assertFalse(d.bet)
+        self.assertIn("edge", d.reason)
+
+    def test_edge_just_above_minimum_passes_the_edge_check(self):
+        """Ledwie dodatni edge przechodzi pierwsza bramke i pada dopiero na
+        drugiej - co dowodzi, ze granica edge lezy dokladnie w zerze."""
+        just_above = math.nextafter(0.50, 0.0)
+        d = decide(0.50, 2.00, TAU["betclic_notax"], p_market=just_above)
+        self.assertGreater(d.edge, 0.0)
+        self.assertFalse(d.bet)
+        self.assertIn("ev_net", d.reason)
+
+    def test_ev_net_exactly_at_threshold_is_accepted(self):
+        probe = decide(0.525, 2.00, TAU["betclic_notax"], p_market=0.40, ev_min=-1.0)
+        exact = probe.ev_net
+        d = decide(0.525, 2.00, TAU["betclic_notax"], p_market=0.40, ev_min=exact)
+        self.assertTrue(d.bet)
+
+    def test_ev_net_one_ulp_below_threshold_is_rejected(self):
+        probe = decide(0.525, 2.00, TAU["betclic_notax"], p_market=0.40, ev_min=-1.0)
+        exact = probe.ev_net
+        d = decide(0.525, 2.00, TAU["betclic_notax"], p_market=0.40,
+                   ev_min=math.nextafter(exact, 1.0))
+        self.assertFalse(d.bet)
+        self.assertIn("ev_net", d.reason)

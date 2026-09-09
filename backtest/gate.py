@@ -54,6 +54,15 @@ def decide(
 ) -> Decision:
     edge = p_model - p_market
     value = ev_net(p_model, odds, tau)
+    # Dwie rozne konwencje granicy, obie celowe:
+    # - edge musi byc SCISLE wiekszy od edge_min (domyslnie 0.0), bo zaklad
+    #   przy zerowej przewadze nad rynkiem nie ma powodu istniec;
+    # - ev_net ROWNY progowi przechodzi, zgodnie z regula "EV_net >= 0.05"
+    #   z HANDOFF.md A.1.
+    # Uwaga: nota 22 paragraf 5 zapisuje ten drugi warunek jako
+    # "EV_net <= EV_min -> NO BET", czyli wymaga ostrej nierownosci. Vault
+    # przeczy tu handoffowi. Trzymamy sie handoffu; rozbieznosc zgloszona
+    # do uporzadkowania w nocie 22.
     if edge <= edge_min:
         return Decision(False, value, edge, "edge {0:.4f} <= edge_min {1:.4f}".format(edge, edge_min))
     if value < ev_min:
