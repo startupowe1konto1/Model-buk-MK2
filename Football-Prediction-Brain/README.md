@@ -16,6 +16,7 @@ Otwórz ten folder jako vault w Obsidianie, a następnie zacznij od [[00 - Mapa 
 - model sportowy, benchmark rynkowy i decyzja bettingowa są oddzielnymi warstwami;
 - częsty wzorzec nie jest przewagą bez kursu i holdoutu;
 - koszt danych i API jest częścią wyniku ekonomicznego;
+- decyzja liczona jest na `EV_net` po podatku, nie na `EV_gross`;
 - szeroki screening jest tani, deep enrichment tylko dla shortlisty;
 - pogoda jest głównie cechą wyjątków/extreme environment;
 - prostszy model pozostaje, jeśli złożony nie daje mierzalnej poprawy.

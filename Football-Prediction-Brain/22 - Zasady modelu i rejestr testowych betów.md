@@ -72,9 +72,18 @@ fair_odds = 1 / p
 raw_implied_probability = 1 / o
 edge = p - market_probability_devig
 EV_gross = p * o - 1
+EV_net   = p * (tau * o) - 1        # tau = mnoznik rezimu podatkowego
 ```
 
-Przykład: jeśli `P_model=0.60`, fair odds wynosi `1.67`. Kurs `1.90` nie oznacza automatycznie BET — model musi jeszcze przejść quality, calibration, uncertainty i minimalny safety margin.
+`tau` deklarujemy per bukmacher: `0.88` w polskim standardzie (podatek 12% od
+stawki), `1.00` u bukmachera bez podatku na zakłady pojedyncze. Wyświetlany kurs
+jest brutto — stawka 100 zł po kursie 2.00 zwraca 176 zł, nie 200.
+
+Przykład: jeśli `P_model=0.60`, fair odds wynosi `1.67`. Kurs `1.90` daje
+`EV_gross = +14%`, co wygląda dobrze, ale przy `tau=0.88` to
+`EV_net = +0.32%` — czyli praktycznie break-even. **Wnioskowanie z `EV_gross`
+jest w polskim reżimie podatkowym bezwartościowe.** Do tego model musi jeszcze
+przejść quality, calibration, uncertainty i minimalny safety margin.
 
 ## 5. Decision gate
 
@@ -89,6 +98,11 @@ ELSE                                 → BET CANDIDATE
 ```
 
 Nie ustalamy jeszcze finalnych wartości `Q_min`, `edge_min` i `EV_min` bez backtestu.
+
+**`EV_min` obowiązuje na `EV_net`, nigdy na `EV_gross`.** Break-even przy
+`tau=0.88` leży na `p * o = 1.13636`, więc próg wyrażony w kursach brutto musi
+przekraczać `+13.64%`, zanim w ogóle zacznie oznaczać zysk. Historia tej pomyłki
+i tabela progów wg reżimu: [[21 - Pilot live 27-08-2026]], korekta 09.09.2026.
 
 ## 6. Rejestr testów
 

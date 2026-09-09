@@ -31,6 +31,32 @@ nie wolno łamać:
 - **cost-aware** — koszt danych jest częścią wyniku ekonomicznego ([[18]])
 - model produkcyjny jest **suchy**: żadnych ręcznych korekt prawdopodobieństwa ([[22]] §1)
 
+### Korekty po 05.09.2026 — czytaj przed użyciem tego dokumentu
+
+Ten handoff jest datowany na 05.09. Trzy rzeczy zostały od tamtej pory
+rozstrzygnięte inaczej, niż stoi niżej.
+
+**Próg decyzyjny liczony jest na `EV_net`, po podatku.** Poprzednia reguła
+(`EV >= ok. 5%` na kursie brutto) przepuszczała zakłady przegrywające i w
+pilocie 27.08 przepuściła jedyny zakład, jaki miała ocenić. Break-even przy
+polskim podatku 12% od stawki leży na `p × o = 1,13636`, nie na `1,0`. Pełna
+tabela progów wg reżimu podatkowego: [[21 - Pilot live 27-08-2026]], korekta
+09.09.2026. Definicje: [[22]] §4–5, [[14]].
+
+**Betclic zmienia rachunek.** To jedyny legalny polski bukmacher z grą bez
+podatku na zakłady pojedyncze (`τ = 1,00`). Wszystkie cztery zamrożone bety są
+ujemne u bukmachera z podatkiem i dodatnie bez niego. Instrukcja z [[25]] fazy
+−1, żeby liczyć marże „z podatkiem 12% w środku", dla Betclica jest nieprawdziwa.
+Bukmacher bez podatku może mieć kursy o 13,6% gorsze i nadal wygrywać, co zmienia,
+kogo warto snapshotować.
+
+**Snapshotter nie zbierał danych 7–9.09.** Punkt C2.4 niżej zaleca kontrolę przez
+`snapshotter.py status` — a to była właśnie ta komenda, która się wywalała, bo
+wymagała klucza API, którego nie używa. Krok `status` wywracał workflow przed
+krokiem `Commit`, więc dobowa praca `plan` i `settle` ginęła razem z runnerem.
+Naprawione 09.09 (`if: always()` na commicie + leniwe wczytywanie klucza).
+Kursy na mecze z 7–9.09 są bezpowrotnie stracone.
+
 ### Rynki docelowe
 
 Pierwsze: 1X2, O/U 2.5, BTTS. Równolegle badane rynki zdarzeń: **rożne drużynowe**,

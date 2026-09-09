@@ -36,8 +36,11 @@ Dla dziesiętnego kursu `o` i modelowego prawdopodobieństwa `p`:
 - `raw_implied_probability = 1 / o`
 - `edge_pp = p - p_market_devig`
 - `EV_gross = p * o - 1`
+- `EV_net = p * (tau * o) - 1`, gdzie `tau` to mnożnik reżimu podatkowego
 
 W produkcji `BET` nie wynika wyłącznie z dodatniego surowego EV. Musi również przejść kalibrację, niepewność, data quality, koszty wykonania i ustalony minimalny margines bezpieczeństwa.
+
+**Decyzja podejmowana jest na `EV_net`, nie na `EV_gross`.** Polski podatek 12% od stawki daje `tau = 0.88`, co przesuwa break-even z `p * o = 1.0` na `1.13636`. Zakład z dodatnim `EV_gross` może być zakładem przegrywającym i w pilocie 27.08.2026 tak właśnie było.
 
 ## Ostrożne hipotezy, nie fakty
 

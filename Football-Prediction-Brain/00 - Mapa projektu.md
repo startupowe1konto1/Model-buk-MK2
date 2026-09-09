@@ -21,7 +21,7 @@ Docelowy Model Buk **nie podejmuje decyzji na podstawie opinii, narracji ani „
 - jawnej transformacji cech i interakcji;
 - wersjonowanego modelu matematycznego/statystycznego;
 - ustalonej reguły niepewności i quality gate;
-- ustalonego progu decyzyjnego.
+- ustalonego progu decyzyjnego, liczonego na `EV_net` po podatku ([[22 - Zasady modelu i rejestr testowych betów]] §4–5; korekta 09.09.2026 w [[21 - Pilot live 27-08-2026]]).
 
 Ręczne pilotaże służą wyłącznie do odkrywania braków danych, hipotez i wymagań systemu. Nie są traktowane jako wynik produkcyjnego modelu.
 
