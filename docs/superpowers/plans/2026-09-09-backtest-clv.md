@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Przepuścić 86 025 meczów z kursami Pinnacle open+close przez pełny łańcuch de-vig → P_model point-in-time → bramka EV_net → CLV → walk-forward i odpowiedzieć liczbą, czy w tym pipelinie jest przewaga.
+**Goal:** Przepuścić 86 024 mecze z kursami Pinnacle open+close i znanym wynikiem przez pełny łańcuch de-vig → P_model point-in-time → bramka EV_net → CLV → walk-forward i odpowiedzieć liczbą, czy w tym pipelinie jest przewaga.
 
 **Architecture:** Dziewięć modułów stdlib w `backtest/`, każdy z jedną odpowiedzialnością i własnym plikiem testów. Dane wchodzą raz przez `loader.py` i dalej krążą jako niemutowalny `Match`. Każdy etap jest testowalny osobno, więc porażka lokalizuje się do jednego modułu, a nie do „backtestu". Orkiestracja walk-forward jest ostatnia i tylko skleja gotowe, przetestowane kawałki.
 
@@ -114,7 +114,11 @@ class TestLoadMatches(unittest.TestCase):
         cls.matches = load_matches()
 
     def test_exact_row_count(self):
-        self.assertEqual(len(self.matches), 86025)
+        """86 025 wierszy ma komplet kursow Pinnacle (tak podaje audyt), ale
+        jeden z nich - Panathinaikos vs Olympiakos, 17/03/2019, derby przerwane
+        przy 0:3 - nie ma wyniku koncowego. Mecz przerwany to VOID, zwrot stawki,
+        wiec do backtestu nadaje sie 86 024."""
+        self.assertEqual(len(self.matches), 86024)
 
     def test_exactly_22_leagues_no_empty_div(self):
         divs = {m.div for m in self.matches}
@@ -155,6 +159,12 @@ Utwórz `backtest/__init__.py` jako pusty plik, potem `backtest/loader.py`:
 
 ```python
 """Wczytywanie meczow z football-data.co.uk z kursami Pinnacle open i close.
+
+Zwraca 86 024 mecze. Audyt podaje 86 025 wierszy z kompletem kursow i ma racje -
+roznica to jeden mecz przerwany (Panathinaikos vs Olympiakos, 17/03/2019, 0:3
+w przerwie), ktory nie ma wyniku koncowego. Mecz przerwany to VOID, zwrot stawki,
+wiec nie jest obserwacja backtestu. NIE domykac tej luki fallbackiem na HTR -
+stan z przerwy nie jest wynikiem meczu.
 
 Pulapka, ktora kosztowala godzine: pliki maja niejednolite kodowanie. Czesc jest
 UTF-8 z BOM, czesc latin-1. Czytanie wszystkiego jako utf-8 wywala sie na 0xf6
@@ -278,7 +288,7 @@ def load_matches(root: str = DEFAULT_DATA_ROOT) -> List[Match]:
 cd /Users/wojciechrudnicki/Code_projects/Model-buk-2.0 && python3 -m unittest tests.test_loader -v
 ```
 
-Oczekiwane: `Ran 11 tests` … `OK`. Jeśli `test_exact_row_count` daje inną liczbę niż 86025 — **zatrzymaj się i znajdź przyczynę**, nie poprawiaj liczby w teście. Ta liczba jest zweryfikowana niezależnie w `Audyt-danych-i-rynku/README.md:29`.
+Oczekiwane: `OK`. Jeśli `test_exact_row_count` daje inną liczbę niż 86024 — **zatrzymaj się i znajdź przyczynę**, nie poprawiaj liczby w teście. Kontekst: audyt (`Audyt-danych-i-rynku/README.md:29`) podaje 86 025 i ma rację — tyle wierszy ma komplet kursów. Jeden z nich (Panathinaikos–Olympiakos, 17/03/2019, mecz przerwany przy 0:3) nie ma wyniku końcowego, więc odpada na filtrze `FTR`. **Nie dopisuj fallbacku na `HTR`** — stan z przerwy nie jest wynikiem meczu, a mecz przerwany to VOID.
 
 - [ ] **Step 5: Commit**
 
@@ -2175,7 +2185,7 @@ Wykonaj **tylko jeśli** wynik z Task 9 jest zaskakujący i chcesz wykluczyć w�
 
 **Techniczne** (bramkują ukończenie):
 - `python3 -m unittest discover -s tests` → wszystko `OK`
-- `load_matches()` zwraca dokładnie 86 025 meczów, 22 ligi, `2014-07-25` → `2026-01-14`
+- `load_matches()` zwraca dokładnie 86 024 mecze, 22 ligi, `2014-07-25` → `2026-01-14`
 - ECE zdevigowanego zamknięcia poniżej 0,01
 - Test regresyjny MB-0001 daje `EV_net = −6,59%`
 - Żadna selekcja nie używa kursu zamknięcia jako ceny wejścia
