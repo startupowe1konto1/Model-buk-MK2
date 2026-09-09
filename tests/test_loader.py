@@ -65,3 +65,24 @@ class TestLoadMatches(unittest.TestCase):
 
     def test_is_a_match_namedtuple(self):
         self.assertIsInstance(self.matches[0], Match)
+
+    def test_odds_open_columns_are_not_transposed(self):
+        """Nic nie wiaze indeksu krotki o_open z konkretnym wynikiem poza
+        kolejnoscia ODDS_OPEN w loaderze - transpozycja kolumn (np. zamiana
+        miejscami D i A) jest wiec niewidoczna dla kazdego innego testu.
+        Kotwiczymy sie w fakcie z pilki noznej: remis niemal nigdy nie jest
+        faworytem, wiec indeks 1 (D) niemal nigdy nie ma najkrotszego kursu
+        otwarcia, a indeks 0 (H) ma go w wiekszosci meczow. Zmierzone na
+        calym zbiorze: H 70.21%, D 0.21%, A 29.58% - progi ponizej maja spory
+        margines i pekna przy kazdej transpozycji dotykajacej indeksu 1."""
+        favourite_counts = [0, 0, 0]
+        for m in self.matches:
+            shortest = min(range(3), key=lambda i: m.o_open[i])
+            favourite_counts[shortest] += 1
+        n = len(self.matches)
+        home_fraction = favourite_counts[0] / n
+        draw_fraction = favourite_counts[1] / n
+        self.assertLess(draw_fraction, 0.01,
+                         "remis niemal nigdy nie powinien byc faworytem otwarcia")
+        self.assertGreater(home_fraction, 0.5,
+                            "gospodarz powinien byc faworytem otwarcia w wiekszosci meczow")

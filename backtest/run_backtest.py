@@ -75,6 +75,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             fh.write(text)
         with open(args.out + ".json", "w", encoding="utf-8") as fh:
             json.dump(summary, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
         print("zapisano {0}.md i {0}.json".format(args.out))
     else:
         print(text)

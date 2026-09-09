@@ -95,6 +95,7 @@ def _render(matches: Sequence[Match]) -> str:
         "> nie kurs otwarcia rynku. Ponizsze 'open' czytaj jako 'piatek'.\n"
     )
     close_pairs = {}
+    close_scores = {}
     for which in ("open", "close"):
         lines.append("\n## {0}\n".format(which))
         lines.append("| metoda | log-loss | Brier | RPS | ECE |")
@@ -103,6 +104,7 @@ def _render(matches: Sequence[Match]) -> str:
             if which == "close":
                 s, pairs_for_name = _score_with_pairs(matches, name, which)
                 close_pairs[name] = pairs_for_name
+                close_scores[name] = s
             else:
                 s = score_method(matches, name, which)
             lines.append(
@@ -110,7 +112,10 @@ def _render(matches: Sequence[Match]) -> str:
                     s.method, s.log_loss, s.brier, s.rps, s.ece
                 )
             )
-    winner = best_method(matches)
+    # Zwyciezca pochodzi z wynikow juz policzonych powyzej w petli "close",
+    # nie z osobnego wywolania best_method(matches) - dwie niezalezne sciezki
+    # liczace to samo moglyby rozjechac sie na remisie.
+    winner = min(close_scores.values(), key=lambda s: s.log_loss).method
     lines.append("\n**Metoda wybrana do dalszych etapow: `{0}`** (najnizszy log-loss na zamknieciu).\n".format(winner))
     lines.append("\n## Krzywa kalibracji zamkniecia ({0})\n".format(winner))
     pairs = close_pairs[winner]

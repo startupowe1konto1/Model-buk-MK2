@@ -1,7 +1,7 @@
 import datetime
 import unittest
 
-from backtest.gate import TAU
+from backtest.gate import TAU, ev_net
 from backtest.loader import Match
 from backtest.walkforward import Selection, features, run, seasons, summarize
 
@@ -59,12 +59,14 @@ class TestFeatures(unittest.TestCase):
 class TestRun(unittest.TestCase):
     def test_returns_selections(self):
         sel = run(_synthetic(4), "proportional", TAU["betclic_notax"], ev_min=0.0)
+        self.assertTrue(sel, "fixture nie wyprodukowal zadnej selekcji")
         self.assertTrue(all(isinstance(s, Selection) for s in sel))
 
     def test_first_seasons_are_never_bet(self):
         """Przy min_train_seasons=2 nic z dwoch pierwszych sezonow nie moze
         trafic do wynikow - to nie sa dane testowe, tylko treningowe."""
         sel = run(_synthetic(4), "proportional", TAU["betclic_notax"], ev_min=0.0, min_train_seasons=2)
+        self.assertTrue(sel, "fixture nie wyprodukowal zadnej selekcji")
         for s in sel:
             self.assertGreaterEqual(s.match.date.year, 2016)
 
@@ -88,6 +90,7 @@ class TestRun(unittest.TestCase):
 
     def test_clv_is_zero_when_line_does_not_move(self):
         sel = run(_synthetic(4), "proportional", TAU["betclic_notax"], ev_min=0.0)
+        self.assertTrue(sel, "fixture nie wyprodukowal zadnej selekcji")
         for s in sel:
             self.assertAlmostEqual(s.clv, 0.0, places=9)
 
@@ -98,6 +101,60 @@ class TestRun(unittest.TestCase):
         picks = [s for s in sel if s.outcome in ("H", "A")]
         self.assertTrue(picks)
         self.assertGreater(sum(s.clv for s in picks) / len(picks), 0.0)
+
+
+class TestSelectionFieldsMatchGateInputs(unittest.TestCase):
+    """Selection musi ujawniac, co NAPRAWDE dostala bramka - inaczej pomylka
+    w okablowaniu wejsc decide() (np. cena zamkniecia zamiast otwarcia, albo
+    prawdopodobienstwo rynkowe po kickoffie) jest niewidoczna dla wynikow.
+    Fixture MUSI miec o_open != o_close (patrz uwaga przy _synthetic_moving)."""
+
+    def test_ev_net_and_edge_are_consistent_with_recorded_odds_and_market(self):
+        tau = TAU["betclic_notax"]
+        sel = run(_synthetic_moving(4), "proportional", tau, ev_min=0.0)
+        self.assertTrue(sel, "fixture nie wyprodukowal zadnej selekcji")
+        for s in sel:
+            self.assertAlmostEqual(s.ev_net, ev_net(s.p_model, s.odds, tau), places=12)
+            self.assertAlmostEqual(s.edge, s.p_model - s.p_market_open, places=12)
+
+
+class TestNoOwnResultLeakageIntoPrediction(unittest.TestCase):
+    """Predykcja meczu nie moze zalezec od jego wlasnego wyniku. Dwie fixture
+    identyczne we wszystkim oprocz ftr JEDNEGO meczu - ostatniego chronologicznie
+    w calym zbiorze, wiec ta zmiana nie moze wplynac na nic wczesniejszego w
+    sekwencji - musza dac identyczne p_model dla tego meczu."""
+
+    def test_last_match_p_model_is_independent_of_its_own_result(self):
+        base = _synthetic_moving(5)
+        target = base[-1]
+        # Musi byc ostatni chronologicznie mecz calego zbioru, zeby zmiana
+        # jego wyniku nie mogla wplynac na cokolwiek wczesniejsze w petli.
+        self.assertEqual(target, max(base, key=lambda m: (m.date, m.div, m.home, m.away)))
+
+        other_ftr = "D" if target.ftr != "D" else "H"
+        variant = list(base)
+        variant[-1] = target._replace(ftr=other_ftr)
+
+        tau = TAU["betclic_notax"]
+        sel_base = run(base, "proportional", tau, ev_min=0.0)
+        sel_variant = run(variant, "proportional", tau, ev_min=0.0)
+
+        def _for_target(sel):
+            return [
+                s for s in sel
+                if s.match.home == target.home
+                and s.match.away == target.away
+                and s.match.date == target.date
+            ]
+
+        picks_base = _for_target(sel_base)
+        picks_variant = _for_target(sel_variant)
+        self.assertTrue(picks_base, "mecz docelowy nie wyprodukowal selekcji w bazowym przebiegu")
+        self.assertTrue(picks_variant, "mecz docelowy nie wyprodukowal selekcji w zmienionym przebiegu")
+        self.assertEqual(len(picks_base), 1)
+        self.assertEqual(len(picks_variant), 1)
+        self.assertEqual(picks_base[0].outcome, picks_variant[0].outcome)
+        self.assertEqual(picks_base[0].p_model, picks_variant[0].p_model)
 
 
 class TestSummarize(unittest.TestCase):

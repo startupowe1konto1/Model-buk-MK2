@@ -17,7 +17,7 @@ import statistics
 from collections import defaultdict
 from typing import Dict, List, NamedTuple, Sequence
 
-from backtest.clv import clv_from_probs
+from backtest.clv import beat_close, clv_from_probs
 from backtest.devig import METHODS
 from backtest.elo import EloTable
 from backtest.gate import decide
@@ -130,7 +130,7 @@ def summarize(selections: Sequence[Selection]) -> Dict[str, object]:
             k: {
                 "n": len(v),
                 "mean_clv": statistics.mean(x.clv for x in v),
-                "beat_close_rate": sum(1 for x in v if x.clv > 0) / len(v),
+                "beat_close_rate": sum(1 for x in v if beat_close(x.p_market_open, x.p_market_close)) / len(v),
             }
             for k, v in sorted(buckets.items())
         }
@@ -139,7 +139,7 @@ def summarize(selections: Sequence[Selection]) -> Dict[str, object]:
         "n_bets": len(selections),
         "mean_clv": statistics.mean(clvs),
         "median_clv": statistics.median(clvs),
-        "beat_close_rate": sum(1 for c in clvs if c > 0) / len(clvs),
+        "beat_close_rate": sum(1 for s in selections if beat_close(s.p_market_open, s.p_market_close)) / len(selections),
         "hit_rate": wins / len(selections),
         "by_season": _group(lambda s: season_of(s.match.date)),
         "by_league": _group(lambda s: s.match.div),
