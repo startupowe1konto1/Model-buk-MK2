@@ -1,243 +1,238 @@
-# Handoff — stan projektu na 05.09.2026
+# Handoff — stan projektu na 09.09.2026
 
-> Dokument startowy dla nowej sesji. Zawiera wszystko, co trzeba wiedzieć, żeby
-> kontynuować bez czytania całej historii rozmowy.
-
----
-
-## A. Kontekst projektu
-
-### Czym jest Model Buk
-
-Globalny silnik **wyszukiwania value w zakładach piłkarskich**. Nie typowanie meczów —
-system porównuje własne prawdopodobieństwo z ceną bukmachera i podejmuje decyzję
-`BET / NO BET / NO PREDICTION`.
-
-Zespół: **Wojciech Rudnicki**, **Mikołaj** (autor vaultu metodologicznego),
-**Oskar Pelzer**, **Mateusz Wojciechowski**.
-
-### Stan wyjściowy (przed 05.09.2026)
-
-Repo `mkonieczny1212/Model-buk` zawierało vault Obsidian: **25 notatek metodologicznych**
-(`Football-Prediction-Brain/`), `experiments/test-bets.csv` z czterema zamrożonymi
-testowymi betami, `AGENTS.md`. **Zero kodu, zero danych.**
-
-Vault jest metodologicznie mocny i pozostaje źródłem prawdy. Kluczowe zasady, których
-nie wolno łamać:
-
-- **point-in-time** — model może użyć wyłącznie tego, co było wiadome w cutoffie ([[11]])
-- **anti-hindsight** — hipoteza bez zamrożonego kursu i `P_model` nie jest trafionym betem ([[22]] §7)
-- **`NO BET` i `NO PREDICTION` to pełnoprawne wyniki** ([[14]])
-- **cost-aware** — koszt danych jest częścią wyniku ekonomicznego ([[18]])
-- model produkcyjny jest **suchy**: żadnych ręcznych korekt prawdopodobieństwa ([[22]] §1)
-
-### Korekty po 05.09.2026 — czytaj przed użyciem tego dokumentu
-
-Ten handoff jest datowany na 05.09. Trzy rzeczy zostały od tamtej pory
-rozstrzygnięte inaczej, niż stoi niżej.
-
-**Próg decyzyjny liczony jest na `EV_net`, po podatku.** Poprzednia reguła
-(`EV >= ok. 5%` na kursie brutto) przepuszczała zakłady przegrywające i w
-pilocie 27.08 przepuściła jedyny zakład, jaki miała ocenić. Break-even przy
-polskim podatku 12% od stawki leży na `p × o = 1,13636`, nie na `1,0`. Pełna
-tabela progów wg reżimu podatkowego: [[21 - Pilot live 27-08-2026]], korekta
-09.09.2026. Definicje: [[22]] §4–5, [[14]].
-
-**Betclic zmienia rachunek.** To jedyny legalny polski bukmacher z grą bez
-podatku na zakłady pojedyncze (`τ = 1,00`). Wszystkie cztery zamrożone bety są
-ujemne u bukmachera z podatkiem i dodatnie bez niego. Instrukcja z [[25]] fazy
-−1, żeby liczyć marże „z podatkiem 12% w środku", dla Betclica jest nieprawdziwa.
-Bukmacher bez podatku może mieć kursy o 13,6% gorsze i nadal wygrywać, co zmienia,
-kogo warto snapshotować.
-
-**Snapshotter nie zbierał danych 7–9.09.** Punkt C2.4 niżej zaleca kontrolę przez
-`snapshotter.py status` — a to była właśnie ta komenda, która się wywalała, bo
-wymagała klucza API, którego nie używa. Krok `status` wywracał workflow przed
-krokiem `Commit`, więc dobowa praca `plan` i `settle` ginęła razem z runnerem.
-Naprawione 09.09 (`if: always()` na commicie + leniwe wczytywanie klucza).
-Kursy na mecze z 7–9.09 są bezpowrotnie stracone.
-
-### Rynki docelowe
-
-Pierwsze: 1X2, O/U 2.5, BTTS. Równolegle badane rynki zdarzeń: **rożne drużynowe**,
-SOT, kartki, team totals. Exact score odrzucony.
+> Dokument startowy dla nowej sesji. Poprzedni handoff (05.09) leży w
+> `docs/handoff-archiwum/HANDOFF-2026-09-05.md` — jest nadal dobrym opisem
+> danych i rynku, ale w czterech miejscach został unieważniony. Tutaj jest to,
+> co obowiązuje.
 
 ---
 
-## B. Co zostało zrobione 05.09.2026
+## A. Co się zmieniło od 05.09 — czytaj to pierwsze
 
-### B1. Krytyczna ocena — i pięć ustaleń, które zmieniają plan
+### 1. Próg decyzyjny był błędny i przepuszczał zakłady przegrywające
 
-**1. Podatek 12% od obrotu wywraca ekonomikę.**
+Reguła pilotażu brzmiała `EV >= ok. 5%` i liczona była na kursie z tabeli
+bukmachera. Polski podatek 12% pobierany jest **od stawki**, więc wyświetlany
+kurs jest brutto: 100 zł po kursie 2.00 zwraca 176 zł, nie 200.
+
+Wiążącym warunkiem jest teraz:
 
 ```text
-EV_net       = p × o × 0.88 − 1
-p_breakeven  = 1.1364 / o
+EV_net = p_model × (τ × o) − 1 ≥ 0.05
 ```
 
-Minimalny sensowny `EV_gross` to **+13,6%**, nie +5% jak zakładał [[21]].
-**Wszystkie cztery zamrożone bety w `experiments/test-bets.csv` są ujemne po podatku:**
-MB-0001 −6,6%, MB-0002 −0,8%, MB-0003 −2,9%, MB-0004 −1,3%.
+| τ | reżim | break-even `p × o` | próg dla `EV_net ≥ 5%` |
+|---|---|---|---|
+| **0,88** | standard PL, 12% od stawki | 1,13636 (+13,64% brutto) | 1,19318 → **+19,32%** |
+| 0,94 | Betclic po degradacji promocji | 1,06383 (+6,38%) | 1,11702 → +11,70% |
+| **1,00** | Betclic bez podatku na SOLO | 1,00000 (0%) | 1,05 → +5,00% |
 
-**2. Teza o „powtarzalnych zdarzeniach" działa odwrotnie.**
-Najlepsza drużyna w bazie (Celtic, 448 meczów) trafia `rożne ≥ 4` w **89,1%** —
-fair 1.12, break-even w PL **1.28**. Im częstsze zdarzenie, tym krótszy kurs, tym mocniej
-podatek je zabija. Value leży w środku rozkładu (`p ≈ 0,45–0,60`, kursy 1.8–2.4),
-nie na jego skraju. To wymaga rewizji [[17]].
+Dowód szkodliwości starej reguły: **MB-0001 był jedynym kandydatem, który
+przeszedł przez bramkę w całym pilocie 27.08.** Miał orientacyjne `EV +6,2%`
+i po podatku ma **−6,59%**.
 
-**3. Rynek rożnych NIE jest „leniwie wyceniany".** Zmierzone marże:
+Znaleziona przy tym luka strukturalna: nota 22 §5 używała w bramce terminu
+`EV_net`, którego vault **nigdzie nie definiował** — §4 definiowała tylko
+`EV_gross`. Kto implementował bramkę, musiał sobie dopowiedzieć, i dopowiedział
+`EV_gross`. Luka domknięta w 22 §4–5 i 14. Pełna korekta z tabelami:
+[[21 - Pilot live 27-08-2026]], sekcja „Korekta 09.09.2026".
 
-| rynek / moment | marża |
-|---|---|
-| 1X2 closing | 3,0% |
-| rożne meczowe closing | 5,0% |
-| kartki closing | 5,2% |
-| rożne drużynowe pre-match, **Pinnacle** | **6,1%** |
-| rożne drużynowe pre-match, Bet365 | 7,2–8,5% |
-| rożne drużynowe przedziały, **STS** | **13,7%** |
+### 2. Betclic zmienia rachunek ekonomiczny całego projektu
 
-Przewaga nie polega na tym, że rynek nie policzył — polega na **rozjeździe między
-Pinnacle a STS**.
+To **jedyny** legalny polski bukmacher z grą bez podatku na zakłady pojedyncze,
+24/7, pre-match i live. Pozostali (Fortuna, Superbet, forBET, LVBET, Betfan,
+Betters) mają to wyłącznie na AKO albo BetBuilder, czyli bezużytecznie dla tego
+procesu.
 
-**4. Kursy na rożne drużynowe SĄ dostępne.** API-Football ma `Home/Away Corners
-Over/Under` (id 57/58), `Home/Away Shots On Target` (243/244), `Home/Away Team Total
-Cards` (82/83) od 6 bukmacherów. Blokada, którą zakładaliśmy, nie istnieje.
-Brakuje wyłącznie **historii tych kursów**.
+Wszystkie cztery zamrożone bety są **ujemne** u bukmachera z podatkiem i
+**dodatnie** bez niego. Podatek jest jedyną przyczyną, dla której są
+przegrywające — nie model.
 
-**5. Bardzo dużo da się zbacktestować już dziś:**
-227 525 meczów z 1X2, 156 474 z Asian Handicap, 148 397 z O/U 2.5,
-i **86 025 z kursem otwarcia I zamknięcia Pinnacle** — czyli z policzalnym CLV.
+Konsekwencja dla [[25 - Kolejność budowy]] fazy −1: instrukcja „marża liczona z
+podatkiem 12% w środku" dla Betclica jest nieprawdziwa. Bukmacher bez podatku
+może mieć kursy o 13,6% gorsze i nadal wygrywać, co zmienia, kogo warto
+snapshotować.
 
-### B2. Audyt STS (ręczny, przeglądarką)
+**Do zweryfikowania w regulaminie, nie na podstawie mediów:** pierwsze ~1000 zł
+sumy stawek bez warunków, powyżej — SOLO bez podatku tylko przy ≥50% obrotu na
+AKO, inaczej 6% na singlach. Okno 12 miesięcy kroczące albo 5000 ostatnich
+zakładów.
 
-**Kursy są widoczne bez logowania** — to koryguje założenie z transkryptu (1:58:01).
-Mecz Ekstraklasy ma ~41 rynków w kategoriach: Gole, Handicap, **Rzuty rożne**, Zawodnicy, Połowy.
+### 3. Snapshotter nie zbierał danych 7–9.09 i raportował sukces
 
-- rożne: suma meczowa, „która drużyna więcej", **drużynowe w formie PRZEDZIAŁÓW** (0-2 / 3-4 / 5-6 / 7+)
-- **kartek: BRAK**
-- **strzałów/SOT: BRAK**
+Krok `status` w workflow `plan + settle` wywalał się codziennie, bo
+`Api.__init__` wczytywał klucz API bezwarunkowo, a `cmd_status` tworzy `Api`
+tylko po to, żeby odczytać zużycie budżetu z lokalnej bazy SQLite. Klucz był
+wymagany i nieużywany, a workflow nie przekazywał sekretu do tego kroku.
 
-Zmierzona marża na przedziałach Korony Kielce: **13,74%**. Potrzebny edge na przedziale
-3-4 @ 2.95: **+9,3 pp** względem rynku po zdjęciu marży.
+GitHub Actions pomija kolejne kroki po nieudanym, a po `status` stoi `Commit`.
+Skutek był większy niż komunikat o błędzie: `plan` i `settle` kończyły się
+sukcesem, po czym cała praca dnia ginęła razem z runnerem. Zacommitowana baza
+stała na 6 września z zerem rekordów `pending`, więc godzinny `capture`
+poprawnie nie miał czego zbierać i **kończył się sukcesem, nie robiąc nic**.
 
-**Konsekwencja:** MB-0002/3/4 opisują rynek `team corners over/under`, którego u polskiego
-bukmachera w tej formie nie ma. Rejestr wymaga przepisania na przedziały albo uznania
-za nierealizowalny.
+Naprawione 09.09 w `automated_bets_downloader`, commit `81c5b55`:
+leniwe wczytywanie klucza + `if: always()` na kroku `Commit`.
 
-### B3. Zebrane dane — 10 zestawów, 18 GB, 605 zmiennych, 9,2 mln rekordów
+Potwierdzenie po naprawie: wszystkie cztery kroki zielone, pierwszy w historii
+repo commit rozliczeniowy (`986eff1`), tabela `results` 0 → 15, licznik
+requestów trwały (58/90 zamiast wiecznego 90/90).
 
-| zestaw | rozmiar | zawartość |
+**Kursy na mecze z 7–9.09 są bezpowrotnie stracone.** Plan Free API-Football
+widzi terminarz ±1 dzień i nie udostępnia historii kursów.
+
+### 4. Punkt C2.4 starego handoffu był pułapką
+
+Zalecał kontrolę snapshottera przez `snapshotter.py status` — a to była
+dokładnie ta komenda, która się wywalała.
+
+**Szersza lekcja, którą warto zaadresować:** system zdrowy i bezczynny wygląda
+identycznie jak system martwy. Oba raportują sukces. Jeden mail na dobę
+przychodził tylko dlatego, że `status` przypadkiem padał; bez tej usterki cisza
+byłaby całkowita. Osłona do dopisania: jeśli w horyzoncie są mecze z universum,
+a od N dni nie zapisano żadnego zdjęcia — zgłoś błąd.
+
+---
+
+## B. Stan pogody i entity resolution — robota w toku
+
+Nota [[31 - TODO pogoda i entity resolution]] zakładała dopasowywanie „~430
+klubów". **Ta liczba była błędna:** `clubs.csv` zna 796 klubów i pokrywa 85,6%
+gospodarzy, a w `games.csv` jest ich 2980. Właściwą miarą nie jest liczba encji,
+tylko **pokrycie meczów**.
+
+### Co zrobione
+
+Skrypt: `Audyt-danych-i-rynku/scripts/09_stadiums_and_weather.py`,
+trzy niezależne etapy (`wikidata` / `match` / `weather`).
+
+**Overpass odpadł jako kanał.** Główna instancja `overpass-api.de` odrzuca
+połączenia, `kumi.systems` daje 504, `overpass.osm.ch` ma tylko dane
+Szwajcarii. Pierwsza próba pobierania kaflami przez 41 minut nie ściągnęła nic
+— 0,81 s czasu CPU, zero otwartych połączeń, sam sen w retry.
+
+**Wikidata okazała się lepsza, nie tylko dostępna.** Trzyma **aliasy** nazw,
+więc „Giuseppe Meazza" i „San Siro" to jeden obiekt — a właśnie na takich parach
+łamało się dopasowanie po nazwie.
+
+```text
+wikidata: 6 764 stadiony, 15 895 aliasów -> 22 659 wariantów nazw   (21 s)
+dopasowane nazwy:  1 493 / 2 968
+pokrycie MECZÓW:  68 882 / 88 716  = 77,6%    (przed: 16,6% na 242 stadionach OSM)
+  exact: 1 384 nazw
+  fuzzy:   109 nazw
+```
+
+Wyniki w `hazard_saas/data/raw/osm/`: `stadiums_wikidata.json` (1,2 MB) i
+`stadium_match.csv` z kolumną `venue_confidence`.
+
+### Co zostało
+
+**Pogoda nie jest pobrana.** Open-Meteo Archive zwraca `429 Too Many Requests`
+— ich limit liczy nie wywołania, a **wagę**: zapytanie o 20 lat × 9 zmiennych
+jest ogromne. Blokada weszła po ~10 zapytaniach i utrzymuje się jako
+natychmiastowe 429 w 0,2 s, czyli cooldown na poziomie IP.
+
+Skrypt jest już przygotowany pod mniejszą wagę: **5 zmiennych zamiast 9**
+(ekstrema temperatury, opad, śnieg, porywy wiatru — zgodnie z
+[[04 - Rejestr cech]], gdzie liczy się `EnvironmentalShock`, nie średni
+komfort), zakres **od 2014-01-01** zamiast 2006 (bo `football-data-uk` startuje
+2014-07 i wcześniejsza pogoda nie ma z czym się spotkać), pauza 5 s i backoff
+na 429 z poszanowaniem `Retry-After`.
+
+Do zrobienia w następnej sesji:
+
+```bash
+cd Audyt-danych-i-rynku/scripts
+python3 -u 09_stadiums_and_weather.py weather \
+  --out ../../../hazard_saas/data/raw --top 500
+```
+
+Odczekać cooldown (rzędu godziny), potem uruchomić i **nie próbować w kółko** —
+każda próba w blokadzie ją wydłuża. Top 500 dopasowanych stadionów pokrywa
+60 475 meczów (68,2%).
+
+Ręczny przegląd, który się opłaca: **pierwsze 50 nietrafionych nazw to 8 629
+meczów.** Wszystkie to nazwy sponsorskie albo transliteracje — „Bluenergy
+Stadium" to Stadio Friuli, „MHPArena Stuttgart" to Mercedes-Benz Arena,
+„Decathlon Arena-Stade Pierre-Mauroy" to Stade Pierre-Mauroy. Pół godziny pracy
+podnosi pokrycie o kilka punktów procentowych.
+
+### Pułapka na leakage, o której nie wolno zapomnieć
+
+Open-Meteo Archive zwraca **pogodę zrealizowaną, nie prognozę**. Do backtestu
+historycznego to akceptowalne. W produkcji to dokładnie ten leakage, który
+wymienia [[11 - Czas predykcji i leakage]] — model przewidujący T−24h nie mógł
+wiedzieć, ile faktycznie spadło deszczu. Produkcja musi używać endpointu
+prognoz i zapisywać je z `known_at`.
+
+---
+
+## C. Co robić dalej, w tej kolejności
+
+### 1. Backtest CLV — to jest ścieżka krytyczna
+
+Jedyne miejsce, gdzie dziś można się czegokolwiek nauczyć o własnym pipelinie.
+Podłoże jest **lepsze**, niż zapisano w starym handoffie:
+
+```text
+mecze z KOMPLETNYM Pinnacle open + close : 86 024
+zakres                                   : 2014-07-25 → 2026-01-14
+ligi                                     : 22
+overround                                : 3,44% na otwarciu → 3,10% na zamknięciu
+```
+
+I jest co gonić, bo linie realnie się ruszają:
+
+| selekcja | mediana \|ruchu fair prob\| | udział ruchów > 2 pp |
 |---|---|---|
-| statsbomb-full | 17 GB | dane zdarzeniowe, 4 235 meczów × ~3000 zdarzeń |
-| transfermarkt | 887 MB | 88 958 meczów (sędzia 99,2%), 3,18 mln składów, 1,27 mln zdarzeń |
-| club-football-2000-2025 | 52 MB | 230 557 meczów, 114 tys. ze statystykami, +245 tys. Elo |
-| football-data-uk | 41 MB | 92 411 meczów, Pinnacle closing na 86 tys. |
-| schochastics | 18 MB | 1 309 501 meczów 1888–2025 |
-| understat | 9,7 MB | 21 690 meczów z xG, 2014–2025 |
-| footiqo | 1,3 MB | **380 meczów z closing odds na rożne i kartki** |
-| apifootball, osm, statsbomb | <1 MB | sondy, 242 stadiony, katalog rozgrywek |
+| gospodarz | 1,85 pp | **46,9%** |
+| remis | 0,78 pp | 12,9% |
+| gość | 1,59 pp | 40,7% |
 
-Pełna rozpiska na poziomie kolumn: **`KATALOG-DANYCH.md`** (generowany skryptem).
+Pięć kroków:
 
-### B4. Infrastruktura
+1. **de-vig** na otwarciu i zamknięciu; ten krok jest testowalny sam w sobie —
+   czy prawdopodobieństwa po zdjęciu marży są skalibrowane na zamknięciu
+2. **`P_model` wyłącznie z cech point-in-time**; `club-football` ma Elo obu
+   stron w momencie meczu, więc tego nie trzeba budować
+3. **bramka decyzyjna** z progiem na `EV_net`, nie `EV_gross`
+4. **CLV, nie zysk:** `CLV = fair_open / fair_close − 1` na cenach po zdjęciu
+   marży, dla każdej selekcji, którą model wziąłby po kursie otwarcia
+5. **walk-forward**, nigdy jeden podział
 
-**Dwa repozytoria na koncie `startupowe1konto1`, oba prywatne:**
+Kryterium rozstrzygające: jeśli łańcuch nie produkuje dodatniego CLV na 1X2 przy
+86 tysiącach meczów, na rożnych też nie wyprodukuje.
 
-1. **`automated_bets_downloader`** — snapshotter kursów.
-   Działa na GitHub Actions: `capture` co godzinę (:07), `plan + settle` codziennie 06:20 UTC.
-   Sekret `API_FOOTBALL_KEY` ustawiony. **Przetestowany end-to-end na runnerze.**
-2. **`Model-buk-2.0`** — projekt. Kopia oryginału z pełną historią (21 commitów)
-   + folder `Audyt-danych-i-rynku/` + `KATALOG-DANYCH.md`.
+### 2. Dokończyć pogodę
 
-**Klucze API** (wszystkie `chmod 600`, poza repo):
+Patrz sekcja B. Nota [[04]] stawia pogodę na niskim priorytecie bazowym, więc to
+praca na przyrostową wartość — ale jest już rozpoczęta i tanio ją domknąć.
 
-```text
-~/.apifootball_key      API-Football, plan Free 100 req/dzien
-~/.rapidapi_key         RapidAPI flashscore4 (nieuzywany, patrz nizej)
-~/.footballdata_key     football-data.org, 13 rozgrywek
-~/.kaggle/access_token  Kaggle (format KGAT_)
-```
+### 3. Dług w rejestrze — resztki
 
-`gh` zalogowany jako `startupowe1konto1` (zakresy `repo`, `workflow`).
+Próg jest już naprawiony (to była pilna część). Zostało:
 
-**Dane surowe:** `/Users/wojciechrudnicki/Code_projects/hazard_saas/data/raw` (18 GB,
-MacBook Wojtka, **poza repo**).
+- rozliczyć **MB-0003** i **MB-0004** (mecze z 03.09, wymaga liczby rożnych)
+- **unieważnić MB-0002** — jego własne pole `notes` przyznaje, że kurs nie był
+  aktualny w momencie zamrożenia, więc wg [[22]] §7 to nie jest ważny frozen bet
+- dodać do `experiments/test-bets.csv` kolumny `tax_regime`, `odds_effective`,
+  `ev_net`
 
-### B5. Ograniczenia API-Football Free — zmierzone, nie ma tego w dokumentacji
+Uwaga na proporcje: **rozliczenie czterech betów nie powie nic o tym, czy
+podejście działa.** Przy `n = 4` nie da się odróżnić umiejętności od rzutu
+monetą. Wartość tej pracy jest w tym, że rejestr przestanie dezinformować
+zespół i że τ wejdzie do schematu, a nie w wiedzy o modelu.
 
-- terminarz widoczny **tylko ±1 dzień** → T-48h nieosiągalne
-- limit **~10 requestów/minutę** → skrypt czeka 6,5 s, ma backoff na 429
-- parametr `next` zablokowany, `season` ograniczony do **2022–2024**
-- 100 req/dzień (w configu ostrożny cap 90)
+### 4. Osłona monitoringu snapshottera
 
-### B6. Co odrzucone i dlaczego
+Patrz A.4. Jeden warunek, który odróżni „bezczynny bo przerwa na kadry" od
+„martwy".
 
-- **FlashscoreScraping** — przetestowany, **nie działa**. Nawet przykład z README zwraca
-  „Found 0 matches"; selektory DOM nieaktualne od listopada 2025.
-- **RapidAPI flashscore4** — ścieżka `/api/flashscore/v2/matches/odds` poprawna,
-  ale zwraca **Cloudflare 1010**. Subskrypcja działa (498/500), upstream blokuje.
+### 5. Faza −1: dokończyć audyt rynku
 
----
-
-## C. Co zostało do zrobienia
-
-### C1. Decyzje czekające na Wojtka
-
-1. **Konwersja transfermarktu na parquet?** 887 MB → ~250 MB, żaden plik >100 MB
-   (zmierzone: `game_lineups` 400→73 MB, `appearances` 189→21 MB, `game_events` 171→32 MB).
-   Bez tego push do repo się odbije.
-2. **Czy dane wchodzą do `Model-buk-2.0`?** Grupa A (122 MB) wchodzi bez problemu.
-   StatsBomb (17 GB) nie wejdzie nigdy.
-3. **Co z katalogiem `hazard_saas/`** — zmienić nazwę na czytelną czy przenieść dane.
-
-### C2. Następne kroki merytoryczne — rekomendowana kolejność
-
-**1. Spłacić dług w rejestrze (30 minut).**
-Rozliczyć MB-0003 i MB-0004 (mecze z 03.09), **unieważnić MB-0002** (kurs nieaktualny
-w momencie zamrożenia → wg [[22]] to nie jest ważny frozen bet), dodać kolumnę
-`ev_net_after_tax`, poprawić próg z [[21]] z +5% na wartość po podatku.
-
-**2. Backtest na tym, co już mamy — 86 025 meczów z CLV.**
-To jest jedyne miejsce, gdzie dziś można się czegokolwiek nauczyć o własnym pipelinie.
-Jeśli cały łańcuch (features → model → de-vig → decision gate → CLV) nie produkuje
-dodatniego CLV na 1X2 przy 227 tysiącach meczów, na rożnych też nie wyprodukuje —
-a dowiecie się tego w tydzień zamiast w rok.
-
-**3. Model rożnych na Footiqo PL 2025/26.**
-380 meczów, closing odds na 4 liniach, sędzia w 100%, marża 5%. Pierwszy realny test,
-czy jakikolwiek model bije rynek na tym rynku.
-
-**4. Pilnować snapshottera.**
-Pierwsze prawdziwe zdjęcia lecą automatycznie. Sprawdzić po tygodniu:
-`python3 scripts/snapshotter.py status` w repo `automated_bets_downloader`.
-
-**5. Po 2–4 tygodniach: rozszerzyć universum o Championship.**
-Ma **najwyższe base rates rożnych** ze wszystkich lig (69,8% na C≥4 przy 13 605 meczach)
-i jest mniej ostro wyceniany niż Premier League.
-
-**6. Decyzja o API-Football Pro ($19/mies).**
-Zdejmuje limit sezonów 2022–2024 i podnosi do 7500 req/dzień. **Nie kupować przed
-zbudowaniem backtestu na darmowych danych.**
-
-### C3. Odłożone świadomie
-
-- **Pogoda + entity resolution** — [[31 - TODO pogoda i entity resolution]].
-  2 968 nazw stadionów, dopasowanie do OSM na poziomie 3,7%. Droga przez kluby
-  (~430 encji) zamiast stadionów skraca to 7×.
-- **StatsBomb** — 17 GB, warstwa v5 z [[08]]. Jesteście przed v0.1.
-- **API-Football sezony 2022–2024** — Wojtek wstrzymał. ~500–1000 requestów, 5–10 dni.
-- **Scraper STS/Fortuna/Betclic** — jedyna droga do polskich kursów na rożne.
-  1–2 dni pracy. **Zbiera wyłącznie do przodu** — archiwum kursów nie istnieje.
-
-### C4. Cztery dziury w danych, w kolejności blokowania
-
-1. **Historia cen rożnych drużynowych — 0 meczów.** Wyniki mamy dla 114 363.
-   Snapshotter to naprawia, ale dopiero z czasem.
-2. **Ekstraklasa: rożne i SOT — 0 źródeł.** Rynek domowy pokryty gorzej niż
-   czwarta liga angielska. Ma za to 4 131 meczów z **Pinnacle closing na 94,1%**,
-   więc CLV na 1X2 jest tam policzalne.
-3. **Kontuzje z `known_at`** — wiemy kto zagrał, nie wiemy kto nie mógł.
-4. **Ruch linii** — mamy otwarcie i zamknięcie, nic pomiędzy.
+Zrobiony jest tylko STS (05.09, ręcznie). Zostają Superbet, Fortuna i **Betclic**
+— ten ostatni jest teraz najważniejszy z powodów z A.2.
 
 ---
 
@@ -245,32 +240,36 @@ zbudowaniem backtestu na darmowych danych.**
 
 ```text
 Model-buk-2.0/
-├── Football-Prediction-Brain/     25 not oryginalnych (zrodlo prawdy metodologicznej)
+├── HANDOFF.md                      ten plik
+├── docs/handoff-archiwum/          poprzednie handoffy
+├── Football-Prediction-Brain/      25 not metodologicznych (zrodlo prawdy)
+│   ├── 00 Mapa · 14 Decyzje · 21 Pilot · 22 Zasady   <- zmienione 09.09
 ├── Audyt-danych-i-rynku/
-│   ├── README.md                  streszczenie 5 ustalen
-│   ├── 23–31 *.md                 dziewiec not z 05.09
-│   ├── scripts/                   7 skryptow pobierania i sond
-│   └── docs/                      2 interaktywne diagramy HTML
-├── KATALOG-DANYCH.md              pelna rozpiska kolumn (generowana)
-├── HANDOFF.md                     ten plik
-└── experiments/test-bets.csv      4 bety, 3 wymagaja rozliczenia
+│   ├── 23-31 *.md                  notatki z audytu 05.09
+│   └── scripts/09_stadiums_and_weather.py            <- nowe, etapy wikidata/match/weather
+├── KATALOG-DANYCH.md               pelna rozpiska kolumn
+└── experiments/test-bets.csv        4 bety, dlug wg C.3
 
-automated_bets_downloader/
-├── scripts/snapshotter.py         plan / capture / settle / status
-├── config/universe.json           Ekstraklasa (106) + Premier League (39)
-├── .github/workflows/             2 workflow, aktywne
-└── data/odds_snapshots/           manifest.db + YYYY-MM-DD/*.json.gz
+automated_bets_downloader/          snapshotter, naprawiony 09.09 (81c5b55)
 
-hazard_saas/data/raw/              18 GB danych surowych (poza repo)
+hazard_saas/                        dane surowe, POZA repo
+├── data/raw/                       18 GB, 9 333 pliki, MANIFEST.txt
+│   ├── osm/stadiums_wikidata.json  6 764 stadiony z aliasami
+│   ├── osm/stadium_match.csv       dopasowanie, 77,6% meczow
+│   └── weather/                    PUSTE — patrz B
+└── report/                         atlas PDF, projekt niezalezny od Model Buk
 ```
 
-**Wizualizacja stanu danych:** https://claude.ai/code/artifact/372fcb55-2658-440a-a691-ec7d3d18ae87
+Uwaga: `hazard_saas/report/` to **osobny projekt** — 31-stronicowy atlas
+wizualizacji na tych samych danych, 27 plansz, 136 liczb weryfikowanych
+skryptem. Nie jest częścią Model Buk i nie wpływa na metodologię silnika.
 
 ---
 
 ## E. Jedno zdanie na koniec
 
-Mamy bardzo dużo danych **o tym, co się w meczach działo**, i prawie żadnych **o tym,
-ile rynek za to żądał** w rynkach, które nas interesują. Model da się zbudować dziś;
-zakład da się zbacktestować dopiero, gdy snapshotter nazbiera cen — dlatego działa
-od wczoraj i każdy dzień zwłoki to dzień danych, których już nie będzie.
+Podatek był przez cały czas policzony w złą stronę, a snapshotter przez trzy dni
+raportował sukces, nie zbierając nic — oba błędy były niewidoczne, bo nic ich nie
+sprawdzało. Następny etap nie polega na dołożeniu kolejnego źródła danych, tylko
+na przepuszczeniu tego, co już jest, przez pełny łańcuch aż do CLV, żeby dowiedzieć
+się, czy w ogóle jest tu przewaga do znalezienia.
