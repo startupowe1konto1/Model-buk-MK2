@@ -36,7 +36,11 @@ class TestLoadMatches(unittest.TestCase):
         cls.matches = load_matches()
 
     def test_exact_row_count(self):
-        self.assertEqual(len(self.matches), 86025)
+        """86 025 wierszy ma komplet kursow Pinnacle (tak podaje audyt), ale
+        jeden z nich - Panathinaikos vs Olympiakos, 17/03/2019, derby przerwane
+        przy 0:3 - nie ma wyniku koncowego. Mecz przerwany to VOID, zwrot stawki,
+        wiec do backtestu nadaje sie 86 024."""
+        self.assertEqual(len(self.matches), 86024)
 
     def test_exactly_22_leagues_no_empty_div(self):
         divs = {m.div for m in self.matches}

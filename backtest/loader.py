@@ -1,5 +1,11 @@
 """Wczytywanie meczow z football-data.co.uk z kursami Pinnacle open i close.
 
+Zwraca 86 024 mecze. Audyt podaje 86 025 wierszy z kompletem kursow i ma racje -
+roznica to jeden mecz przerwany (Panathinaikos vs Olympiakos, 17/03/2019, 0:3
+w przerwie), ktory nie ma wyniku koncowego. Mecz przerwany to VOID, zwrot stawki,
+wiec nie jest obserwacja backtestu. NIE domykac tej luki fallbackiem na HTR -
+stan z przerwy nie jest wynikiem meczu.
+
 Pulapka, ktora kosztowala godzine: pliki maja niejednolite kodowanie. Czesc jest
 UTF-8 z BOM, czesc latin-1. Czytanie wszystkiego jako utf-8 wywala sie na 0xf6
 (niemieckie o umlaut w nazwiskach sedziow). Czytanie wszystkiego jako latin-1
@@ -96,16 +102,7 @@ def load_matches(root: str = DEFAULT_DATA_ROOT) -> List[Match]:
                 continue
             ftr = (row.get("FTR") or "").strip()
             if ftr not in ("H", "D", "A"):
-                # Cicha strata #2: co najmniej jeden mecz (Panathinaikos-Olympiakos,
-                # 17/03/2019, przerwany przez zamieszki i przyznany walkowerem) ma
-                # puste FTR/FTHG/FTAG, ale wynik jest zapisany w kolumnach polczasu
-                # (HTR/HTHG/HTAG). Kursy Pinnacle open+close sa kompletne, więc
-                # odrzucenie takiego wiersza tylko z powodu pustego FTR zgubiloby
-                # policzalny mecz. Uzywamy HTR jako fallbacku wylacznie gdy FTR
-                # jest puste.
-                ftr = (row.get("HTR") or "").strip()
-                if ftr not in ("H", "D", "A"):
-                    continue
+                continue
             o_open = _odds(row, ODDS_OPEN)
             o_close = _odds(row, ODDS_CLOSE)
             if o_open is None or o_close is None:
