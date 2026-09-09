@@ -1,275 +1,213 @@
-# Handoff — stan projektu na 09.09.2026
+# Handoff — stan projektu na 09.09.2026, po backteście CLV
 
-> Dokument startowy dla nowej sesji. Poprzedni handoff (05.09) leży w
-> `docs/handoff-archiwum/HANDOFF-2026-09-05.md` — jest nadal dobrym opisem
-> danych i rynku, ale w czterech miejscach został unieważniony. Tutaj jest to,
-> co obowiązuje.
-
----
-
-## A. Co się zmieniło od 05.09 — czytaj to pierwsze
-
-### 1. Próg decyzyjny był błędny i przepuszczał zakłady przegrywające
-
-Reguła pilotażu brzmiała `EV >= ok. 5%` i liczona była na kursie z tabeli
-bukmachera. Polski podatek 12% pobierany jest **od stawki**, więc wyświetlany
-kurs jest brutto: 100 zł po kursie 2.00 zwraca 176 zł, nie 200.
-
-Wiążącym warunkiem jest teraz:
-
-```text
-EV_net = p_model × (τ × o) − 1 ≥ 0.05
-```
-
-| τ | reżim | break-even `p × o` | próg dla `EV_net ≥ 5%` |
-|---|---|---|---|
-| **0,88** | standard PL, 12% od stawki | 1,13636 (+13,64% brutto) | 1,19318 → **+19,32%** |
-| 0,94 | Betclic po degradacji promocji | 1,06383 (+6,38%) | 1,11702 → +11,70% |
-| **1,00** | Betclic bez podatku na SOLO | 1,00000 (0%) | 1,05 → +5,00% |
-
-Dowód szkodliwości starej reguły: **MB-0001 był jedynym kandydatem, który
-przeszedł przez bramkę w całym pilocie 27.08.** Miał orientacyjne `EV +6,2%`
-i po podatku ma **−6,59%**.
-
-Znaleziona przy tym luka strukturalna: nota 22 §5 używała w bramce terminu
-`EV_net`, którego vault **nigdzie nie definiował** — §4 definiowała tylko
-`EV_gross`. Kto implementował bramkę, musiał sobie dopowiedzieć, i dopowiedział
-`EV_gross`. Luka domknięta w 22 §4–5 i 14. Pełna korekta z tabelami:
-[[21 - Pilot live 27-08-2026]], sekcja „Korekta 09.09.2026".
-
-### 2. Betclic zmienia rachunek ekonomiczny całego projektu
-
-To **jedyny** legalny polski bukmacher z grą bez podatku na zakłady pojedyncze,
-24/7, pre-match i live. Pozostali (Fortuna, Superbet, forBET, LVBET, Betfan,
-Betters) mają to wyłącznie na AKO albo BetBuilder, czyli bezużytecznie dla tego
-procesu.
-
-Wszystkie cztery zamrożone bety są **ujemne** u bukmachera z podatkiem i
-**dodatnie** bez niego. Podatek jest jedyną przyczyną, dla której są
-przegrywające — nie model.
-
-Konsekwencja dla [[25 - Kolejność budowy]] fazy −1: instrukcja „marża liczona z
-podatkiem 12% w środku" dla Betclica jest nieprawdziwa. Bukmacher bez podatku
-może mieć kursy o 13,6% gorsze i nadal wygrywać, co zmienia, kogo warto
-snapshotować.
-
-**Do zweryfikowania w regulaminie, nie na podstawie mediów:** pierwsze ~1000 zł
-sumy stawek bez warunków, powyżej — SOLO bez podatku tylko przy ≥50% obrotu na
-AKO, inaczej 6% na singlach. Okno 12 miesięcy kroczące albo 5000 ostatnich
-zakładów.
-
-### 3. Snapshotter nie zbierał danych 7–9.09 i raportował sukces
-
-Krok `status` w workflow `plan + settle` wywalał się codziennie, bo
-`Api.__init__` wczytywał klucz API bezwarunkowo, a `cmd_status` tworzy `Api`
-tylko po to, żeby odczytać zużycie budżetu z lokalnej bazy SQLite. Klucz był
-wymagany i nieużywany, a workflow nie przekazywał sekretu do tego kroku.
-
-GitHub Actions pomija kolejne kroki po nieudanym, a po `status` stoi `Commit`.
-Skutek był większy niż komunikat o błędzie: `plan` i `settle` kończyły się
-sukcesem, po czym cała praca dnia ginęła razem z runnerem. Zacommitowana baza
-stała na 6 września z zerem rekordów `pending`, więc godzinny `capture`
-poprawnie nie miał czego zbierać i **kończył się sukcesem, nie robiąc nic**.
-
-Naprawione 09.09 w `automated_bets_downloader`, commit `81c5b55`:
-leniwe wczytywanie klucza + `if: always()` na kroku `Commit`.
-
-Potwierdzenie po naprawie: wszystkie cztery kroki zielone, pierwszy w historii
-repo commit rozliczeniowy (`986eff1`), tabela `results` 0 → 15, licznik
-requestów trwały (58/90 zamiast wiecznego 90/90).
-
-**Kursy na mecze z 7–9.09 są bezpowrotnie stracone.** Plan Free API-Football
-widzi terminarz ±1 dzień i nie udostępnia historii kursów.
-
-### 4. Punkt C2.4 starego handoffu był pułapką
-
-Zalecał kontrolę snapshottera przez `snapshotter.py status` — a to była
-dokładnie ta komenda, która się wywalała.
-
-**Szersza lekcja, którą warto zaadresować:** system zdrowy i bezczynny wygląda
-identycznie jak system martwy. Oba raportują sukces. Jeden mail na dobę
-przychodził tylko dlatego, że `status` przypadkiem padał; bez tej usterki cisza
-byłaby całkowita. Osłona do dopisania: jeśli w horyzoncie są mecze z universum,
-a od N dni nie zapisano żadnego zdjęcia — zgłoś błąd.
+> Dokument startowy dla nowej sesji. Poprzedni handoff z tego samego dnia leży w
+> `docs/handoff-archiwum/HANDOFF-2026-09-09-przed-backtestem.md`. Jego opis danych,
+> podatku i Betclica **obowiązuje nadal**. Unieważniona jest wyłącznie sekcja C.1
+> („Backtest CLV — to jest ścieżka krytyczna") — bo została wykonana. Tutaj jest wynik.
 
 ---
 
-## B. Stan pogody i entity resolution — robota w toku
+## A. Jedno zdanie
 
-Nota [[31 - TODO pogoda i entity resolution]] zakładała dopasowywanie „~430
-klubów". **Ta liczba była błędna:** `clubs.csv` zna 796 klubów i pokrywa 85,6%
-gospodarzy, a w `games.csv` jest ich 2980. Właściwą miarą nie jest liczba encji,
-tylko **pokrycie meczów**.
+Backtest CLV istnieje, przeszedł na 86 024 meczach i mówi, że **dwucechowy model Elo
+nie ma przewagi nad Pinnacle** — a przy okazji ujawnił, że dwie rzeczy, w które
+łatwo było uwierzyć (dodatni średni CLV i spadek efektywności rynku w czasie),
+są artefaktami, nie wynikami.
 
-### Co zrobione
+---
 
-Skrypt: `Audyt-danych-i-rynku/scripts/09_stadiums_and_weather.py`,
-trzy niezależne etapy (`wikidata` / `match` / `weather`).
+## B. Wynik
 
-**Overpass odpadł jako kanał.** Główna instancja `overpass-api.de` odrzuca
-połączenia, `kumi.systems` daje 504, `overpass.osm.ch` ma tylko dane
-Szwajcarii. Pierwsza próba pobierania kaflami przez 41 minut nie ściągnęła nic
-— 0,81 s czasu CPU, zero otwartych połączeń, sam sen w retry.
+### Trzy reżimy podatkowe
 
-**Wikidata okazała się lepsza, nie tylko dostępna.** Trzyma **aliasy** nazw,
-więc „Giuseppe Meazza" i „San Siro" to jeden obiekt — a właśnie na takich parach
-łamało się dopasowanie po nazwie.
+| reżim | τ | próg `p × o` | zakładów | średni CLV | mediana CLV | **pobito zamknięcie** | trafień |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `pl_standard` | 0,88 | 1,19318 | 32 152 | +0,33% | −0,48% | **47,72%** | 21,0% |
+| `betclic_degraded` | 0,94 | 1,11702 | 46 999 | +0,14% | −0,49% | **47,52%** | 23,0% |
+| `betclic_notax` | 1,00 | 1,05000 | 66 774 | +0,09% | −0,34% | **48,12%** | 25,2% |
+
+### Zero odniesienia, bez którego powyższe nie znaczy nic
+
+Wszystkie 258 072 nogi po de-vigu, **żadnego modelu i żadnej bramki**:
 
 ```text
-wikidata: 6 764 stadiony, 15 895 aliasów -> 22 659 wariantów nazw   (21 s)
-dopasowane nazwy:  1 493 / 2 968
-pokrycie MECZÓW:  68 882 / 88 716  = 77,6%    (przed: 16,6% na 242 stadionach OSM)
-  exact: 1 384 nazw
-  fuzzy:   109 nazw
+średni CLV        +0,1087%
+pobito zamknięcie   49,98%
 ```
 
-Wyniki w `hazard_saas/data/raw/osm/`: `stadiums_wikidata.json` (1,2 MB) i
-`stadium_match.csv` z kolumną `venue_confidence`.
+Czyli: nasz najlepszy reżim (+0,0895% przy 48,12%) jest **gorszy od losowego brania nóg**
+na obu miarach. 47,7% wobec 49,98% przy n = 32 152 to około **8 błędów standardowych
+poniżej przypadku**. Model nie jest nieinformatywny — jego niezgody z Pinnacle są
+systematycznie po złej stronie.
 
-### Co zostało
+To nie jest sygnatura leakage'u. Leakage zawyża pozorną przewagę, a tu nie ma czego zawyżać.
 
-**Pogoda nie jest pobrana.** Open-Meteo Archive zwraca `429 Too Many Requests`
-— ich limit liczy nie wywołania, a **wagę**: zapytanie o 20 lat × 9 zmiennych
-jest ogromne. Blokada weszła po ~10 zapytaniach i utrzymuje się jako
-natychmiastowe 429 w 0,2 s, czyli cooldown na poziomie IP.
+### Dwie tezy, które wyglądały na wyniki i nimi nie są
 
-Skrypt jest już przygotowany pod mniejszą wagę: **5 zmiennych zamiast 9**
-(ekstrema temperatury, opad, śnieg, porywy wiatru — zgodnie z
-[[04 - Rejestr cech]], gdzie liczy się `EnvironmentalShock`, nie średni
-komfort), zakres **od 2014-01-01** zamiast 2006 (bo `football-data-uk` startuje
-2014-07 i wcześniejsza pogoda nie ma z czym się spotkać), pauza 5 s i backoff
-na 429 z poszanowaniem `Retry-After`.
+**„Wyższy próg daje lepszy CLV, więc `EV_net` porządkuje selekcje sensownie" — nieprawda.**
+Średni CLV i „pobito zamknięcie" idą między reżimami w **przeciwnych** kierunkach.
+`p_close/p_open − 1` ma podłogę na −1 i brak sufitu, więc ostrzejszy próg przechyla
+selekcje w długie strzały i podbija średnią przez nierówność Jensena. W decylu
+najdłuższych kursów (bez modelu): średnia +0,762%, mediana −0,551%.
 
-Do zrobienia w następnej sesji:
+**„CLV spada z sezonu na sezon, więc rynek się wyostrzył" — nieprawda.**
+Ten sam kształt odtwarza się z **całkowicie wyłączonym modelem i bramką** i przeżywa
+wszystkie trzy metody de-vigu. Przyczyna jest w danych: średni overround kolumn `PS*`
+rośnie z **2,46% (2015/16) do 5,08% (2024/25)**, podczas gdy zamknięcie stoi na ~3,9%.
+Zmieniło się to, **czym jest piątkowe zdjęcie** u football-data.co.uk.
+
+> **Reguła do zapamiętania:** porównania CLV między sezonami na kolumnach `PS*`
+> nie są bezpieczne. Tabela sezonowa w `reports/` nie jest trendem efektywności rynku.
+
+---
+
+## C. Co powstało
+
+Gałąź **`backtest-clv`**, 19 commitów przed `main`, **101 testów zielonych**, czysty stdlib.
+
+```text
+backtest/
+├── loader.py         CSV, mieszane kodowania, typ Match, granice sezonów
+├── devig.py          proportional / power / Shin
+├── metrics.py        Brier, log-loss, RPS, ECE, koszyki kalibracji
+├── report_devig.py   kalibracja rynku; wybiera metodę de-vigu
+├── elo.py            Elo liczone wyłącznie do przodu
+├── model.py          wieloklasowa regresja logistyczna, pełny gradient
+├── gate.py           τ, EV_net, reguła decyzyjna
+├── clv.py            closing line value
+├── walkforward.py    pętla scalająca całość
+└── run_backtest.py   CLI, raporty markdown + JSON
+tests/                101 testów
+reports/              devig-calibration.md + backtest-clv-<τ>.{md,json}
+docs/superpowers/plans/2026-09-09-backtest-clv.md
+```
+
+Uruchomienie (jeden reżim ≈ 9 min):
 
 ```bash
-cd Audyt-danych-i-rynku/scripts
-python3 -u 09_stadiums_and_weather.py weather \
-  --out ../../../hazard_saas/data/raw --top 500
+cd /Users/wojciechrudnicki/Code_projects/Model-buk-2.0
+python3 -m unittest discover -s tests
+python3 -m backtest.report_devig --out reports/devig-calibration.md
+python3 -m backtest.run_backtest --tau pl_standard --out reports/backtest-clv-pl_standard
 ```
 
-Odczekać cooldown (rzędu godziny), potem uruchomić i **nie próbować w kółko** —
-każda próba w blokadzie ją wydłuża. Top 500 dopasowanych stadionów pokrywa
-60 475 meczów (68,2%).
+### Rzeczy, które warto znać, zanim się w to wejdzie
 
-Ręczny przegląd, który się opłaca: **pierwsze 50 nietrafionych nazw to 8 629
-meczów.** Wszystkie to nazwy sponsorskie albo transliteracje — „Bluenergy
-Stadium" to Stadio Friuli, „MHPArena Stuttgart" to Mercedes-Benz Arena,
-„Decathlon Arena-Stade Pierre-Mauroy" to Stade Pierre-Mauroy. Pół godziny pracy
-podnosi pokrycie o kilka punktów procentowych.
-
-### Pułapka na leakage, o której nie wolno zapomnieć
-
-Open-Meteo Archive zwraca **pogodę zrealizowaną, nie prognozę**. Do backtestu
-historycznego to akceptowalne. W produkcji to dokładnie ten leakage, który
-wymienia [[11 - Czas predykcji i leakage]] — model przewidujący T−24h nie mógł
-wiedzieć, ile faktycznie spadło deszczu. Produkcja musi używać endpointu
-prognoz i zapisywać je z `known_at`.
+- **86 025 kontra 86 024.** Audyt podaje 86 025 wierszy z kompletem kursów i ma rację.
+  Backtest używa 86 024, bo jeden mecz (Panathinaikos–Olympiakos, 17.03.2019, derby
+  przerwane przy 0:3) nie ma wyniku końcowego. Mecz przerwany to VOID. **Nie domykać
+  tej różnicy fallbackiem na `HTR`** — stan z przerwy nie jest wynikiem meczu.
+- **Pliki `football-data-uk` mają niejednolite kodowanie.** Część UTF-8 z BOM, część
+  latin-1. Naiwne czytanie gubi kolumnę `Div` w 11 658 wierszach i daje 23 ligi zamiast 22.
+  `loader.read_rows` wykrywa BOM na bajtach przed dekodowaniem.
+- **Rynek po de-vigu jest skalibrowany:** ECE **0,00311** na zamknięciu, overround
+  3,44% → 3,10%. Zwycięska metoda: `power` (najniższy log-loss).
+- **Cena wejścia to `PSH/PSD/PSA`, czyli zdjęcie piątkowe, nie otwarcie rynku.**
+  Mierzymy ruch piątek → zamknięcie. Przewaga może siedzieć we wcześniejszym oknie,
+  którego te dane nie pokazują.
 
 ---
 
-## C. Co robić dalej, w tej kolejności
+## D. Czego NIE zrobiono — trzy ustalenia z finalnego review
 
-### 1. Backtest CLV — to jest ścieżka krytyczna
+Kod jest poprawny; recenzent prześledził wszystkie powierzchnie leakage'u i są czyste.
+Poniższe nie psują poprawności, tylko **znaczenie liczb**. Wymagają ponownych przebiegów.
 
-Jedyne miejsce, gdzie dziś można się czegokolwiek nauczyć o własnym pipelinie.
-Podłoże jest **lepsze**, niż zapisano w starym handoffie:
+### D.1 Raporty nie mają zera odniesienia — priorytet najwyższy
 
-```text
-mecze z KOMPLETNYM Pinnacle open + close : 86 024
-zakres                                   : 2014-07-25 → 2026-01-14
-ligi                                     : 22
-overround                                : 3,44% na otwarciu → 3,10% na zamknięciu
-```
+`reports/*.md` podają „+0,09% średniego CLV" bez baseline'u z sekcji B. Ktokolwiek
+przeczyta te pliki bez tej rozmowy, wyciągnie odwrotny wniosek. Do zrobienia:
+wiersz baseline w każdym raporcie, i albo zamiana średniego CLV na średni log-CLV
+(`ln(p_close/p_open)`) jako liczbę główną, albo jawne nazwanie rozjazdu średnia/mediana
+artefaktem metryki.
 
-I jest co gonić, bo linie realnie się ruszają:
+### D.2 Metoda de-vigu wybierana na danych z przyszłości
 
-| selekcja | mediana \|ruchu fair prob\| | udział ruchów > 2 pp |
-|---|---|---|
-| gospodarz | 1,85 pp | **46,9%** |
-| remis | 0,78 pp | 12,9% |
-| gość | 1,59 pp | 40,7% |
+`run_backtest.py` woła `best_method(matches)` na **całym** zbiorze, w tym na sezonach,
+które backtest dopiero będzie „przewidywał". To ten sam grzech, który cały pipeline
+ma wykluczać, tylko na poziomie hiperparametru.
 
-Pięć kroków:
+I nie jest obojętny. Longshot CLV bez modelu:
 
-1. **de-vig** na otwarciu i zamknięciu; ten krok jest testowalny sam w sobie —
-   czy prawdopodobieństwa po zdjęciu marży są skalibrowane na zamknięciu
-2. **`P_model` wyłącznie z cech point-in-time**; `club-football` ma Elo obu
-   stron w momencie meczu, więc tego nie trzeba budować
-3. **bramka decyzyjna** z progiem na `EV_net`, nie `EV_gross`
-4. **CLV, nie zysk:** `CLV = fair_open / fair_close − 1` na cenach po zdjęciu
-   marży, dla każdej selekcji, którą model wziąłby po kursie otwarcia
-5. **walk-forward**, nigdy jeden podział
+| metoda | longshot CLV |
+|---|---:|
+| `proportional` | +0,056% |
+| `shin` | +0,442% |
+| **`power`** (wybierana) | **+0,599%** |
 
-Kryterium rozstrzygające: jeśli łańcuch nie produkuje dodatniego CLV na 1X2 przy
-86 tysiącach meczów, na rożnych też nie wyprodukuje.
+Rozrzut 10×, większy niż cały raportowany efekt — a pipeline wybiera najbardziej
+pochlebną z trzech. Minimum: raportować wrażliwość na wszystkie trzy metody obok siebie.
+Poprawnie: wybierać metodę z sezonów treningowych, wewnątrz pętli walk-forward.
 
-### 2. Dokończyć pogodę
+### D.3 Jeden mecz może dać dwie selekcje
 
-Patrz sekcja B. Nota [[04]] stawia pogodę na niskim priorytecie bazowym, więc to
-praca na przyrostową wartość — ale jest już rozpoczęta i tanio ją domknąć.
+Krawędzie sumują się do zera na trzech nogach, więc dwie mogą być dodatnie jednocześnie.
+`summarize` liczy nogi jako niezależne, choć nogi tego samego meczu mają mechanicznie
+ujemnie skorelowany CLV (prawdopodobieństwa sumują się do jedynki). Brakuje liczby
+odrębnych meczów i błędów standardowych — raporty zawyżają efektywną próbę.
 
-### 3. Dług w rejestrze — resztki
+### D.4 Nie zmierzono kalibracji modelu
 
-Próg jest już naprawiony (to była pilna część). Zostało:
-
-- rozliczyć **MB-0003** i **MB-0004** (mecze z 03.09, wymaga liczby rożnych)
-- **unieważnić MB-0002** — jego własne pole `notes` przyznaje, że kurs nie był
-  aktualny w momencie zamrożenia, więc wg [[22]] §7 to nie jest ważny frozen bet
-- dodać do `experiments/test-bets.csv` kolumny `tax_regime`, `odds_effective`,
-  `ev_net`
-
-Uwaga na proporcje: **rozliczenie czterech betów nie powie nic o tym, czy
-podejście działa.** Przy `n = 4` nie da się odróżnić umiejętności od rzutu
-monetą. Wartość tej pracy jest w tym, że rejestr przestanie dezinformować
-zespół i że τ wejdzie do schematu, a nie w wiedzy o modelu.
-
-### 4. Osłona monitoringu snapshottera
-
-Patrz A.4. Jeden warunek, który odróżni „bezczynny bo przerwa na kadry" od
-„martwy".
-
-### 5. Faza −1: dokończyć audyt rynku
-
-Zrobiony jest tylko STS (05.09, ręcznie). Zostają Superbet, Fortuna i **Betclic**
-— ten ostatni jest teraz najważniejszy z powodów z A.2.
+Znamy ECE rynku (0,00311), nie znamy ECE modelu. Diagnoza „model przesadnie pewny
+na długich strzałach" opiera się na trafialności 21% i na tym, że 15% wszystkich
+selekcji przechodzi bramkę wymagającą +19,3% — to mocna poszlaka, nie pomiar.
+Jeden przebieg, ~9 min, i wiadomo.
 
 ---
 
-## D. Gdzie co jest
+## E. Dług metodologiczny w samym vaulcie
+
+**Nota 22 §5 przeczy `HANDOFF`owi.** Nota zapisuje warunek jako
+`EV_net <= EV_min → NO BET` (wymaga ostrej nierówności), a handoff jako
+`EV_net ≥ 0.05` (dopuszcza równość). Kod trzyma się handoffu i ma to udokumentowane
+w `backtest/gate.py`. **Notę 22 trzeba uspójnić.**
+
+Osobno, obserwacja o procesie, nie o kodzie: plan implementacyjny zawierał kompletny
+kod każdego zadania, więc implementerzy przepisywali, zamiast wyprowadzać. Skutek —
+**pięć pustych testów** przeszło z planu do repo nietkniętych (test leakage'u w Elo
+porównujący floata sprzed mutacji, fixture z `o_open == o_close` pilnujący „nigdy nie
+wyceniaj po zamknięciu", nieprzypięte granice bramki, test koszyka przechodzący na
+pustym wejściu, brak wiązania indeksu kursu z wynikiem). Wszystkie wykryte mutation
+testingiem i naprawione — każdy nowy test udowodniony przez tymczasowe zepsucie kodu.
+**Wniosek na przyszłość: plan z gotowym kodem kupuje szybkość kosztem tego, że defekt
+planu nikt po drodze nie zakwestionuje.**
+
+---
+
+## F. Co robić dalej, w tej kolejności
+
+1. **Kalibracja modelu** (D.4) — jedna liczba, 9 minut, rozstrzyga diagnozę.
+   Jeśli potwierdzi rozkalibrowanie, następny krok jest tani: kalibracja izotoniczna
+   albo Platt na `P_model`, co często samo usuwa większość pozornych przewag.
+2. **Baseline i wrażliwość de-vigu** (D.1, D.2) — żeby raporty w repo mówiły prawdę
+   bez przypisu. ~40 min przebiegów.
+3. **Dopiero potem cechy.** Model jest liniowym logitem na jednej cesze, więc
+   `log(p_D/p_H)` jest wymuszenie monotoniczne w `elo_diff`, podczas gdy prawdziwe
+   prawdopodobieństwo remisu jest garbate. Bramka strzela głównie w remisy i długie
+   strzały w meczach niedopasowanych — dokładnie tam, gdzie ta specyfikacja jest najgorsza.
+4. **Pogoda** (sekcja B poprzedniego handoffu) — niezależne, nadal otwarte.
+5. **Dług w rejestrze i faza −1 / Betclic** — niezależne, nadal otwarte.
+
+> **Uwaga na proporcje.** „Brak przewagi" jest uczciwym werdyktem o **tym modelu**.
+> Jest znacznie słabszym dowodem na temat Pinnacle, niż sugerowałby ton raportów.
+> Zbudowano przyrząd pomiarowy i zmierzono nim baseline — to jest dorobek tej sesji,
+> a nie rozstrzygnięcie, czy w projekcie jest przewaga do znalezienia.
+
+---
+
+## G. Gdzie co jest
 
 ```text
 Model-buk-2.0/
-├── HANDOFF.md                      ten plik
-├── docs/handoff-archiwum/          poprzednie handoffy
-├── Football-Prediction-Brain/      25 not metodologicznych (zrodlo prawdy)
-│   ├── 00 Mapa · 14 Decyzje · 21 Pilot · 22 Zasady   <- zmienione 09.09
-├── Audyt-danych-i-rynku/
-│   ├── 23-31 *.md                  notatki z audytu 05.09
-│   └── scripts/09_stadiums_and_weather.py            <- nowe, etapy wikidata/match/weather
-├── KATALOG-DANYCH.md               pelna rozpiska kolumn
-└── experiments/test-bets.csv        4 bety, dlug wg C.3
+├── HANDOFF.md                        ten plik
+├── docs/handoff-archiwum/            poprzednie, w tym 09.09 sprzed backtestu
+├── docs/superpowers/plans/           plan backtestu, 10 tasków
+├── backtest/                         pipeline (galaz backtest-clv)
+├── tests/                            101 testow
+├── reports/                          kalibracja rynku + 3 rezimy CLV
+├── Football-Prediction-Brain/        25 not metodologicznych (zrodlo prawdy)
+├── Audyt-danych-i-rynku/             notatki i skrypty 01-09
+└── experiments/test-bets.csv         4 bety, dlug wg C.3 poprzedniego handoffu
 
-automated_bets_downloader/          snapshotter, naprawiony 09.09 (81c5b55)
-
-hazard_saas/                        dane surowe, POZA repo
-├── data/raw/                       18 GB, 9 333 pliki, MANIFEST.txt
-│   ├── osm/stadiums_wikidata.json  6 764 stadiony z aliasami
-│   ├── osm/stadium_match.csv       dopasowanie, 77,6% meczow
-│   └── weather/                    PUSTE — patrz B
-└── report/                         atlas PDF, projekt niezalezny od Model Buk
+hazard_saas/data/raw/                 dane surowe, 18 GB, POZA repo
 ```
-
-Uwaga: `hazard_saas/report/` to **osobny projekt** — 31-stronicowy atlas
-wizualizacji na tych samych danych, 27 plansz, 136 liczb weryfikowanych
-skryptem. Nie jest częścią Model Buk i nie wpływa na metodologię silnika.
-
----
-
-## E. Jedno zdanie na koniec
-
-Podatek był przez cały czas policzony w złą stronę, a snapshotter przez trzy dni
-raportował sukces, nie zbierając nic — oba błędy były niewidoczne, bo nic ich nie
-sprawdzało. Następny etap nie polega na dołożeniu kolejnego źródła danych, tylko
-na przepuszczeniu tego, co już jest, przez pełny łańcuch aż do CLV, żeby dowiedzieć
-się, czy w ogóle jest tu przewaga do znalezienia.
