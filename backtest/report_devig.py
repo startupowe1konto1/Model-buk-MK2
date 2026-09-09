@@ -11,7 +11,7 @@ Uzycie:
 """
 import argparse
 import sys
-from typing import Callable, List, NamedTuple, Optional, Sequence, Tuple
+from typing import List, NamedTuple, Optional, Sequence, Tuple
 
 from backtest.devig import METHODS, overround
 from backtest.loader import Match, load_matches
@@ -48,20 +48,13 @@ def _match_pairs(probs: Sequence[float], ftr: str) -> List[Tuple[float, int]]:
     return [(p, 1 if i == k else 0) for i, p in enumerate(probs)]
 
 
-def _pairs(matches: Sequence[Match], fn: Callable[[Sequence[float]], Sequence[float]]) -> List[Tuple[float, int]]:
-    """(prawdopodobienstwo, trafienie) na kursach zamkniecia dla danej funkcji de-vig.
+def _score_with_pairs(matches: Sequence[Match], method: str, which: str) -> Tuple[MethodScore, List[Tuple[float, int]]]:
+    """Jeden przebieg po meczach: akumuluje log-loss/Brier/RPS i zbiera pary.
 
-    Uzywane przez _render przy krzywej kalibracji. score_method NIE korzysta
-    z tej funkcji - liczy wlasne pary w tym samym przebiegu po meczach, w
-    ktorym juz akumuluje log-loss/Brier/RPS, zeby nie robic drugiego przejscia.
+    score_method korzysta z tego i odrzuca pary. _render (dla kolumny
+    "close") korzysta z tego i zachowuje pary per metoda, zeby przy wyborze
+    zwyciezcy nie trzeba bylo przechodzic po meczach jeszcze raz.
     """
-    out: List[Tuple[float, int]] = []
-    for m in matches:
-        out.extend(_match_pairs(fn(m.o_close), m.ftr))
-    return out
-
-
-def score_method(matches: Sequence[Match], method: str, which: str) -> MethodScore:
     fn = METHODS[method]
     ll = br = rp = 0.0
     pairs: List[Tuple[float, int]] = []
@@ -73,8 +66,13 @@ def score_method(matches: Sequence[Match], method: str, which: str) -> MethodSco
         pairs.extend(_match_pairs(probs, m.ftr))
     n = len(matches)
     if not n:
-        return MethodScore(method, 0, 0.0, 0.0, 0.0, 0.0)
-    return MethodScore(method, n, ll / n, br / n, rp / n, ece(pairs))
+        return MethodScore(method, 0, 0.0, 0.0, 0.0, 0.0), pairs
+    return MethodScore(method, n, ll / n, br / n, rp / n, ece(pairs)), pairs
+
+
+def score_method(matches: Sequence[Match], method: str, which: str) -> MethodScore:
+    score, _pairs_unused = _score_with_pairs(matches, method, which)
+    return score
 
 
 def best_method(matches: Sequence[Match]) -> str:
@@ -96,12 +94,17 @@ def _render(matches: Sequence[Match]) -> str:
         "> `PSH/PSD/PSA` to zdjecie z budowy pliku tygodniowego (zwykle piatek),\n"
         "> nie kurs otwarcia rynku. Ponizsze 'open' czytaj jako 'piatek'.\n"
     )
+    close_pairs = {}
     for which in ("open", "close"):
         lines.append("\n## {0}\n".format(which))
         lines.append("| metoda | log-loss | Brier | RPS | ECE |")
         lines.append("|---|---:|---:|---:|---:|")
         for name in sorted(METHODS):
-            s = score_method(matches, name, which)
+            if which == "close":
+                s, pairs_for_name = _score_with_pairs(matches, name, which)
+                close_pairs[name] = pairs_for_name
+            else:
+                s = score_method(matches, name, which)
             lines.append(
                 "| {0} | {1:.5f} | {2:.5f} | {3:.5f} | {4:.5f} |".format(
                     s.method, s.log_loss, s.brier, s.rps, s.ece
@@ -110,8 +113,7 @@ def _render(matches: Sequence[Match]) -> str:
     winner = best_method(matches)
     lines.append("\n**Metoda wybrana do dalszych etapow: `{0}`** (najnizszy log-loss na zamknieciu).\n".format(winner))
     lines.append("\n## Krzywa kalibracji zamkniecia ({0})\n".format(winner))
-    fn = METHODS[winner]
-    pairs = _pairs(matches, fn)
+    pairs = close_pairs[winner]
     lines.append("| przedzial | n | sr. przewidziane | sr. zaobserwowane | roznica |")
     lines.append("|---|---:|---:|---:|---:|")
     for b in calibration_buckets(pairs, n_buckets=20):
