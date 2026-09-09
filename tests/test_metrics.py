@@ -78,6 +78,13 @@ class TestCalibrationBuckets(unittest.TestCase):
         buckets = calibration_buckets([(1.0, 1)], n_buckets=10)
         self.assertEqual(buckets[-1].n, 1)
 
+    def test_negative_probability_does_not_land_in_last_bucket(self):
+        """int(-0.1 * 10) == -1, ktore bez clampu Python odczytuje jako
+        ostatni koszyk. Ujemne p nie powinno wygladac jak p ~ 1."""
+        buckets = calibration_buckets([(-0.1, 0)], n_buckets=10)
+        self.assertEqual(buckets[0].n, 1)
+        self.assertEqual(buckets[-1].n, 0)
+
 
 class TestECE(unittest.TestCase):
     def test_perfect_calibration_is_zero(self):

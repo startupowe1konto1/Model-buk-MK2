@@ -30,7 +30,6 @@ DEFAULT_DATA_ROOT = (
 # Constraints w planie.
 ODDS_OPEN = ("PSH", "PSD", "PSA")
 ODDS_CLOSE = ("PSCH", "PSCD", "PSCA")
-REQUIRED = ODDS_OPEN + ODDS_CLOSE
 
 _DATE_FORMATS = ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d")
 

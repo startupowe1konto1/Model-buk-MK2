@@ -17,7 +17,7 @@ def outcome_index(ftr: str) -> int:
     try:
         return OUTCOMES.index(ftr)
     except ValueError:
-        raise ValueError("nieznany wynik: {0!r}".format(ftr))
+        raise ValueError("nieznany wynik: {0!r}".format(ftr)) from None
 
 
 def brier(probs: Sequence[float], ftr: str) -> float:
@@ -59,7 +59,9 @@ def calibration_buckets(
     hits = [0] * n_buckets
     counts = [0] * n_buckets
     for p, y in pairs:
-        idx = min(int(p * n_buckets), n_buckets - 1)  # p == 1.0 do ostatniego
+        # p == 1.0 idzie do ostatniego koszyka; p poza [0, 1] jest przypiecie
+        # do krajca, zamiast (dla p < 0) trafiac przez idx=-1 w ostatni koszyk.
+        idx = min(max(int(p * n_buckets), 0), n_buckets - 1)
         sums[idx] += p
         hits[idx] += y
         counts[idx] += 1

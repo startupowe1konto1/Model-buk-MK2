@@ -10,7 +10,7 @@ Trzy metody, bo wybor jest hipoteza badawcza, nie detalem technicznym:
   obrotu pochodzacy od poinformowanych; wiekszy z = wiecej marzy zdjete
   z dlugich strzalow.
 
-Oba nieliniowe rozwiazania idziemy bisekcja - 60 iteracji daje precyzje
+Oba nieliniowe rozwiazania idziemy bisekcja - 100 iteracji daje precyzje
 ponizej 1e-15 i nie wymaga pochodnych ani numpy.
 """
 import math
