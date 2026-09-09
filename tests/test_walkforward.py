@@ -29,6 +29,21 @@ def _synthetic(n_seasons=4):
     return sorted(out, key=lambda m: (m.date, m.div, m.home, m.away))
 
 
+def _synthetic_moving(n_seasons=4):
+    """Jak _synthetic, ale linia sie rusza: o_open != o_close na kazdej
+    selekcji. Potrzebne wszedzie, gdzie test ma odroznic cene otwarcia od
+    ceny zamkniecia - przy rownych kursach taki test nie pilnuje niczego."""
+    out = []
+    for i in range(n_seasons):
+        year = 2014 + i
+        for day in range(1, 21):
+            out.append(_m(year, 9, day, "Silny", "Slaby", "H",
+                          o_open=(2.00, 3.50, 4.00), o_close=(1.70, 3.80, 5.00)))
+            out.append(_m(year, 10, day, "Slaby", "Silny", "A",
+                          o_open=(4.00, 3.50, 2.00), o_close=(5.00, 3.80, 1.70)))
+    return sorted(out, key=lambda m: (m.date, m.div, m.home, m.away))
+
+
 class TestSeasons(unittest.TestCase):
     def test_sorted_and_unique(self):
         s = seasons(_synthetic(3))
@@ -54,13 +69,15 @@ class TestRun(unittest.TestCase):
             self.assertGreaterEqual(s.match.date.year, 2016)
 
     def test_no_selection_uses_closing_odds_as_price(self):
-        """Zaklad zawsze bierzemy po cenie 'open'. Zamkniecie sluzy WYLACZNIE
-        do liczenia CLV - uzycie go jako ceny to leakage z [[11]]."""
-        matches = _synthetic(4)
-        sel = run(matches, "proportional", TAU["betclic_notax"], ev_min=0.0)
+        """Fixture MUSI miec o_open != o_close, inaczej test nie odroznia ceny
+        otwarcia od zamkniecia i przechodzi takze wtedy, gdy kod bierze zaklad
+        po kursie zamkniecia. Zamkniecie sluzy wylacznie do liczenia CLV."""
+        sel = run(_synthetic_moving(4), "proportional", TAU["betclic_notax"], ev_min=0.0)
+        self.assertTrue(sel, "fixture nie wyprodukowal zadnej selekcji")
         for s in sel:
             idx = ("H", "D", "A").index(s.outcome)
             self.assertAlmostEqual(s.odds, s.match.o_open[idx], places=12)
+            self.assertNotAlmostEqual(s.odds, s.match.o_close[idx], places=6)
 
     def test_model_learns_the_synthetic_edge(self):
         """W lidze, gdzie Silny zawsze wygrywa, model musi to zauwazyc."""
@@ -76,15 +93,7 @@ class TestRun(unittest.TestCase):
 
     def test_clv_is_positive_when_line_moves_toward_the_pick(self):
         """Zamkniecie krotsze na gospodarzu = rynek przyszedl po nas."""
-        matches = []
-        for i in range(4):
-            year = 2014 + i
-            for day in range(1, 21):
-                matches.append(_m(year, 9, day, "Silny", "Slaby", "H",
-                                  o_open=(2.00, 3.50, 4.00), o_close=(1.70, 3.80, 5.00)))
-                matches.append(_m(year, 10, day, "Slaby", "Silny", "A",
-                                  o_open=(4.00, 3.50, 2.00), o_close=(5.00, 3.80, 1.70)))
-        matches.sort(key=lambda m: (m.date, m.div, m.home, m.away))
+        matches = _synthetic_moving(4)
         sel = run(matches, "proportional", TAU["betclic_notax"], ev_min=0.0)
         picks = [s for s in sel if s.outcome in ("H", "A")]
         self.assertTrue(picks)
@@ -95,7 +104,7 @@ class TestSummarize(unittest.TestCase):
     def test_reports_core_fields(self):
         sel = run(_synthetic(4), "proportional", TAU["betclic_notax"], ev_min=0.0)
         out = summarize(sel)
-        for key in ("n_bets", "mean_clv", "median_clv", "beat_close_rate", "by_season"):
+        for key in ("n_bets", "mean_clv", "median_clv", "beat_close_rate", "hit_rate", "by_season", "by_league"):
             self.assertIn(key, out)
 
     def test_empty_input_does_not_crash(self):

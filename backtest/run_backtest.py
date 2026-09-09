@@ -7,6 +7,7 @@ Uzycie:
 """
 import argparse
 import json
+import os
 from typing import Optional, Sequence
 
 from backtest.devig import METHODS
@@ -67,6 +68,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     text = _markdown(summary, args.tau, devig_method, args.ev_min)
 
     if args.out:
+        out_dir = os.path.dirname(args.out)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
         with open(args.out + ".md", "w", encoding="utf-8") as fh:
             fh.write(text)
         with open(args.out + ".json", "w", encoding="utf-8") as fh:
