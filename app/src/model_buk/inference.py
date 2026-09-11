@@ -214,6 +214,7 @@ def attach_total_market_price(
         under_odds=under_odds,
         edge_threshold=cfg.edge_threshold,
         ev_threshold=cfg.ev_threshold,
+        tax_multiplier=cfg.tax_multiplier,
     )
     priced = dict(prediction)
     priced["market_check"] = {
@@ -223,6 +224,8 @@ def attach_total_market_price(
         "under_odds": float(under_odds),
         "over": over.__dict__,
         "under": under.__dict__,
-        "best_decision": max((over, under), key=lambda d: d.ev).__dict__,
+        # Wybor "najlepszej" strony musi isc po EV_net - to samo kryterium,
+        # na ktorym decyduje bramka bet/no-bet w price_two_way_market.
+        "best_decision": max((over, under), key=lambda d: d.ev_net).__dict__,
     }
     return priced

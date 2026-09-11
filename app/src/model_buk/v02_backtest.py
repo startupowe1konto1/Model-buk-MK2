@@ -21,7 +21,7 @@ from model_buk.evaluation.metrics import (
     expected_calibration_error,
     probability_metrics,
 )
-from model_buk.markets.pricing import devig_two_way, expected_value, fair_odds
+from model_buk.markets.pricing import devig_two_way, expected_value, expected_value_net, fair_odds
 from model_buk.models.corner_dual_v02 import fit_dual_model
 from model_buk.strengths import add_corner_strength_features
 
@@ -163,8 +163,13 @@ def reference_predictions(
         z["fair_under_odds"] = 1.0 / z.p_model_under.clip(lower=1e-12)
         z["edge_over"] = z.p_model_over - z.p_market_over
         z["edge_under"] = z.p_model_under - z.p_market_under
+        # ev_over/ev_under sa brutto (przed podatkiem) - zostawione do
+        # porownan/raportow. Bramka bet/no-bet w select_reference_bets
+        # decyduje wylacznie na ev_over_net/ev_under_net.
         z["ev_over"] = z.p_model_over * z.over_odds - 1.0
         z["ev_under"] = z.p_model_under * z.under_odds - 1.0
+        z["ev_over_net"] = expected_value_net(z.p_model_over, z.over_odds, cfg.tax_multiplier)
+        z["ev_under_net"] = expected_value_net(z.p_model_under, z.under_odds, cfg.tax_multiplier)
         z["distribution_method"] = distribution_method
         total_parts.append(z)
     total = pd.concat(total_parts, ignore_index=True)
@@ -200,10 +205,10 @@ def select_reference_bets(predictions: pd.DataFrame, cfg: CornerV02Config) -> pd
     candidates: list[dict] = []
     for _, row in predictions.iterrows():
         options = []
-        if row.edge_over >= cfg.edge_threshold and row.ev_over >= cfg.ev_threshold:
-            options.append(("OVER", row.edge_over, row.ev_over, row.over_odds, row.actual_over, row.p_model_over))
-        if row.edge_under >= cfg.edge_threshold and row.ev_under >= cfg.ev_threshold:
-            options.append(("UNDER", row.edge_under, row.ev_under, row.under_odds, 1 - row.actual_over, row.p_model_under))
+        if row.edge_over >= cfg.edge_threshold and row.ev_over_net >= cfg.ev_threshold:
+            options.append(("OVER", row.edge_over, row.ev_over_net, row.over_odds, row.actual_over, row.p_model_over))
+        if row.edge_under >= cfg.edge_threshold and row.ev_under_net >= cfg.ev_threshold:
+            options.append(("UNDER", row.edge_under, row.ev_under_net, row.under_odds, 1 - row.actual_over, row.p_model_under))
         if not options:
             continue
         side, edge, ev, odds, win, p_model = max(options, key=lambda x: x[2])
@@ -294,6 +299,7 @@ def build_v02_summary(
             "reference_start": cfg.reference_start,
             "edge_threshold": cfg.edge_threshold,
             "ev_threshold": cfg.ev_threshold,
+            "tax_multiplier": cfg.tax_multiplier,
             "max_bets_per_match": cfg.max_bets_per_match,
             "shrinkage_games": cfg.shrinkage_games,
         },

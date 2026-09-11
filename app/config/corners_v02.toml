@@ -24,6 +24,11 @@ max_rate = 2.50
 edge_threshold = 0.05
 ev_threshold = 0.05
 max_bets_per_match = 1
+# Mnoznik podatkowy do liczenia EV_net (bramka decyduje na EV_net, nigdy na
+# EV_gross - patrz pricing.py). 0.88 = polski standard, podatek 12% od
+# stawki. Inne rezimy uzywane w tym projekcie: 0.94 (Betclic po degradacji
+# promocji), 1.00 (Betclic bez podatku na SOLO).
+tax_multiplier = 0.88
 
 [validation]
 folds = [
