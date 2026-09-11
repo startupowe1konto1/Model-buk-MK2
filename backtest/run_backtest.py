@@ -100,6 +100,12 @@ def _markdown(
         "modelu powyzej, zestawiony wprost z wynikiem modelu w jednej tabeli,\n"
         "zeby nie trzeba bylo otwierac drugiego pliku.\n".format(devig_method)
     )
+    lines.append(
+        "To zestawienie rozstrzygaja `mediana CLV` i `pobito zamkniecie`, nie\n"
+        "`sredni CLV` (patrz notka o artefakcie ilorazowym wyzej). Na tych\n"
+        "danych model wypada gorzej niz baseline na obu tych miarach - gorzej\n"
+        "niz losowe branie wszystkich trzech nog kazdego meczu.\n"
+    )
     lines.append("| kto | n (zakladow / nog) | sredni CLV | mediana CLV | pobito zamkniecie |")
     lines.append("|---|---:|---:|---:|---:|")
     lines.append(

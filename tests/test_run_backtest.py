@@ -163,6 +163,26 @@ class TestMarkdownReport(unittest.TestCase):
         for phrase in forbidden:
             self.assertNotIn(phrase, text)
 
+    def test_baseline_table_has_explicit_verdict_pointing_at_median_and_beat_close(self):
+        """Brief taska: tabela porownawcza (model vs baseline) sama w sobie nie
+        moze prowadzic czytelnika skanujacego tylko kolumne `sredni CLV` do
+        blednego wniosku. Raport musi jawnie powiedziec, ktore miary
+        rozstrzygaja (mediana CLV i pobicie zamkniecia, NIE srednia) i w ktora
+        strone wypada porownanie na tych dwoch miarach."""
+        text = self._render()
+        header_idx = text.index("| kto | n (zakladow / nog) |")
+        verdict_markers = ("mediana CLV", "pobito zamkniecie", "gorzej niz baseline")
+        # werdykt musi wskazywac WLASNIE te dwie miary, a nie `sredni CLV`
+        for marker in verdict_markers:
+            self.assertIn(marker, text)
+        # werdykt musi siedziec w sekcji "Model kontra baseline", przed
+        # tabela (czytelnik skanujacy kolumne `sredni CLV` musi go minac
+        # zanim dotrze do liczb) - nie gdzies indziej w dokumencie.
+        section_idx = text.index("## Model kontra baseline")
+        verdict_idx = text.index("gorzej niz baseline")
+        self.assertLess(section_idx, verdict_idx)
+        self.assertLess(verdict_idx, header_idx)
+
     def test_pre_existing_sections_survive_with_unchanged_content(self):
         text = self._render()
         self.assertIn("\n## Po sezonach\n", text)
