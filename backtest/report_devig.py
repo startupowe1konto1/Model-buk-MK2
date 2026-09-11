@@ -15,14 +15,7 @@ from typing import List, NamedTuple, Optional, Sequence, Tuple
 
 from backtest.devig import METHODS, overround
 from backtest.loader import Match, load_matches
-from backtest.metrics import (
-    brier,
-    calibration_buckets,
-    ece,
-    log_loss,
-    outcome_index,
-    rps,
-)
+from backtest.metrics import aggregate_scores, calibration_buckets
 
 
 class MethodScore(NamedTuple):
@@ -42,32 +35,23 @@ def _odds_for(m: Match, which: str):
     raise ValueError("which musi byc 'open' albo 'close', dostalem {0!r}".format(which))
 
 
-def _match_pairs(probs: Sequence[float], ftr: str) -> List[Tuple[float, int]]:
-    """Pary (przewidziane prawdopodobienstwo, trafienie) dla jednego meczu."""
-    k = outcome_index(ftr)
-    return [(p, 1 if i == k else 0) for i, p in enumerate(probs)]
-
-
 def _score_with_pairs(matches: Sequence[Match], method: str, which: str) -> Tuple[MethodScore, List[Tuple[float, int]]]:
-    """Jeden przebieg po meczach: akumuluje log-loss/Brier/RPS i zbiera pary.
+    """Jeden przebieg po meczach: wydobywa (probs, ftr) dla kazdego meczu i
+    oddaje akumulacje log-lossu/Briera/RPS oraz budowe par
+    `backtest.metrics.aggregate_scores` - to samo, co robi
+    `walkforward.score_predictions` dla P_model, wiec petla akumulujaca
+    istnieje raz, nie dwa razy.
 
     score_method korzysta z tego i odrzuca pary. _render (dla kolumny
     "close") korzysta z tego i zachowuje pary per metoda, zeby przy wyborze
     zwyciezcy nie trzeba bylo przechodzic po meczach jeszcze raz.
     """
     fn = METHODS[method]
-    ll = br = rp = 0.0
-    pairs: List[Tuple[float, int]] = []
-    for m in matches:
-        probs = fn(_odds_for(m, which))
-        ll += log_loss(probs, m.ftr)
-        br += brier(probs, m.ftr)
-        rp += rps(probs, m.ftr)
-        pairs.extend(_match_pairs(probs, m.ftr))
-    n = len(matches)
-    if not n:
-        return MethodScore(method, 0, 0.0, 0.0, 0.0, 0.0), pairs
-    return MethodScore(method, n, ll / n, br / n, rp / n, ece(pairs)), pairs
+    totals = aggregate_scores((fn(_odds_for(m, which)), m.ftr) for m in matches)
+    return (
+        MethodScore(method, totals.n, totals.log_loss, totals.brier, totals.rps, totals.ece),
+        totals.pairs,
+    )
 
 
 def score_method(matches: Sequence[Match], method: str, which: str) -> MethodScore:

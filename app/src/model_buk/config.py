@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import tomllib
+
+
+@dataclass(frozen=True)
+class CornerV02Config:
+    version: str
+    train_start: str
+    reference_start: str
+    max_count: int
+    random_seed: int
+    catboost_params: dict
+    shrinkage_games: float
+    min_rate: float
+    max_rate: float
+    edge_threshold: float
+    ev_threshold: float
+    max_bets_per_match: int
+    tax_multiplier: float
+    folds: tuple[tuple[str, str, str], ...]
+
+
+def load_corner_v02_config(path: str | Path) -> CornerV02Config:
+    path = Path(path)
+    with path.open("rb") as handle:
+        raw = tomllib.load(handle)
+    betting = raw["betting"]
+    if "tax_multiplier" not in betting:
+        raise ValueError(
+            "Brakuje 'tax_multiplier' w sekcji [betting] pliku "
+            f"{path}. To mnoznik podatkowy (np. 0.88 dla polskiego "
+            "standardu - podatek 12% od stawki), ktorym trzeba przemnozyc "
+            "kurs przy liczeniu EV_net. Bramka bet/no-bet decyduje na "
+            "EV_net, nigdy na EV_gross - bez jawnej wartosci tutaj nie ma "
+            "bezpiecznego domyslnego zalozenia (ani 1.0, ani 0.88), bo to "
+            "wlasnie brak jawnej definicji spowodowal, ze bramka kiedys "
+            "liczyla na EV_gross i przepuszczala zaklady przegrywajace."
+        )
+    return CornerV02Config(
+        version=str(raw["model"]["version"]),
+        train_start=str(raw["model"]["train_start"]),
+        reference_start=str(raw["validation"]["reference_start"]),
+        max_count=int(raw["model"]["max_count"]),
+        random_seed=int(raw["model"]["random_seed"]),
+        catboost_params=dict(raw["catboost"]),
+        shrinkage_games=float(raw["strengths"]["shrinkage_games"]),
+        min_rate=float(raw["strengths"]["min_rate"]),
+        max_rate=float(raw["strengths"]["max_rate"]),
+        edge_threshold=float(betting["edge_threshold"]),
+        ev_threshold=float(betting["ev_threshold"]),
+        max_bets_per_match=int(betting["max_bets_per_match"]),
+        tax_multiplier=float(betting["tax_multiplier"]),
+        folds=tuple(tuple(map(str, fold)) for fold in raw["validation"]["folds"]),
+    )
