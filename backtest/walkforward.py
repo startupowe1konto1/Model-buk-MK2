@@ -22,7 +22,7 @@ from backtest.devig import METHODS
 from backtest.elo import EloTable
 from backtest.gate import decide
 from backtest.loader import Match, season_of
-from backtest.metrics import OUTCOMES, brier, ece, log_loss, outcome_index, rps
+from backtest.metrics import OUTCOMES, aggregate_scores, outcome_index
 from backtest.model import fit, predict_proba
 
 
@@ -151,21 +151,12 @@ def score_predictions(predictions: Sequence[Prediction]) -> ModelScore:
     """Log-loss/Brier/RPS/ECE dla P_model, licza uzywajac WYLACZNIE funkcji z
     `backtest.metrics` - to samo, co `report_devig` liczy dla rynku, zeby
     porownanie bylo miedzy tymi samymi wzorami, a nie miedzy dwiema
-    niezaleznymi implementacjami tego samego pojecia."""
-    if not predictions:
-        return ModelScore(0, 0.0, 0.0, 0.0, 0.0)
-    ll = br = rp = 0.0
-    pairs: List[Tuple[float, int]] = []
-    for pred in predictions:
-        probs = pred.probs
-        ftr = pred.match.ftr
-        ll += log_loss(probs, ftr)
-        br += brier(probs, ftr)
-        rp += rps(probs, ftr)
-        k = outcome_index(ftr)
-        pairs.extend((p, 1 if idx == k else 0) for idx, p in enumerate(probs))
-    n = len(predictions)
-    return ModelScore(n=n, log_loss=ll / n, brier=br / n, rps=rp / n, ece=ece(pairs))
+    niezaleznymi implementacjami tego samego pojecia. Akumulacja i dzielenie
+    przez n siedzi w `backtest.metrics.aggregate_scores`
+    (`report_devig._score_with_pairs` wola dokladnie to samo) - tu zostaje
+    tylko wydobycie (probs, ftr) z kazdej predykcji."""
+    totals = aggregate_scores((pred.probs, pred.match.ftr) for pred in predictions)
+    return ModelScore(n=totals.n, log_loss=totals.log_loss, brier=totals.brier, rps=totals.rps, ece=totals.ece)
 
 
 def summarize(selections: Sequence[Selection]) -> Dict[str, object]:

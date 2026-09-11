@@ -6,7 +6,7 @@ a zwyciestwem goscia, wiec karze mocniej za pomylke H<->A niz H<->D. Dla 1X2
 RPS jest metryka wlasciwa, Brier - pomocnicza.
 """
 import math
-from typing import List, NamedTuple, Sequence, Tuple
+from typing import Iterable, List, NamedTuple, Sequence, Tuple
 
 OUTCOMES: Tuple[str, str, str] = ("H", "D", "A")
 
@@ -87,3 +87,42 @@ def ece(pairs: Sequence[Tuple[float, int]], n_buckets: int = 20) -> float:
     if not total:
         return 0.0
     return sum(b.n * abs(b.mean_pred - b.mean_obs) for b in buckets) / total
+
+
+class AggregateScore(NamedTuple):
+    """n obserwacji, srednie log-loss/Brier/RPS, ECE, i surowe pary
+    (przewidziane prawdopodobienstwo, trafienie) z ktorych ECE zostalo
+    policzone."""
+    n: int
+    log_loss: float
+    brier: float
+    rps: float
+    ece: float
+    pairs: List[Tuple[float, int]]
+
+
+def aggregate_scores(items: Iterable[Tuple[Sequence[float], str]]) -> AggregateScore:
+    """Jeden przebieg po sekwencji (probs, ftr) - jeden element na mecz albo
+    predykcje: akumuluje log-loss/Brier/RPS, buduje pary do ECE, dzieli przez
+    n na koniec.
+
+    To jest jedyne miejsce w calym projekcie z ta petla. `report_devig`
+    (kalibracja rynku, jedna metoda de-vigu na wywolanie) i `walkforward`
+    (kalibracja P_model) licza dokladnie to samo pojecie na dwoch roznych
+    zrodlach danych - roznica jest wylacznie w tym, skad wziac (probs, ftr)
+    dla kolejnego elementu, wiec to wywolujacy dostarcza je przez `items`,
+    a nie ta funkcja przez flage czy branch.
+    """
+    ll = br = rp = 0.0
+    pairs: List[Tuple[float, int]] = []
+    n = 0
+    for probs, ftr in items:
+        ll += log_loss(probs, ftr)
+        br += brier(probs, ftr)
+        rp += rps(probs, ftr)
+        k = outcome_index(ftr)
+        pairs.extend((p, 1 if idx == k else 0) for idx, p in enumerate(probs))
+        n += 1
+    if not n:
+        return AggregateScore(0, 0.0, 0.0, 0.0, 0.0, pairs)
+    return AggregateScore(n, ll / n, br / n, rp / n, ece(pairs), pairs)
