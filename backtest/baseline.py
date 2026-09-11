@@ -12,16 +12,14 @@ nigdy nie widzi jako kandydatow do zakladu, a ktore majac inny (zazwyczaj
 lepszy) profil overroundu, zniekstalcaja punkt odniesienia.
 """
 import argparse
-import json
-import os
 import statistics
-from collections import defaultdict
 from typing import Dict, List, NamedTuple, Sequence
 
-from backtest.clv import beat_close, clv_from_probs
+from backtest.clv import beat_close, clv_from_probs, group_by
 from backtest.devig import METHODS
 from backtest.loader import Match, load_matches, season_of
 from backtest.metrics import OUTCOMES
+from backtest.report_io import write_or_print
 from backtest.walkforward import seasons as _all_seasons
 
 
@@ -87,17 +85,7 @@ def summarize(legs_: Sequence[Leg]) -> Dict[str, object]:
     clvs = [l.clv for l in legs_]
 
     def _group(key_fn):
-        buckets: Dict[str, List[Leg]] = defaultdict(list)
-        for l in legs_:
-            buckets[key_fn(l)].append(l)
-        return {
-            k: {
-                "n": len(v),
-                "mean_clv": statistics.mean(x.clv for x in v),
-                "beat_close_rate": sum(1 for x in v if beat_close(x.p_open, x.p_close)) / len(v),
-            }
-            for k, v in sorted(buckets.items())
-        }
+        return group_by(legs_, key_fn, lambda l: l.p_open, lambda l: l.p_close)
 
     return {
         "n_legs": len(legs_),
@@ -174,18 +162,7 @@ def main(argv=None) -> int:
         "methods": per_method,
     }
 
-    if args.out:
-        out_dir = os.path.dirname(args.out)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
-        with open(args.out + ".md", "w", encoding="utf-8") as fh:
-            fh.write(text)
-        with open(args.out + ".json", "w", encoding="utf-8") as fh:
-            json.dump(json_out, fh, indent=2, ensure_ascii=False)
-            fh.write("\n")
-        print("zapisano {0}.md i {0}.json".format(args.out))
-    else:
-        print(text)
+    write_or_print(text, json_out, args.out)
     return 0
 
 

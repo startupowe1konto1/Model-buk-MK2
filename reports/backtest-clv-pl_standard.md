@@ -58,3 +58,12 @@ Rezim `pl_standard` (tau=0.88), de-vig `power`, prog EV_net >= 0.05
 | SP1 | 1872 | -0.5679% | 44.34% |
 | SP2 | 2068 | +2.4197% | 53.24% |
 | T1 | 1085 | +1.3734% | 46.64% |
+
+## Kalibracja: model kontra rynek (zamkniecie)
+
+ECE (blad kalibracji) mowi, o ile srednio przewidywane prawdopodobienstwo roznilo sie od tego, jak czesto dany wynik naprawde sie zdarzal. Liczony tu na **71264** meczach - kazdym meczu sezonow testowych, nie tylko na tych 32152, ktore przeszly bramke EV powyzej. Liczenie samej bramki dawaloby wynik obciazony w strone przypadkow, w ktorych model i tak juz roznil sie od rynku.
+
+| kto | n | log-loss | Brier | RPS | ECE |
+|---|---:|---:|---:|---:|---:|
+| model | 71264 | 1.02482 | 0.61483 | 0.21128 | 0.00667 |
+| rynek (`power`, zamkniecie) | 71264 | 0.99727 | 0.59605 | 0.20270 | 0.00387 |
