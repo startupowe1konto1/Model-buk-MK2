@@ -183,6 +183,38 @@ class TestMarkdownReport(unittest.TestCase):
         self.assertLess(section_idx, verdict_idx)
         self.assertLess(verdict_idx, header_idx)
 
+    def test_season_table_has_margin_drift_caveat_before_table(self):
+        """Nowa notka: spadek sredniego CLV w tabeli "Po sezonach" nie jest
+        dowodem, ze rynek sie wyostrzyl - to artefakt dryfu marzy w kolumnach
+        `PSH/PSD/PSA` (2.46% -> 5.08%, zamkniecie stabilne ~3.9%). Notka musi
+        stac PRZED tabela "Po sezonach" (czytelnik trafia na nia zanim
+        zobaczy liczby) i NIE moze pojawic sie przy tabeli "Po ligach", ktora
+        tego problemu nie ma."""
+        text = self._render()
+        self.assertIn("2.46%", text)
+        self.assertIn("5.08%", text)
+        self.assertIn("3.9%", text)
+        self.assertIn("wniosek bledny", text)
+        self.assertIn("nie wolno czytac jako trendu", text)
+        self.assertIn("PSH/PSD/PSA", text)
+        # przyczyna musi byc nazwana wprost jako dryf marzy w tych kolumnach,
+        # nie cokolwiek innego (np. rzekoma poprawa modelu/typera) - to jest
+        # dokladnie ta fraza, ktora wiaze liczby 2.46%/5.08% z marza, a nie
+        # z jakims innym mechanizmem.
+        self.assertIn("marza wliczona w te kolumny", text)
+
+        section_idx = text.index("\n## Po sezonach\n")
+        caveat_idx = text.index("2.46%")
+        table_idx = text.index("| klucz | n | sredni CLV | pobito zamkniecie |")
+        self.assertLess(section_idx, caveat_idx)
+        self.assertLess(caveat_idx, table_idx)
+
+        # notka jest specyficzna dla sezonow - nie ma jej przy "Po ligach"
+        leagues_idx = text.index("\n## Po ligach\n")
+        after_leagues = text[leagues_idx:]
+        self.assertNotIn("2.46%", after_leagues)
+        self.assertNotIn("5.08%", after_leagues)
+
     def test_pre_existing_sections_survive_with_unchanged_content(self):
         text = self._render()
         self.assertIn("\n## Po sezonach\n", text)

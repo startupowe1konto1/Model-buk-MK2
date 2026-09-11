@@ -123,6 +123,27 @@ def _markdown(
     )
     for title, key in (("sezonach", "by_season"), ("ligach", "by_league")):
         lines.append("\n## Po {0}\n".format(title))
+        if key == "by_season":
+            lines.append(
+                "> Patrzac na tabele ponizej latwo pomyslec: CLV z roku na rok\n"
+                "> systematycznie spada, wiec rynek z czasem nauczyl sie wyceniac\n"
+                "> mecze lepiej. To jest wniosek bledny. Ten sam spadek wychodzi\n"
+                "> identycznie, gdy z backtestu wyjmie sie caly model i cala\n"
+                "> bramke zakladow - wiec to nie jest cecha naszych typow, tylko\n"
+                "> czegos w samych danych wejsciowych. Kurs, po ktorym tu liczymy\n"
+                "> wejscie w zaklad (kolumny `PSH/PSD/PSA`), to zdjecie robione raz\n"
+                "> w tygodniu przy budowie pliku przez football-data.co.uk, a to,\n"
+                "> jak dokladnie to zdjecie jest robione, zmienilo sie na\n"
+                "> przestrzeni lat: srednia marza wliczona w te kolumny urosla z\n"
+                "> 2.46% w sezonie 2015/16 do 5.08% w sezonie 2024/25, podczas gdy\n"
+                "> marza na zamknieciu przez caly ten czas trzyma sie okolo 3.9%.\n"
+                "> Im pozniejszy sezon, tym gorszy (bardziej zamarzowany) jest wiec\n"
+                "> kurs startowy pomiaru - i dlatego ruch do zamkniecia wyglada na\n"
+                "> mniejszy, chociaz rynek wcale nie zrobil sie bardziej efektywny.\n"
+                "> Wniosek: liczb z tej tabeli nie wolno czytac jako trendu\n"
+                "> efektywnosci rynku miedzy sezonami. W obrebie jednego, pojedynczego\n"
+                "> sezonu ponizsze liczby sa jak najbardziej wiarygodne.\n"
+            )
         lines.append("| klucz | n | sredni CLV | pobito zamkniecie |")
         lines.append("|---|---:|---:|---:|")
         for k, v in summary[key].items():
