@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Model Buk</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">MODEL BUK · RESEARCH / PAPER</div>
+        <h1>Football probability engine</h1>
+      </div>
+      <div id="statusChip" class="chip">Ładowanie modelu…</div>
+    </header>
+
+    <main class="grid">
+      <section class="panel form-panel">
+        <div class="panel-head">
+          <div>
+            <p class="kicker">Corner Engine</p>
+            <h2>Nowa predykcja</h2>
+          </div>
+          <span class="version">v0.4 web</span>
+        </div>
+
+        <form id="predictionForm">
+          <div class="field-row two">
+            <label>Gospodarz<select id="homeTeam" required></select></label>
+            <label>Gość<select id="awayTeam" required></select></label>
+          </div>
+          <label>Data i godzina meczu<input id="fixtureDate" type="datetime-local" required /></label>
+
+          <div class="market-box">
+            <div class="market-title">Opcjonalnie: porównaj z rynkiem</div>
+            <div class="field-row three">
+              <label>Linia<select id="line"><option value="">Bez kursów</option><option>7.5</option><option>8.5</option><option>9.5</option><option>10.5</option></select></label>
+              <label>Over odds<input id="overOdds" type="number" min="1.01" step="0.01" placeholder="1.95" /></label>
+              <label>Under odds<input id="underOdds" type="number" min="1.01" step="0.01" placeholder="1.85" /></label>
+            </div>
+          </div>
+
+          <button id="predictBtn" class="primary" type="submit">Policz predykcję</button>
+          <div id="errorBox" class="error hidden"></div>
+        </form>
+      </section>
+
+      <section class="panel status-panel">
+        <p class="kicker">Stan systemu</p>
+        <h2>Model & dane</h2>
+        <div id="systemStats" class="stats-list"></div>
+      </section>
+
+      <section id="resultPanel" class="panel result-panel hidden">
+        <div class="panel-head">
+          <div>
+            <p class="kicker">PURE prediction</p>
+            <h2 id="fixtureTitle">—</h2>
+          </div>
+          <div id="dataQuality" class="quality"></div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><span>Home corners</span><strong id="homeMu">—</strong></div>
+          <div class="metric"><span>Away corners</span><strong id="awayMu">—</strong></div>
+          <div class="metric accent"><span>Total corners</span><strong id="totalMu">—</strong></div>
+        </div>
+
+        <div class="split">
+          <div>
+            <h3>Total corners</h3>
+            <div class="table-wrap"><table><thead><tr><th>Linia</th><th>P Over</th><th>Fair O</th><th>P Under</th><th>Fair U</th></tr></thead><tbody id="totalRows"></tbody></table></div>
+          </div>
+          <div>
+            <h3>Team corners</h3>
+            <div class="table-wrap"><table><thead><tr><th>Drużyna</th><th>Linia</th><th>P Over</th><th>Fair</th></tr></thead><tbody id="teamRows"></tbody></table></div>
+          </div>
+        </div>
+
+        <div id="marketDecision" class="decision hidden"></div>
+      </section>
+
+      <section class="panel recent-panel">
+        <div class="panel-head"><div><p class="kicker">Frozen log</p><h2>Ostatnie predykcje</h2></div><button id="refreshRecent" class="ghost">Odśwież</button></div>
+        <div id="recentList" class="recent-list"></div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
