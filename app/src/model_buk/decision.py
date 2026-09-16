@@ -12,6 +12,7 @@ class MarketDecision:
     fair_odds: float
     market_probability: float
     edge: float
+    ev: float
     ev_gross: float
     ev_net: float
     decision: str
@@ -26,13 +27,6 @@ def price_two_way_market(
     ev_threshold: float,
     tax_multiplier: float,
 ) -> tuple[MarketDecision, MarketDecision]:
-    """Wycenia obie strony rynku i stosuje bramke bet/no-bet.
-
-    `tax_multiplier` nie ma wartosci domyslnej celowo: bramka decyduje na
-    EV_net (po podatku), nigdy na EV_gross (przed podatkiem) - patrz
-    docstring `expected_value_net`. Kazdy wywolujacy musi jawnie podac,
-    jaki rezim podatkowy stosuje.
-    """
     p_market_over, p_market_under = devig_two_way(over_odds, under_odds)
     p_under = 1.0 - p_over
 
@@ -49,6 +43,7 @@ def price_two_way_market(
         fair_odds=fair_odds(p_over),
         market_probability=p_market_over,
         edge=over_edge,
+        ev=over_ev_net,
         ev_gross=over_ev_gross,
         ev_net=over_ev_net,
         decision="BET" if over_edge >= edge_threshold and over_ev_net >= ev_threshold else "NO BET",
@@ -59,6 +54,7 @@ def price_two_way_market(
         fair_odds=fair_odds(p_under),
         market_probability=p_market_under,
         edge=under_edge,
+        ev=under_ev_net,
         ev_gross=under_ev_gross,
         ev_net=under_ev_net,
         decision="BET" if under_edge >= edge_threshold and under_ev_net >= ev_threshold else "NO BET",

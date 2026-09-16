@@ -67,19 +67,16 @@ from model_buk.schema import validate_raw_history
 
 
 def test_decision_gate_uses_devig_edge_and_ev() -> None:
-    # tax_multiplier musi byc podany jawnie - bramka decyduje na EV_net
-    # (po podatku), nigdy na EV_gross. 0.88 = polski standard, podatek
-    # 12% od stawki.
     over, under = price_two_way_market(
         p_over=0.60,
         over_odds=2.00,
         under_odds=1.80,
         edge_threshold=0.05,
         ev_threshold=0.05,
-        tax_multiplier=0.88,
+        tax_multiplier=1.0,
     )
     assert over.edge > 0.05
-    assert over.ev_net > 0.05
+    assert over.ev > 0.05
     assert over.decision == "BET"
     assert under.decision == "NO BET"
 

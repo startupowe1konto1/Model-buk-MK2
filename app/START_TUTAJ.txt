@@ -1,0 +1,7 @@
+MODEL BUK v0.5 — WERSJA NA PORCIE 8010
+
+1. Rozpakuj cały folder.
+2. Kliknij URUCHOM_MODEL_BUK.bat.
+3. Otworzy się http://127.0.0.1:8010/?v=05
+
+Ta wersja celowo NIE używa portu 8000, aby ominąć starą wersję aplikacji.

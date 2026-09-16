@@ -121,8 +121,11 @@ def predict_fixture(
     history = raw_history.copy()
     history["date"] = pd.to_datetime(history["date"], format="mixed")
     future_date = pd.Timestamp(date)
-    if future_date <= history["date"].min():
-        raise ValueError("prediction date must be after the beginning of the available history")
+    if future_date <= history["date"].max():
+        raise ValueError(
+            "prediction date must be after the latest completed match in the supplied history; "
+            "historical inference requires an as-of model artifact"
+        )
     if home_team == away_team:
         raise ValueError("home_team and away_team must differ")
 
@@ -224,8 +227,6 @@ def attach_total_market_price(
         "under_odds": float(under_odds),
         "over": over.__dict__,
         "under": under.__dict__,
-        # Wybor "najlepszej" strony musi isc po EV_net - to samo kryterium,
-        # na ktorym decyduje bramka bet/no-bet w price_two_way_market.
-        "best_decision": max((over, under), key=lambda d: d.ev_net).__dict__,
+        "best_decision": max((over, under), key=lambda d: d.ev).__dict__,
     }
     return priced

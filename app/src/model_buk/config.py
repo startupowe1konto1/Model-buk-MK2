@@ -30,14 +30,8 @@ def load_corner_v02_config(path: str | Path) -> CornerV02Config:
     betting = raw["betting"]
     if "tax_multiplier" not in betting:
         raise ValueError(
-            "Brakuje 'tax_multiplier' w sekcji [betting] pliku "
-            f"{path}. To mnoznik podatkowy (np. 0.88 dla polskiego "
-            "standardu - podatek 12% od stawki), ktorym trzeba przemnozyc "
-            "kurs przy liczeniu EV_net. Bramka bet/no-bet decyduje na "
-            "EV_net, nigdy na EV_gross - bez jawnej wartosci tutaj nie ma "
-            "bezpiecznego domyslnego zalozenia (ani 1.0, ani 0.88), bo to "
-            "wlasnie brak jawnej definicji spowodowal, ze bramka kiedys "
-            "liczyla na EV_gross i przepuszczala zaklady przegrywajace."
+            "Missing required betting.tax_multiplier; use 0.88 for the "
+            "standard Polish 12% stake-tax profile or an explicit bookmaker profile."
         )
     return CornerV02Config(
         version=str(raw["model"]["version"]),

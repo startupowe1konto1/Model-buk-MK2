@@ -1,165 +1,154 @@
-# Model Buk
+# Model Buk v0.5 — backend badawczy
 
-Reproducible football probability + market-value engine. The project is now in the **implementation phase**: research notes remain important, but executable code, frozen configurations, tests and walk-forward validation are the source of truth for model behavior.
+> Status: research/paper betting only. Szerokie rynki v0.5 nie emitują
+> rekomendacji `BET` bez jawnego włączenia eksperymentalnej bramki po walidacji.
+> Ekonomika używa domyślnego polskiego profilu podatkowego 0.88.
 
-## Current engine: Corner Engine v0.2
+Model Buk is a reproducible football probability + market-value research engine. v0.5 expands the previous EPL/corners prototype into a **multi-league, multi-market application** with an optional live context layer.
 
-`corner-dual-v0.2` predicts home and away corner counts separately, converts them to full probability distributions and prices both total-corners and team-corners markets.
+## What changed in v0.5
 
-Core rules:
-- PURE probabilities are calculated **without bookmaker odds as model inputs**;
-- every rolling feature is point-in-time (`shift(1)`);
-- validation is chronological, never random train/test;
-- bookmaker margin is removed only after the model prediction;
-- `BET` requires both minimum edge and minimum EV;
-- `NO BET` is a normal output;
-- 2025/26 is a **reference benchmark for v0.2**, not an untouched proof, because it was already opened during v0.1 research.
+### 16 European leagues
 
-## Project structure
+- Premier League, Championship
+- LaLiga, LaLiga 2
+- Bundesliga, 2. Bundesliga
+- Serie A, Serie B
+- Ligue 1, Ligue 2
+- Primeira Liga
+- Eredivisie
+- Belgian Pro League
+- Süper Lig
+- Scottish Premiership
+- Ekstraklasa
+
+The bundled historical table contains ~61k matches from 2014/15 onward for these competitions.
+
+### Markets
+
+The broad v0.5 engine prices:
+
+- 1X2
+- BTTS
+- total goals + team goals
+- total corners + team corners
+- total shots + team shots
+- total shots on target + team SOT
+- total cards + team cards
+
+`fair_odds = 1 / P_model`.
+
+Bookmaker prices are **never** model inputs. They are attached after PURE probabilities are calculated.
+
+### Current-match context (optional API-Football integration)
+
+If `API_FOOTBALL_KEY` is configured, opening one fixture triggers a quota-aware deep analysis:
+
+- current fixture metadata;
+- recent completed fixtures;
+- recent match statistics (shots, SOT, corners, cards) with a strict call cap + disk cache;
+- injuries / suspensions;
+- lineups when available;
+- referee + venue;
+- pre-match odds;
+- API-Football prediction only as an **external benchmark**, never a model feature;
+- weather from Open-Meteo when the venue can be matched to the bundled OSM stadium database.
+
+Current recent event counts are shrunk toward the historical baseline and can update expected counts. Injuries, lineup, referee and ordinary weather are currently **quality/context gates**, not arbitrary probability multipliers. This is intentional: they only become probability inputs after a reproducible player/referee/weather model passes OOS validation.
+
+### Value layer
+
+Supported API-Football markets are normalized to Model Buk market keys. The app displays:
+
+- Model probability
+- Model fair odds
+- bookmaker and offered odds
+- de-vig market probability where the opposite side / 1X2 trio is available
+- edge
+- EV
+- BET / NO BET
+
+Default decision gate remains research-only and requires both positive probability edge and EV.
+
+## One-click Windows start
+
+1. Unzip the full project.
+2. Double-click `URUCHOM_MODEL_BUK.bat`.
+3. First launch may take a few minutes while Python packages are installed.
+4. The one-click launcher opens automatically at `http://127.0.0.1:8010/?v=05` to avoid collisions with older local builds that may still occupy port 8000.
+
+### Enable live data
+
+Double-click:
 
 ```text
-src/model_buk/
-  data.py                  provider reconciliation / canonical match table
-  features.py              point-in-time rolling features
-  strengths.py             shrunk attack/concession corner strengths
-  distributions.py         Poisson/NB probability layer
-  models/corner_dual_v02.py home/away count models
-  v02_backtest.py          walk-forward + reference benchmark
-  inference.py             future-fixture pricing
-  decision.py              de-vig, edge, EV, BET/NO BET
-  schema.py                data contracts
-  evaluation/              count/probability/calibration metrics
-  markets/                 market-pricing utilities
-config/
-  corners_v02.toml         frozen v0.2 configuration
-models/                    trained model artifacts + metadata
-outputs/                   OOF/reference results
-artifacts/                 generated examples
- tests/                    leakage, distribution, pricing and schema tests
+USTAW_API_FOOTBALL.bat
 ```
 
-## Setup
+Paste your API-Football / API-Sports key, close Model Buk and start it again.
+
+Equivalent manual command:
+
+```bat
+setx API_FOOTBALL_KEY "YOUR_KEY"
+```
+
+The key is a local Windows environment variable and is never committed to GitHub.
+
+## Command-line setup
 
 ```bash
 python -m venv .venv
-# Windows
 .venv\Scripts\activate
-# macOS/Linux
-# source .venv/bin/activate
-
 pip install -r requirements.txt
 pip install -e .
 pytest -q
-```
-
-## Rebuild the canonical and processed datasets
-
-Until data preparation is folded into the main CLI, run:
-
-```bash
-python prepare_dataset.py \
-  --matches /path/to/Matches.csv \
-  --understat /path/to/eng_team_match_stats.csv \
-  --footiqo-corners /path/to/corners_cards_closing_PL_2025_26.xlsx \
-  --big-five /path/to/big_five_2025_26.xlsx
-```
-
-This writes:
-- `data/canonical/epl_matches_v01.csv.gz` — raw canonical point-in-time history used for future fixture feature generation;
-- `data/processed/epl_total_corners_v01.csv.gz` — model-ready historical/reference feature table.
-
-## Run v0.2 walk-forward backtest
-
-```bash
-model-buk backtest-corners-v02 \
-  --data data/processed/epl_total_corners_v01.csv.gz \
-  --config config/corners_v02.toml \
-  --outdir outputs \
-  --modeldir models
-```
-
-The pipeline writes OOF predictions, distribution comparison, reference probabilities, calibration tables, selected reference bets and model metadata.
-
-## Fit current-use models on all completed local data
-
-After a new completed-match batch is appended, refit the frozen specifications for live/paper inference:
-
-```bash
-model-buk fit-live-corners
-```
-
-This creates `models/registry.json` plus current-use artifacts under `models/live/`. Backtest artifacts stay separate from current-use fitting.
-
-## Price a future fixture
-
-The default router uses the **v0.1 total-corners champion** for total markets and the **v0.2 dual challenger** for team-corners:
-
-```bash
-model-buk predict-corners \
-  --date "2026-09-12 17:30" \
-  --home "Liverpool" \
-  --away "Manchester City"
-```
-
-The output contains:
-- expected home/away/total corners;
-- total O/U probabilities and fair odds for 7.5–10.5;
-- team-corner probabilities and fair odds for 2.5–7.5;
-- deterministic data-quality diagnostics.
-
-Only after the PURE prediction exists, compare with a two-way market:
-
-```bash
-model-buk predict-corners \
-  --date "2026-09-12 17:30" \
-  --home "Liverpool" \
-  --away "Manchester City" \
-  --line 9.5 \
-  --over-odds 1.95 \
-  --under-odds 1.85
-```
-
-The market block returns de-vig market probability, fair odds, edge, EV and `BET/NO BET` using the frozen thresholds from `config/corners_v02.toml`. `predict-corners-v02` remains available as a research-only dual-model command.
-
-
-## Run the web application
-
-Model Buk now includes a FastAPI backend and a lightweight browser UI. The web layer uses the same frozen inference code as the CLI and stores prospective prediction payloads in an append-only SQLite registry.
-
-```bash
-pip install -e .
 model-buk-web
 ```
 
-Open `http://127.0.0.1:8000`.
+Manual `model-buk-web` uses port 8000 by default. The bundled Windows one-click launcher sets `MODEL_BUK_PORT=8010` deliberately.
 
-Useful endpoints:
-- `GET /api/status` — model/data freshness and champion/challenger state;
-- `GET /api/teams` — canonical teams available in local history;
-- `POST /api/predict/corners` — PURE prediction plus optional market comparison;
-- `GET /api/predictions` — frozen local prediction log.
+## Web API
 
-Runtime paths can be overridden with `MODEL_BUK_HISTORY`, `MODEL_BUK_MODEL_ROOT`, `MODEL_BUK_CONFIG` and `MODEL_BUK_DB`.
+- `GET /api/status`
+- `GET /api/catalog/leagues`
+- `GET /api/teams?league=EPL`
+- `GET /api/fixtures?date=YYYY-MM-DD&league=EPL`
+- `POST /api/analyze/manual`
+- `POST /api/analyze/fixture/{fixture_id}`
+- `GET /api/predictions`
+- legacy: `POST /api/predict/corners`
 
-## Verification
+## Model architecture in v0.5
 
-Current implementation checks:
-- rolling-feature leakage;
-- valid/monotonic probability distributions;
-- two-way de-vig math;
-- team and total corner probability monotonicity;
-- strength shrinkage;
-- data-schema failures;
-- market decision gate separation from PURE inference.
+### Broad multi-market baseline
 
-Run:
+For each event count:
 
-```bash
-pytest -q
-```
+1. time-decayed team production;
+2. time-decayed opponent concession;
+3. home/away split;
+4. shrinkage to the league baseline;
+5. mild Elo adjustment where appropriate;
+6. Negative Binomial probability distribution;
+7. current API observations, if available, are shrunk into the baseline with capped adjustment.
 
-## Current evidence
+This is a transparent challenger layer. It is not presented as a proven profitable production model.
 
-v0.2 is an engineering/research milestone, **not a claim of profitable deployment**. On pre-2025 OOF, the dual model currently does not beat the simpler v0.1 total-count model on total-corner MAE. On the already-seen 2025/26 reference season, the closing market also remains better on probability log loss. That is useful evidence: the codebase works, but the next job is improving information quality/model structure rather than curve-fitting thresholds.
+### EPL corners
 
-See `docs/ARCHITECTURE.md` and `docs/NEXT_STEPS.md`.
+The trained v0.1/v0.2 EPL Corner Engine is kept as a **separate historical benchmark** in EPL match analysis. We do not silently replace or rewrite its old holdout evidence.
+
+## Safety against false edge
+
+- point-in-time rules remain mandatory;
+- no random train/test split for final evaluation;
+- no odds as PURE features;
+- current context is separated by whether it is `model_input`, `quality_gate`, or `monitor_only`;
+- API-Football's own prediction is benchmark-only;
+- `NO BET` is a first-class result;
+- local SQLite stores prospective predictions and odds snapshots separately for later CLV and line-movement analysis.
+
+## Current status
+
+**Research / paper betting only.** v0.5 is a substantially more complete application and data pipeline, not proof of durable profitability. The next research priority is validating the broad engines league-by-league and building quantified player/lineup strength so current injuries and confirmed XI can enter probabilities without subjective weights.

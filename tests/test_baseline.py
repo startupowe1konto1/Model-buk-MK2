@@ -1,4 +1,5 @@
 import datetime
+import os
 import unittest
 
 from backtest.baseline import (
@@ -8,7 +9,7 @@ from backtest.baseline import (
     restrict_to_betting_seasons,
     summarize,
 )
-from backtest.loader import Match, load_matches
+from backtest.loader import DEFAULT_DATA_ROOT, Match, load_matches
 from backtest.walkforward import seasons as all_seasons
 
 
@@ -115,6 +116,10 @@ class TestSummarize(unittest.TestCase):
         self.assertEqual(total_in_seasons, s["n_legs"])
 
 
+@unittest.skipUnless(
+    os.path.isdir(DEFAULT_DATA_ROOT),
+    "external football-data dataset is not available in a fresh clone",
+)
 class TestBaselineOnRealData(unittest.TestCase):
     """Liczby pochodza z HANDOFF.md sekcja B i z brief'u task 1. Ograniczone do
     sezonow testowych walk-forward (min_train_seasons=2, od 2016/17)."""

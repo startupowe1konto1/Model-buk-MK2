@@ -21,10 +21,10 @@ class StoredPrediction:
 
 
 class PredictionStore:
-    """Small append-only SQLite registry for prospective model runs.
+    """Append-only local research registry.
 
-    Prediction payloads are stored exactly as produced by the engine so a later
-    result/CLV layer can evaluate what was known at prediction time.
+    Predictions and odds snapshots are kept separately. This preserves the PURE
+    model output and makes later CLV/line-movement analysis possible.
     """
 
     def __init__(self, path: str | Path):
@@ -53,20 +53,28 @@ class PredictionStore:
                 )
                 """
             )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_predictions_created_at ON predictions(created_at DESC)")
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_predictions_created_at ON predictions(created_at DESC)"
+                """
+                CREATE TABLE IF NOT EXISTS odds_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TEXT NOT NULL,
+                    fixture_id INTEGER,
+                    bookmaker TEXT,
+                    market_key TEXT,
+                    odds REAL NOT NULL,
+                    provider_update TEXT,
+                    raw_json TEXT NOT NULL
+                )
+                """
             )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_odds_fixture_market ON odds_snapshots(fixture_id, market_key, created_at)")
 
     def save(self, payload: dict[str, Any]) -> int:
         fixture = payload.get("fixture", {})
-        market = payload.get("market_check") or {}
-        best = market.get("best_decision") or {}
-        model_version = (
-            payload.get("suite_version")
-            or payload.get("model_version")
-            or payload.get("total_corners", {}).get("model")
-            or "unknown"
-        )
+        opportunities = payload.get("opportunities") or []
+        best = opportunities[0] if opportunities else {}
+        model_version = payload.get("engine_version") or payload.get("suite_version") or payload.get("model_version") or "unknown"
         created_at = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             cur = conn.execute(
@@ -78,9 +86,9 @@ class PredictionStore:
                 """,
                 (
                     created_at,
-                    str(fixture.get("date", "")),
-                    str(fixture.get("home_team", "")),
-                    str(fixture.get("away_team", "")),
+                    str(fixture.get("date") or fixture.get("kickoff") or ""),
+                    str(fixture.get("home_team") or (fixture.get("home") or {}).get("name") or ""),
+                    str(fixture.get("away_team") or (fixture.get("away") or {}).get("name") or ""),
                     str(model_version),
                     best.get("decision"),
                     json.dumps(payload, ensure_ascii=False),
@@ -88,12 +96,50 @@ class PredictionStore:
             )
             return int(cur.lastrowid)
 
+    def save_odds(self, fixture_id: int | None, odds_rows: list[dict[str, Any]]) -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        count = 0
+        with self._connect() as conn:
+            for row in odds_rows:
+                market_key = row.get("market_key")
+                if not market_key:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO odds_snapshots (
+                        created_at, fixture_id, bookmaker, market_key, odds,
+                        provider_update, raw_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        now,
+                        fixture_id,
+                        str(row.get("bookmaker") or ""),
+                        str(market_key),
+                        float(row["odd"]),
+                        row.get("update"),
+                        json.dumps(row, ensure_ascii=False),
+                    ),
+                )
+                count += 1
+        return count
+
+    def recent_odds(self, fixture_id: int, market_key: str, bookmaker: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM odds_snapshots WHERE fixture_id=? AND market_key=?"
+        params: list[Any] = [fixture_id, market_key]
+        if bookmaker:
+            sql += " AND bookmaker=?"
+            params.append(bookmaker)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(max(1, min(int(limit), 200)))
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+        return [dict(row) for row in rows]
+
     def recent(self, limit: int = 20) -> list[StoredPrediction]:
         limit = max(1, min(int(limit), 200))
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM predictions ORDER BY id DESC LIMIT ?", (limit,)
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [
             StoredPrediction(
                 id=int(row["id"]),

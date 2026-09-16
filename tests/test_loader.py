@@ -1,7 +1,8 @@
 import datetime
+import os
 import unittest
 
-from backtest.loader import Match, load_matches, parse_date, season_of
+from backtest.loader import DEFAULT_DATA_ROOT, Match, load_matches, parse_date, season_of
 
 
 class TestParseDate(unittest.TestCase):
@@ -27,6 +28,10 @@ class TestSeasonOf(unittest.TestCase):
         self.assertEqual(season_of(datetime.date(2026, 1, 14)), "2025/26")
 
 
+@unittest.skipUnless(
+    os.path.isdir(DEFAULT_DATA_ROOT),
+    "external football-data dataset is not available in a fresh clone",
+)
 class TestLoadMatches(unittest.TestCase):
     """Testy na prawdziwych danych. Liczby pochodza z audytu i musza sie zgadzac
     co do jednego meczu - cicha utrata wierszy jest tu glownym ryzykiem."""

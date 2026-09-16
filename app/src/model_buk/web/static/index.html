@@ -3,90 +3,158 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Model Buk</title>
+  <title>Model Buk v0.5</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <div class="shell">
-    <header class="topbar">
-      <div>
-        <div class="eyebrow">MODEL BUK · RESEARCH / PAPER</div>
-        <h1>Football probability engine</h1>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">MB</div>
+        <div><strong>Model Buk</strong><span>research / paper</span></div>
       </div>
-      <div id="statusChip" class="chip">Ładowanie modelu…</div>
-    </header>
+      <nav>
+        <button class="nav-item active" data-scroll="dashboard">Dzisiaj</button>
+        <button class="nav-item" data-scroll="analysisPanel">Analiza meczu</button>
+        <button class="nav-item" data-scroll="recentPanel">Rejestr predykcji</button>
+        <button class="nav-item" data-scroll="systemPanel">System</button>
+      </nav>
+      <div class="side-note">
+        <span class="dot"></span>
+        <div><strong>PURE first</strong><small>Kursy nigdy nie są wejściem do modelu.</small></div>
+      </div>
+    </aside>
 
-    <main class="grid">
-      <section class="panel form-panel">
-        <div class="panel-head">
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">MODEL BUK · v0.5</div>
+          <h1>Match Analysis Dashboard</h1>
+          <p>Wiele lig, wiele rynków, bieżący kontekst i oddzielna warstwa value.</p>
+        </div>
+        <div id="providerChip" class="status-chip">Ładowanie…</div>
+      </header>
+
+      <section id="dashboard" class="section">
+        <div class="section-head">
           <div>
-            <p class="kicker">Corner Engine</p>
-            <h2>Nowa predykcja</h2>
+            <span class="kicker">Mecze</span>
+            <h2>Dzisiejszy / wybrany dzień</h2>
           </div>
-          <span class="version">v0.4 web</span>
+          <div class="date-controls">
+            <input id="fixtureDay" type="date" />
+            <button id="refreshFixtures" class="button secondary">Pobierz mecze</button>
+          </div>
         </div>
 
-        <form id="predictionForm">
-          <div class="field-row two">
-            <label>Gospodarz<select id="homeTeam" required></select></label>
-            <label>Gość<select id="awayTeam" required></select></label>
-          </div>
-          <label>Data i godzina meczu<input id="fixtureDate" type="datetime-local" required /></label>
+        <div id="liveNotice" class="notice hidden"></div>
+        <div id="leagueFilters" class="league-chips"></div>
+        <div id="fixturesList" class="fixtures-grid"></div>
 
-          <div class="market-box">
-            <div class="market-title">Opcjonalnie: porównaj z rynkiem</div>
-            <div class="field-row three">
-              <label>Linia<select id="line"><option value="">Bez kursów</option><option>7.5</option><option>8.5</option><option>9.5</option><option>10.5</option></select></label>
-              <label>Over odds<input id="overOdds" type="number" min="1.01" step="0.01" placeholder="1.95" /></label>
-              <label>Under odds<input id="underOdds" type="number" min="1.01" step="0.01" placeholder="1.85" /></label>
-            </div>
+        <div class="manual-card">
+          <div>
+            <span class="kicker">Analiza ręczna</span>
+            <h3>Wybierz dowolny mecz z obsługiwanej ligi</h3>
+            <p>Bez live API dostaniesz pełny historyczny baseline dla 1X2, goli, BTTS, rożnych, strzałów, SOT i kartek. Po podłączeniu API dochodzą bieżąca forma, kontuzje, składy, sędzia, pogoda i kursy.</p>
           </div>
-
-          <button id="predictBtn" class="primary" type="submit">Policz predykcję</button>
-          <div id="errorBox" class="error hidden"></div>
-        </form>
+          <form id="manualForm" class="manual-form">
+            <label>Liga<select id="manualLeague"></select></label>
+            <label>Gospodarz<select id="manualHome"></select></label>
+            <label>Gość<select id="manualAway"></select></label>
+            <label>Data i godzina<input id="manualDate" type="datetime-local" required /></label>
+            <button class="button primary" id="manualAnalyze" type="submit">Analizuj mecz</button>
+          </form>
+          <div id="manualError" class="error hidden"></div>
+        </div>
       </section>
 
-      <section class="panel status-panel">
-        <p class="kicker">Stan systemu</p>
-        <h2>Model & dane</h2>
-        <div id="systemStats" class="stats-list"></div>
+      <section id="analysisPanel" class="section analysis hidden">
+        <div class="match-hero">
+          <div class="match-title-wrap">
+            <span id="analysisLeague" class="kicker">—</span>
+            <h2 id="analysisTitle">—</h2>
+            <div id="analysisMeta" class="muted">—</div>
+          </div>
+          <div class="hero-badges">
+            <div class="confidence"><span>Confidence</span><strong id="confidenceScore">—</strong><small id="confidenceLabel"></small></div>
+            <div id="analysisMode" class="pill">—</div>
+          </div>
+        </div>
+
+        <div id="analysisWarning" class="notice warning hidden"></div>
+
+        <div class="expected-grid">
+          <div class="expected-card goals"><span>Gole</span><strong id="xGoals">—</strong><small id="xGoalsTeams">—</small></div>
+          <div class="expected-card corners"><span>Rożne</span><strong id="xCorners">—</strong><small id="xCornersTeams">—</small></div>
+          <div class="expected-card shots"><span>Strzały</span><strong id="xShots">—</strong><small id="xShotsTeams">—</small></div>
+          <div class="expected-card sot"><span>SOT</span><strong id="xSot">—</strong><small id="xSotTeams">—</small></div>
+          <div class="expected-card cards"><span>Kartki</span><strong id="xCards">—</strong><small id="xCardsTeams">—</small></div>
+        </div>
+
+        <div class="panel-block">
+          <div class="block-head">
+            <div><span class="kicker">Value</span><h3>Najciekawsze okazje</h3></div>
+            <span class="help-text">BET pojawia się tylko, jeśli kurs jest dostępny i przechodzi edge + EV gate.</span>
+          </div>
+          <div id="opportunityList" class="opportunity-grid"></div>
+        </div>
+
+        <div class="panel-block">
+          <div class="block-head market-head">
+            <div><span class="kicker">Probability → price</span><h3>Rynki</h3></div>
+            <div id="marketTabs" class="market-tabs"></div>
+          </div>
+          <div class="market-explainer">
+            <div><b>Model P</b> — nasze prawdopodobieństwo.</div>
+            <div><b>Kurs fair</b> — 1 / Model P.</div>
+            <div><b>Kurs bukmachera</b> — realna cena z feedu.</div>
+            <div><b>P rynku</b> — prawdopodobieństwo po usunięciu marży, jeśli mamy obie strony rynku.</div>
+            <div><b>Edge</b> — Model P minus P rynku.</div>
+            <div><b>EV</b> — oczekiwany zwrot przy danym kursie.</div>
+          </div>
+          <div class="table-wrap">
+            <table class="market-table">
+              <thead><tr><th>Rynek</th><th>Model P</th><th>Kurs fair</th><th>Bukmacher</th><th>Kurs</th><th>P rynku</th><th>Edge</th><th>EV</th><th>Decyzja</th></tr></thead>
+              <tbody id="marketRows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="panel-block">
+            <div class="block-head"><div><span class="kicker">Model inputs</span><h3>Czynniki i ich status</h3></div></div>
+            <div id="factorList" class="factor-list"></div>
+          </div>
+          <div class="panel-block">
+            <div class="block-head"><div><span class="kicker">Current context</span><h3>Dane bieżące</h3></div></div>
+            <div id="contextList" class="context-list"></div>
+          </div>
+        </div>
+
+        <div id="benchmarkBlock" class="panel-block hidden">
+          <div class="block-head"><div><span class="kicker">Benchmarks</span><h3>Porównania pomocnicze</h3></div></div>
+          <div id="benchmarkList"></div>
+        </div>
       </section>
 
-      <section id="resultPanel" class="panel result-panel hidden">
-        <div class="panel-head">
-          <div>
-            <p class="kicker">PURE prediction</p>
-            <h2 id="fixtureTitle">—</h2>
-          </div>
-          <div id="dataQuality" class="quality"></div>
-        </div>
-        <div class="metric-grid">
-          <div class="metric"><span>Home corners</span><strong id="homeMu">—</strong></div>
-          <div class="metric"><span>Away corners</span><strong id="awayMu">—</strong></div>
-          <div class="metric accent"><span>Total corners</span><strong id="totalMu">—</strong></div>
-        </div>
-
-        <div class="split">
-          <div>
-            <h3>Total corners</h3>
-            <div class="table-wrap"><table><thead><tr><th>Linia</th><th>P Over</th><th>Fair O</th><th>P Under</th><th>Fair U</th></tr></thead><tbody id="totalRows"></tbody></table></div>
-          </div>
-          <div>
-            <h3>Team corners</h3>
-            <div class="table-wrap"><table><thead><tr><th>Drużyna</th><th>Linia</th><th>P Over</th><th>Fair</th></tr></thead><tbody id="teamRows"></tbody></table></div>
-          </div>
-        </div>
-
-        <div id="marketDecision" class="decision hidden"></div>
-      </section>
-
-      <section class="panel recent-panel">
-        <div class="panel-head"><div><p class="kicker">Frozen log</p><h2>Ostatnie predykcje</h2></div><button id="refreshRecent" class="ghost">Odśwież</button></div>
+      <section id="recentPanel" class="section">
+        <div class="section-head"><div><span class="kicker">Frozen log</span><h2>Ostatnie predykcje</h2></div><button id="refreshRecent" class="button secondary">Odśwież</button></div>
         <div id="recentList" class="recent-list"></div>
+      </section>
+
+      <section id="systemPanel" class="section">
+        <div class="section-head"><div><span class="kicker">System</span><h2>Stan danych i modeli</h2></div></div>
+        <div id="systemStats" class="system-grid"></div>
+        <div class="setup-box">
+          <h3>Live data</h3>
+          <p>Aby aplikacja sama pobierała bieżące mecze, kontuzje, składy, statystyki i kursy, ustaw lokalnie klucz API-Football i uruchom aplikację ponownie:</p>
+          <code>setx API_FOOTBALL_KEY "TWÓJ_KLUCZ"</code>
+          <p class="muted">Klucz nie trafia do GitHuba. Bez niego nadal działa analiza historyczna wielu lig.</p>
+        </div>
       </section>
     </main>
   </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>
