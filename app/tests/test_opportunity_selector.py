@@ -22,6 +22,7 @@ def candidate(
     correlation_group: str | None = None,
     tax_multiplier: float = 1.0,
     bookmaker: str = "book-a",
+    market_probability: float | None = None,
 ) -> OpportunityCandidate:
     return OpportunityCandidate(
         fixture_id=fixture_id,
@@ -35,6 +36,7 @@ def candidate(
         bookmaker=bookmaker,
         correlation_group=correlation_group,
         tax_multiplier=tax_multiplier,
+        market_probability=market_probability,
     )
 
 
@@ -129,6 +131,41 @@ def test_fixture_limit_caps_otherwise_distinct_groups() -> None:
 def test_invalid_probability_interval_is_rejected() -> None:
     with pytest.raises(ValueError, match="probabilities must satisfy"):
         candidate("m1", "a", lower=0.71, probability=0.70)
+
+
+@pytest.mark.parametrize("market_probability", [-0.01, 1.01])
+def test_invalid_market_probability_is_rejected(market_probability: float) -> None:
+    with pytest.raises(ValueError, match="market_probability must be in"):
+        candidate("m1", "a", market_probability=market_probability)
+
+
+def test_market_edge_gate_rejects_candidate_without_market_probability() -> None:
+    result = select_opportunities(
+        [candidate("m1", "a")],
+        min_conservative_market_edge=0.01,
+    )
+
+    assert result.selected == ()
+    assert result.rejection_counts == {"market_probability_unavailable": 1}
+
+
+def test_market_edge_gate_rejects_negative_threshold() -> None:
+    with pytest.raises(ValueError, match="min_conservative_market_edge must be non-negative"):
+        select_opportunities([], min_conservative_market_edge=-0.01)
+
+
+def test_market_edge_gate_is_strict_and_uses_probability_lower_bound() -> None:
+    result = select_opportunities(
+        [
+            candidate("m1", "a", lower=0.60, probability=0.80, market_probability=0.55),
+            candidate("m2", "b", lower=0.61, probability=0.61, market_probability=0.55),
+        ],
+        min_conservative_market_edge=0.05,
+    )
+
+    assert [item.candidate.fixture_id for item in result.selected] == ["m2"]
+    assert result.selected[0].candidate.conservative_market_edge == pytest.approx(0.06)
+    assert result.rejection_counts == {"conservative_market_edge_below_threshold": 1}
 
 
 def test_keeps_latest_quote_per_bookmaker_then_best_executable_price():

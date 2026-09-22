@@ -1,0 +1,26 @@
+[paper_scan]
+version = "paper-scan-v1"
+output_dir = "runtime/paper-runs"
+history_path = "data/multileague/europe16_matches_v05.csv.gz"
+model_id = "pure-multimarket-v1"
+# Optional engine artifact id. Credentials stay out of this file; the adapter
+# reads API-Football credentials from the environment in its own layer.
+engine_id = "pure-engine-v1"
+api_day_offsets = [0, 1]
+league_codes = []
+max_fixtures = 10
+include_context = true
+include_recent_observations = false
+max_recommendations = 10
+min_conservative_ev_net = 0.02
+min_conservative_market_edge = 0.0
+devig_method = "proportional"
+tax_multiplier = 0.88
+execution_cost = 0.0
+probability_haircut = 0.05
+min_data_quality = 60.0
+quote_freshness_minutes = 30
+
+[paper_scan.required_feature_groups]
+fixture = 1
+odds = 1

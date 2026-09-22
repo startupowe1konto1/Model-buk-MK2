@@ -7,6 +7,19 @@ from .football_data_uk import (
     read_football_data_uk_csv,
 )
 from .enrichment import enrich_with_understat
+from .canonical import (
+    CANONICAL_SCHEMA_VERSION,
+    ValidationIssue,
+    ValidationReport,
+    canonical_match_id,
+    validate_canonical_matches,
+    validate_odds_snapshots,
+)
+from .api_football import (
+    ApiFootballSnapshotAdapter,
+    ApiFootballSnapshotError,
+    ApiFootballSnapshotPolicy,
+)
 from .understat import (
     SCHEDULE_COLUMNS,
     STATS_COLUMNS,
@@ -23,6 +36,15 @@ __all__ = [
     "normalize_football_data_uk",
     "read_football_data_uk_csv",
     "enrich_with_understat",
+    "CANONICAL_SCHEMA_VERSION",
+    "ValidationIssue",
+    "ValidationReport",
+    "canonical_match_id",
+    "validate_canonical_matches",
+    "validate_odds_snapshots",
+    "ApiFootballSnapshotAdapter",
+    "ApiFootballSnapshotError",
+    "ApiFootballSnapshotPolicy",
     "SCHEDULE_COLUMNS",
     "STATS_COLUMNS",
     "UnderstatBatch",

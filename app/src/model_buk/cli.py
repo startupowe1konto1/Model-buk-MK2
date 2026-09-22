@@ -1,14 +1,25 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
+from requests import RequestException
 
 from model_buk.config import load_corner_v02_config
 from model_buk.inference import attach_total_market_price, load_corner_engine, predict_fixture
 from model_buk.live_fit import fit_live_corner_models
+from model_buk.paper_config import PaperScanConfig, PaperScanConfigError, load_paper_scan_config
+from model_buk.paper_scan import (
+    PaperScanError,
+    ProviderUnavailableError,
+    build_paper_scan,
+    run_paper_scan,
+)
+from model_buk.current_pipeline import PipelineDataError, RunConflictError
 from model_buk.suite import load_live_corner_suite, predict_with_live_suite
 from model_buk.v02_backtest import run_v02_pipeline
 
@@ -53,6 +64,42 @@ def build_parser() -> argparse.ArgumentParser:
     predict.add_argument("--over-odds", type=float, default=None)
     predict.add_argument("--under-odds", type=float, default=None)
     predict.add_argument("--out", default=None, help="Optional JSON output path")
+
+    scan = sub.add_parser(
+        "scan-current",
+        help="Run the current-data pipeline in paper/shadow mode",
+    )
+    scan.add_argument("--config", default="config/paper_scan.toml")
+    scan.add_argument("--mode", choices=("live", "offline"), default="live")
+    scan.add_argument("--snapshots", default=None, help="JSON/JSONL snapshot input for offline mode")
+    scan.add_argument("--api-key-env", default="API_FOOTBALL_KEY")
+    scan.add_argument("--cache-dir", default="runtime/api_cache/paper-scan")
+    scan.add_argument("--history", default=None)
+    scan.add_argument("--outdir", default=None)
+    scan.add_argument("--league", action="append", default=None)
+    scan.add_argument("--day-offset", action="append", type=int, default=None)
+    scan.add_argument("--max-fixtures", type=int, default=None)
+    scan.add_argument("--max-recommendations", type=int, default=None)
+    scan.add_argument("--min-ev-net", type=float, default=None)
+    scan.add_argument("--tax-multiplier", type=float, default=None)
+    scan.add_argument("--execution-cost", type=float, default=None)
+    scan.add_argument("--probability-haircut", type=float, default=None)
+    scan.add_argument("--min-data-quality", type=float, default=None)
+    scan.add_argument("--max-quote-age-minutes", type=float, default=None)
+    scan.add_argument(
+        "--include-context",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    scan.add_argument(
+        "--include-recent-observations",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    scan.add_argument("--cutoff", default=None, help="Timezone-aware ISO-8601 timestamp")
+    scan.add_argument("--run-id", default=None)
+    scan.add_argument("--dry-run", action="store_true")
+    scan.add_argument("--out", default=None, help="Optional JSON summary output path")
     return parser
 
 
@@ -64,7 +111,7 @@ def _validate_market_triplet(line: float | None, over: float | None, under: floa
 
 
 def _write_and_print(payload_obj: dict, out: str | None) -> None:
-    payload = json.dumps(payload_obj, indent=2)
+    payload = json.dumps(payload_obj, indent=2, ensure_ascii=False)
     if out:
         path = Path(out)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,8 +119,99 @@ def _write_and_print(payload_obj: dict, out: str | None) -> None:
     print(payload)
 
 
+def _paper_config_from_args(args: argparse.Namespace) -> PaperScanConfig:
+    config = load_paper_scan_config(args.config)
+    overrides: dict = {}
+    mapping = {
+        "history": "history_path",
+        "outdir": "output_dir",
+        "max_fixtures": "max_fixtures",
+        "max_recommendations": "max_recommendations",
+        "min_ev_net": "min_conservative_ev_net",
+        "tax_multiplier": "tax_multiplier",
+        "execution_cost": "execution_cost",
+        "probability_haircut": "probability_haircut",
+        "min_data_quality": "min_data_quality",
+        "include_context": "include_context",
+        "include_recent_observations": "include_recent_observations",
+    }
+    for argument, field_name in mapping.items():
+        value = getattr(args, argument)
+        if value is not None:
+            overrides[field_name] = value
+    if args.league is not None:
+        overrides["league_codes"] = tuple(args.league)
+    if args.day_offset is not None:
+        overrides["api_day_offsets"] = tuple(args.day_offset)
+    if args.max_quote_age_minutes is not None:
+        from datetime import timedelta
+
+        overrides["quote_freshness"] = timedelta(minutes=args.max_quote_age_minutes)
+    return replace(config, **overrides)
+
+
+def _run_scan_current(args: argparse.Namespace) -> dict:
+    config = _paper_config_from_args(args)
+    api_key = os.getenv(args.api_key_env) if args.mode == "live" else None
+    built = build_paper_scan(
+        config,
+        source_mode=args.mode,
+        api_key=api_key,
+        snapshots_path=args.snapshots,
+        cache_dir=args.cache_dir,
+    )
+    return run_paper_scan(
+        built,
+        cutoff=args.cutoff,
+        run_id=args.run_id,
+        dry_run=args.dry_run,
+    )
+
+
+def _scan_error(exc: Exception) -> tuple[str, int]:
+    if isinstance(exc, PaperScanConfigError):
+        return "config_error", 2
+    if isinstance(exc, ProviderUnavailableError):
+        return "provider_unavailable", 3
+    if isinstance(exc, RunConflictError):
+        return "run_conflict", 4
+    if isinstance(exc, PipelineDataError):
+        return "data_quality_error", 5
+    if isinstance(exc, PaperScanError):
+        return "not_ready", 6
+    if isinstance(exc, ValueError):
+        return "data_quality_error", 5
+    return "provider_error", 7
+
+
 def main() -> None:
     args = build_parser().parse_args()
+
+    if args.command == "scan-current":
+        try:
+            payload = _run_scan_current(args)
+        except (
+            PaperScanConfigError,
+            PaperScanError,
+            PipelineDataError,
+            RunConflictError,
+            RequestException,
+            RuntimeError,
+            ValueError,
+        ) as exc:
+            status, exit_code = _scan_error(exc)
+            _write_and_print(
+                {
+                    "status": status,
+                    "mode": "paper/shadow",
+                    "source_mode": args.mode,
+                    "message": str(exc),
+                },
+                args.out,
+            )
+            raise SystemExit(exit_code) from None
+        _write_and_print(payload, args.out)
+        return
 
     if args.command == "backtest-corners-v02":
         cfg = load_corner_v02_config(args.config)

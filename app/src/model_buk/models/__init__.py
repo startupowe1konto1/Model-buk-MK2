@@ -7,6 +7,11 @@ from model_buk.models.dixon_coles import (
     time_decay_weights,
 )
 from model_buk.models.gas_poisson import GasPoissonConfig, GasPoissonModel, fit_gas_poisson
+from model_buk.models.negative_binomial import (
+    NegativeBinomialModel,
+    fit_negative_binomial,
+    nb2_pmf,
+)
 
 __all__ = [
     "DixonColesModel",
@@ -17,4 +22,7 @@ __all__ = [
     "GasPoissonConfig",
     "GasPoissonModel",
     "fit_gas_poisson",
+    "NegativeBinomialModel",
+    "fit_negative_binomial",
+    "nb2_pmf",
 ]

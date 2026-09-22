@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from model_buk.backtest import devig_two_way
 from model_buk.features import build_features
@@ -61,3 +62,49 @@ def test_current_match_target_does_not_enter_own_features() -> None:
     a = f1.loc[target_idx, feature_cols]
     b = f2.loc[target_idx, feature_cols]
     pd.testing.assert_series_equal(a, b, check_names=False)
+
+
+def test_league_features_do_not_observe_simultaneous_matches() -> None:
+    rows = []
+    teams = [f"T{i}" for i in range(44)]
+    for index in range(22):
+        rows.append(
+            {
+                "date": pd.Timestamp("2025-01-01") + pd.Timedelta(days=min(index, 20)),
+                "internal_match_id": index,
+                "home_team": teams[index * 2],
+                "away_team": teams[index * 2 + 1],
+                "home_corners": 4,
+                "away_corners": 3,
+                "home_shots": 10,
+                "away_shots": 8,
+                "home_sot": 4,
+                "away_sot": 3,
+                "home_goals": 1,
+                "away_goals": 1,
+                "home_xg": 1.2,
+                "away_xg": 1.0,
+                "home_ppda": 10.0,
+                "away_ppda": 11.0,
+                "home_deep": 6,
+                "away_deep": 5,
+            }
+        )
+    raw = pd.DataFrame(rows)
+    changed = raw.copy()
+    changed.loc[20, ["home_corners", "away_corners"]] = [99, 88]
+
+    before = build_features(raw)
+    after = build_features(changed)
+
+    assert before.loc[21, "league_total_corners_r100"] == after.loc[
+        21, "league_total_corners_r100"
+    ]
+
+
+def test_ambiguous_same_team_timestamp_is_rejected() -> None:
+    raw = tiny_frame()
+    raw.loc[1, "date"] = raw.loc[0, "date"]
+
+    with pytest.raises(ValueError, match="distinct kickoff times"):
+        build_features(raw)

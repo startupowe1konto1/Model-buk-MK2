@@ -14,7 +14,7 @@ from backtest.baseline import summarize as baseline_summarize
 from backtest.devig import METHODS
 from backtest.gate import TAU
 from backtest.loader import load_matches
-from backtest.report_devig import best_method, score_method
+from backtest.report_devig import score_method
 from backtest.report_io import write_or_print
 from backtest.walkforward import Selection, run, score_predictions, summarize
 
@@ -24,6 +24,7 @@ from backtest.walkforward import Selection, run, score_predictions, summarize
 # wskazywac dokladnie te same mecze, na ktorych `run()` zbiera `predictions` -
 # inaczej n modelu i n rynku w tabeli kalibracji przestalyby byc porownywalne.
 MIN_TRAIN_SEASONS = 2
+DEFAULT_DEVIG_METHOD = "proportional"
 
 
 def distinct_match_count(selections: Sequence[Selection]) -> int:
@@ -179,14 +180,21 @@ def _markdown(
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Backtest CLV na 1X2")
     ap.add_argument("--tau", default="pl_standard", choices=sorted(TAU))
-    ap.add_argument("--devig", default=None, choices=sorted(METHODS),
-                    help="domyslnie metoda o najnizszym log-lossie na zamknieciu")
+    ap.add_argument(
+        "--devig",
+        default=DEFAULT_DEVIG_METHOD,
+        choices=sorted(METHODS),
+        help=(
+            "metoda zamrozona przed backtestem; domyslnie proportional. "
+            "Nie wybieramy jej na podstawie wynikow sezonow testowych"
+        ),
+    )
     ap.add_argument("--ev-min", type=float, default=0.05)
     ap.add_argument("--out", default=None, help="prefiks sciezki, bez rozszerzenia")
     args = ap.parse_args(argv)
 
     matches = load_matches()
-    devig_method = args.devig or best_method(matches)
+    devig_method = args.devig
     print("mecze: {0} | de-vig: {1} | tau: {2}".format(len(matches), devig_method, args.tau))
 
     # JEDNO przejscie: run() zbiera i selekcje (do CLV), i predictions dla

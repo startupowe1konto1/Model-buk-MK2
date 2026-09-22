@@ -3,7 +3,7 @@ import unittest
 
 from backtest.loader import Match
 from backtest.report_devig import MethodScore
-from backtest.run_backtest import _markdown, distinct_match_count
+from backtest.run_backtest import DEFAULT_DEVIG_METHOD, _markdown, distinct_match_count
 from backtest.walkforward import ModelScore, Selection
 
 
@@ -41,6 +41,9 @@ class TestDistinctMatchCount(unittest.TestCase):
 
     def test_empty_input_is_zero(self):
         self.assertEqual(distinct_match_count([]), 0)
+
+    def test_default_devig_is_frozen_before_test_seasons(self):
+        self.assertEqual(DEFAULT_DEVIG_METHOD, "proportional")
 
     def test_equals_bet_count_when_every_match_has_one_selection(self):
         m1, m2, m3 = _match("A", "B", day=1), _match("C", "D", day=2), _match("E", "F", day=3)

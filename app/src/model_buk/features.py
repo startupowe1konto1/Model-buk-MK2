@@ -4,6 +4,27 @@ import numpy as np
 import pandas as pd
 
 
+def _strict_prior_timestamp_mean(
+    values: pd.Series,
+    timestamps: pd.Series,
+    *,
+    window: int,
+    min_periods: int,
+) -> pd.Series:
+    """Rolling mean that never observes another row at the same timestamp."""
+    result = pd.Series(np.nan, index=values.index, dtype=float)
+    history: list[float] = []
+    grouped = pd.DataFrame({"value": values, "timestamp": timestamps}).groupby(
+        "timestamp", sort=False, dropna=False
+    )
+    for _, simultaneous in grouped:
+        prior = pd.Series(history[-window:], dtype=float)
+        if prior.count() >= min_periods:
+            result.loc[simultaneous.index] = float(prior.mean())
+        history.extend(pd.to_numeric(simultaneous["value"], errors="coerce").tolist())
+    return result
+
+
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
     """Create strictly point-in-time rolling features.
 
@@ -57,6 +78,14 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
         }
     )
     long = pd.concat([home, away], ignore_index=True).sort_values(["team", "date", "_mid"])
+    # Date-only sources cannot order two matches of the same team on one day.
+    # Refuse that ambiguous history instead of allowing internal_match_id to
+    # decide which result becomes available first.
+    if long.duplicated(["team", "date"], keep=False).any():
+        raise ValueError(
+            "history contains multiple matches for one team at the same timestamp; "
+            "provide distinct kickoff times"
+        )
 
     metrics = [
         "corners_for", "corners_against", "shots_for", "shots_against",
@@ -109,8 +138,14 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     out = out.merge(afeat, left_on="internal_match_id", right_on="_mid", how="left").drop(columns="_mid")
 
     total = d.home_corners + d.away_corners
-    out["league_total_corners_r100"] = total.shift(1).rolling(100, min_periods=20).mean().to_numpy()
-    out["league_home_corners_r100"] = d.home_corners.shift(1).rolling(100, min_periods=20).mean().to_numpy()
-    out["league_away_corners_r100"] = d.away_corners.shift(1).rolling(100, min_periods=20).mean().to_numpy()
+    out["league_total_corners_r100"] = _strict_prior_timestamp_mean(
+        total, d.date, window=100, min_periods=20
+    ).to_numpy()
+    out["league_home_corners_r100"] = _strict_prior_timestamp_mean(
+        d.home_corners, d.date, window=100, min_periods=20
+    ).to_numpy()
+    out["league_away_corners_r100"] = _strict_prior_timestamp_mean(
+        d.away_corners, d.date, window=100, min_periods=20
+    ).to_numpy()
     out["total_corners"] = out.home_corners + out.away_corners
     return out

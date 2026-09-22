@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Mapping
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,8 @@ from model_buk.models.dixon_coles import (
     score_matrix,
 )
 from model_buk.models.gas_poisson import GasPoissonConfig, fit_gas_poisson
+from model_buk.models.negative_binomial import fit_negative_binomial
+from model_buk.evaluation.calibration import CalibrationFold, calibrate_chronologically
 
 
 @dataclass(frozen=True)
@@ -195,6 +197,189 @@ def walk_forward_gas_poisson(
     return pd.DataFrame(predictions)
 
 
+def walk_forward_negative_binomial(
+    matches: pd.DataFrame,
+    folds: Iterable[GoalsFold],
+    *,
+    l2_strength: float = 0.0,
+    min_train_matches: int = 100,
+    max_goals: int = 10,
+) -> pd.DataFrame:
+    """Generate frozen-fold forecasts from the independent-marginal NB2 model."""
+    if min_train_matches < 1:
+        raise ValueError("min_train_matches must be positive")
+    data = _prepare_matches(matches)
+    predictions: list[dict] = []
+    for fold in folds:
+        start, end = fold.bounds()
+        train_all = data[data["kickoff"] < start]
+        valid_all = data[(data["kickoff"] >= start) & (data["kickoff"] < end)]
+        for league, valid in valid_all.groupby("league", sort=True):
+            train = train_all[train_all["league"] == league]
+            if len(train) < min_train_matches:
+                continue
+            model = fit_negative_binomial(
+                train.rename(columns={"kickoff": "date"}),
+                l2_strength=l2_strength,
+            )
+            for row in valid.itertuples(index=False):
+                home_rate, away_rate = model.expected_goals(
+                    str(row.home_team), str(row.away_team), unknown_strategy="neutral"
+                )
+                probabilities = market_probabilities(
+                    model.score_matrix(
+                        str(row.home_team),
+                        str(row.away_team),
+                        max_goals=max_goals,
+                        unknown_strategy="neutral",
+                    )
+                )
+                actual = (
+                    "home"
+                    if row.home_goals > row.away_goals
+                    else "draw"
+                    if row.home_goals == row.away_goals
+                    else "away"
+                )
+                predictions.append(
+                    {
+                        "fold": fold.label,
+                        "source_row_id": getattr(row, "source_row_id", None),
+                        "league": league,
+                        "kickoff": row.kickoff,
+                        "home_team": row.home_team,
+                        "away_team": row.away_team,
+                        "home_goals": int(row.home_goals),
+                        "away_goals": int(row.away_goals),
+                        "home_rate": home_rate,
+                        "away_rate": away_rate,
+                        "alpha": model.alpha,
+                        "p_home": probabilities["result.home"],
+                        "p_draw": probabilities["result.draw"],
+                        "p_away": probabilities["result.away"],
+                        "actual": actual,
+                        "cold_start": bool(
+                            row.home_team not in model.teams or row.away_team not in model.teams
+                        ),
+                    }
+                )
+    return pd.DataFrame(predictions)
+
+
+def calibrate_goal_predictions(
+    predictions: pd.DataFrame,
+    folds: Iterable[GoalsFold],
+    *,
+    min_history: int = 100,
+) -> pd.DataFrame:
+    """Apply temperature scaling without fitting on the fold being scored.
+
+    Raw probabilities remain available under ``*_raw`` columns.  Rows outside
+    the supplied folds, or folds without enough earlier forecasts, retain the
+    raw probabilities and carry an explicit calibration status.
+    """
+    required = {"kickoff", "actual", "p_home", "p_draw", "p_away"}
+    missing = sorted(required - set(predictions.columns))
+    if missing:
+        raise ValueError(f"predictions is missing required columns: {', '.join(missing)}")
+    if predictions.empty:
+        raise ValueError("predictions is empty")
+    frozen_folds = tuple(folds)
+    calibration_folds = tuple(
+        CalibrationFold(fold.label, fold.start, fold.end) for fold in frozen_folds
+    )
+    probabilities = predictions[["p_home", "p_draw", "p_away"]].to_numpy(dtype=float)
+    result = calibrate_chronologically(
+        probabilities,
+        predictions["actual"].to_numpy(),
+        predictions["kickoff"],
+        calibration_folds,
+        classes=("home", "draw", "away"),
+        min_history=min_history,
+    )
+    output = predictions.copy()
+    for index, name in enumerate(("p_home", "p_draw", "p_away")):
+        output[f"{name}_raw"] = probabilities[:, index]
+        output[name] = result.probabilities[:, index]
+    output["calibrated"] = result.calibrated
+    output["calibration_status"] = "outside_fold"
+    kickoff = pd.DatetimeIndex(
+        pd.to_datetime(output["kickoff"], errors="coerce", utc=True, format="mixed")
+    )
+    for report in result.folds:
+        start, end = report.fold.bounds()
+        mask = (kickoff >= start) & (kickoff < end)
+        output.loc[mask, "calibration_status"] = report.status
+    return output
+
+
+def compare_goal_model_predictions(
+    predictions_by_model: Mapping[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Compare models on the intersection of exactly the same fixtures.
+
+    The function deliberately performs no tuning and no winner promotion.  It
+    is a paired diagnostic for already-frozen model configurations.
+    """
+    if len(predictions_by_model) < 2:
+        raise ValueError("at least two model prediction sets are required")
+    required = {
+        "league", "kickoff", "home_team", "away_team", "actual",
+        "p_home", "p_draw", "p_away",
+    }
+    prepared: dict[str, pd.DataFrame] = {}
+    common_keys: set[str] | None = None
+    for raw_name, frame in predictions_by_model.items():
+        name = str(raw_name).strip()
+        if not name:
+            raise ValueError("model names must not be blank")
+        missing = sorted(required - set(frame.columns))
+        if missing:
+            raise ValueError(f"{name} predictions is missing required columns: {', '.join(missing)}")
+        if frame.empty:
+            raise ValueError(f"{name} predictions is empty")
+        current = frame.copy()
+        kickoff = pd.to_datetime(current["kickoff"], errors="coerce", utc=True, format="mixed")
+        if kickoff.isna().any():
+            raise ValueError(f"{name} predictions contains invalid kickoff values")
+        current["_fixture_key"] = (
+            current["league"].astype(str) + "|" + kickoff.astype(str) + "|"
+            + current["home_team"].astype(str) + "|" + current["away_team"].astype(str)
+        )
+        if current["_fixture_key"].duplicated().any():
+            raise ValueError(f"{name} predictions contains duplicate fixtures")
+        keys = set(current["_fixture_key"])
+        common_keys = keys if common_keys is None else common_keys & keys
+        prepared[name] = current
+    assert common_keys is not None
+    if not common_keys:
+        raise ValueError("model prediction sets have no common fixtures")
+
+    ordered_keys = sorted(common_keys)
+    reference_actual: dict[str, str] | None = None
+    rows: list[dict[str, float | int | str]] = []
+    for name, frame in prepared.items():
+        paired = frame.set_index("_fixture_key").loc[ordered_keys].reset_index()
+        actual = dict(zip(paired["_fixture_key"], paired["actual"], strict=True))
+        if reference_actual is None:
+            reference_actual = actual
+        elif actual != reference_actual:
+            raise ValueError("models disagree about actual outcomes for common fixtures")
+        scores = score_goals_predictions(paired)
+        rows.append(
+            {
+                "model": name,
+                "available_n": int(len(frame)),
+                "common_n": int(len(paired)),
+                "paired_coverage": float(len(paired) / len(frame)),
+                **scores,
+            }
+        )
+    return pd.DataFrame(rows).sort_values(
+        ["log_loss", "brier", "model"], ignore_index=True
+    )
+
+
 def compare_dixon_coles_configurations(
     matches: pd.DataFrame,
     folds: Iterable[GoalsFold],
@@ -245,7 +430,12 @@ def compare_dixon_coles_configurations(
 
 
 def score_goals_predictions(predictions: pd.DataFrame) -> dict[str, float | int]:
-    """Score 1X2 probabilities with proper losses and explicit coverage."""
+    """Score 1X2 probabilities with proper losses and explicit coverage.
+
+    RPS complements log loss and Brier by respecting the natural ordering
+    ``home < draw < away``.  A home/away miss is therefore penalised more than
+    an adjacent home/draw or draw/away miss.
+    """
     required = {"p_home", "p_draw", "p_away", "actual"}
     missing = sorted(required - set(predictions.columns))
     if missing:
@@ -266,10 +456,14 @@ def score_goals_predictions(predictions: pd.DataFrame) -> dict[str, float | int]
     chosen = probability_matrix[np.arange(len(predictions)), actual_index]
     targets = np.eye(len(classes))[actual_index]
     predicted_index = probability_matrix.argmax(axis=1)
+    cumulative_error = np.cumsum(probability_matrix, axis=1)[:, :-1] - np.cumsum(
+        targets, axis=1
+    )[:, :-1]
     return {
         "n": int(len(predictions)),
         "log_loss": float(-np.mean(np.log(np.clip(chosen, 1e-15, 1.0)))),
         "brier": float(np.mean(np.sum((probability_matrix - targets) ** 2, axis=1))),
+        "rps": float(np.mean(np.sum(cumulative_error**2, axis=1) / (len(classes) - 1))),
         "accuracy": float(np.mean(predicted_index == actual_index)),
         "cold_start_rate": float(predictions.get("cold_start", pd.Series(False, index=predictions.index)).mean()),
     }

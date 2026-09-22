@@ -27,6 +27,7 @@ class OpportunityCandidate:
     tax_multiplier: float = 1.0
     execution_cost: float = 0.0
     correlation_group: str | None = None
+    market_probability: float | None = None
 
     def __post_init__(self) -> None:
         if not self.fixture_id.strip():
@@ -51,6 +52,8 @@ class OpportunityCandidate:
             raise ValueError("tax_multiplier must be in (0, 1]")
         if self.execution_cost < 0.0:
             raise ValueError("execution_cost must be non-negative")
+        if self.market_probability is not None and not 0.0 <= self.market_probability <= 1.0:
+            raise ValueError("market_probability must be in [0, 1]")
 
     @property
     def logical_key(self) -> tuple[str, str, str]:
@@ -69,6 +72,12 @@ class OpportunityCandidate:
             - 1.0
             - self.execution_cost
         )
+
+    @property
+    def conservative_market_edge(self) -> float | None:
+        if self.market_probability is None:
+            return None
+        return self.probability_lower_bound - self.market_probability
 
 
 @dataclass(frozen=True)
@@ -145,6 +154,7 @@ def select_opportunities(
     *,
     max_recommendations: int = 10,
     min_conservative_ev_net: float = 0.0,
+    min_conservative_market_edge: float | None = None,
     max_per_fixture: int = 2,
     max_per_correlation_group: int = 1,
     decision_time: datetime | None = None,
@@ -164,6 +174,8 @@ def select_opportunities(
         raise ValueError("max_per_correlation_group must be at least 1")
     if min_conservative_ev_net < 0.0:
         raise ValueError("min_conservative_ev_net must be non-negative")
+    if min_conservative_market_edge is not None and min_conservative_market_edge < 0.0:
+        raise ValueError("min_conservative_market_edge must be non-negative")
     if (decision_time is None) != (max_quote_age is None):
         raise ValueError("decision_time and max_quote_age must be provided together")
     if decision_time is not None:
@@ -190,6 +202,16 @@ def select_opportunities(
         ):
             rejected.append(RejectedOpportunity(candidate, "stale_quote"))
             continue
+        if min_conservative_market_edge is not None:
+            market_edge = candidate.conservative_market_edge
+            if market_edge is None:
+                rejected.append(RejectedOpportunity(candidate, "market_probability_unavailable"))
+                continue
+            if market_edge <= min_conservative_market_edge:
+                rejected.append(
+                    RejectedOpportunity(candidate, "conservative_market_edge_below_threshold")
+                )
+                continue
         # A threshold of zero still means strictly positive EV; break-even is not
         # an opportunity after estimation and execution uncertainty.
         if candidate.conservative_ev_net <= min_conservative_ev_net:

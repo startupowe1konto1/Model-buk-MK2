@@ -7,11 +7,14 @@ import pytest
 from model_buk.goals_backtest import (
     GoalsFold,
     build_market_1x2_benchmark,
+    calibrate_goal_predictions,
+    compare_goal_model_predictions,
     compare_dixon_coles_configurations,
     logarithmic_pool_1x2,
     score_goals_predictions,
     tune_logarithmic_pool_1x2,
     walk_forward_dixon_coles,
+    walk_forward_negative_binomial,
 )
 
 
@@ -66,6 +69,7 @@ def test_scores_probabilistic_forecasts():
     assert scores["n"] == 3
     assert scores["accuracy"] == 1.0
     assert 0.0 < scores["log_loss"] < 1.0
+    assert 0.0 <= scores["rps"] < scores["brier"]
     assert scores["cold_start_rate"] == pytest.approx(1 / 3)
 
 
@@ -133,3 +137,51 @@ def test_logarithmic_pool_has_coherent_endpoints_and_tuning():
     assert np.allclose(model_only[["p_home", "p_draw", "p_away"]].sum(axis=1), 1.0)
     assert set(tuned["model_weight"]) == {0.0, 0.5, 1.0}
     assert tuned["log_loss"].is_monotonic_increasing
+
+
+def test_negative_binomial_walk_forward_and_paired_comparison():
+    fold = GoalsFold("holdout", "2024-06-01", "2024-08-01")
+    dixon_coles = walk_forward_dixon_coles(
+        _matches(), [fold], min_train_matches=40, half_life_days=90,
+    )
+    negative_binomial = walk_forward_negative_binomial(
+        _matches(), [fold], min_train_matches=40, l2_strength=0.2,
+    )
+
+    comparison = compare_goal_model_predictions(
+        {"dixon_coles": dixon_coles, "negative_binomial": negative_binomial}
+    )
+
+    assert set(comparison["model"]) == {"dixon_coles", "negative_binomial"}
+    assert comparison["common_n"].nunique() == 1
+    assert comparison["common_n"].iloc[0] > 0
+    assert comparison["log_loss"].is_monotonic_increasing
+    assert np.allclose(
+        negative_binomial[["p_home", "p_draw", "p_away"]].sum(axis=1), 1.0
+    )
+
+
+def test_goal_calibration_uses_only_earlier_predictions_and_keeps_raw_values():
+    probabilities = pd.DataFrame(
+        {
+            "league": ["TEST"] * 8,
+            "kickoff": pd.date_range("2024-01-01", periods=8, tz="UTC"),
+            "home_team": [f"H{i}" for i in range(8)],
+            "away_team": [f"A{i}" for i in range(8)],
+            "actual": ["home", "draw", "away", "home", "draw", "away", "home", "draw"],
+            "p_home": [0.8, 0.7, 0.1, 0.7, 0.2, 0.1, 0.8, 0.2],
+            "p_draw": [0.1, 0.2, 0.2, 0.2, 0.7, 0.2, 0.1, 0.7],
+            "p_away": [0.1, 0.1, 0.7, 0.1, 0.1, 0.7, 0.1, 0.1],
+        }
+    )
+    calibrated = calibrate_goal_predictions(
+        probabilities,
+        [GoalsFold("outer", "2024-01-05", "2024-01-09")],
+        min_history=4,
+    )
+
+    assert calibrated.loc[:3, "calibration_status"].eq("outside_fold").all()
+    assert calibrated.loc[4:, "calibration_status"].eq("calibrated").all()
+    assert calibrated.loc[4:, "calibrated"].all()
+    assert calibrated["p_home_raw"].tolist() == probabilities["p_home"].tolist()
+    assert np.allclose(calibrated[["p_home", "p_draw", "p_away"]].sum(axis=1), 1.0)

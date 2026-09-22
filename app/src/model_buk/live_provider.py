@@ -347,8 +347,17 @@ class ApiFootballClient:
             output.append(row)
         return output
 
-    def match_context(self, fixture_id: int, deep: bool = True) -> dict[str, Any]:
-        fixture = self.fixture(fixture_id)
+    def match_context(
+        self,
+        fixture_id: int,
+        deep: bool = True,
+        *,
+        include_prediction_benchmark: bool = True,
+        fixture_override: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        fixture = dict(fixture_override) if fixture_override is not None else self.fixture(fixture_id)
+        if int(fixture.get("fixture_id") or 0) != int(fixture_id):
+            raise ValueError("fixture_override does not match fixture_id")
         injuries: list[dict[str, Any]] = []
         lineups: list[dict[str, Any]] = []
         odds: list[dict[str, Any]] = []
@@ -356,12 +365,16 @@ class ApiFootballClient:
         current: dict[str, list[dict[str, Any]]] = {"home": [], "away": []}
         errors: list[str] = []
 
-        for label, fn in (
+        operations = [
             ("injuries", lambda: self.injuries(fixture_id)),
             ("lineups", lambda: self.lineups(fixture_id)),
             ("odds", lambda: self.odds(fixture_id)),
-            ("prediction_benchmark", lambda: self.prediction_benchmark(fixture_id)),
-        ):
+        ]
+        if include_prediction_benchmark:
+            operations.append(
+                ("prediction_benchmark", lambda: self.prediction_benchmark(fixture_id))
+            )
+        for label, fn in operations:
             try:
                 value = fn()
                 if label == "injuries": injuries = value
