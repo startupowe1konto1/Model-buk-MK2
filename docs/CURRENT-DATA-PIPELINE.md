@@ -77,6 +77,49 @@ uruchomieniem zwycięzcy na outer foldzie.
 Do czasu przejścia tych kryteriów wykonanie powinno działać wyłącznie w trybie
 paper/shadow.
 
+## Import danych do historycznego replayu
+
+`model_buk.evaluation.replay_data.load_replay_data(path)` przyjmuje CSV albo
+JSONL/NDJSON z jednym wierszem na wybór rynku w danym snapshotcie. Wymagane są
+kolumny: `cutoff`, `kickoff`, `fixture_id`, `market_key`, `selection`,
+`decimal_odds`, `probability`, `probability_lower_bound`, `observed_at`,
+`snapshot_id`, `bookmaker`, `tax_multiplier`, `execution_cost`,
+`correlation_group`, `settlement`, `market_group_id` i `market_size`.
+
+Opcjonalne kolumny to `execution_price_kind` (domyślnie `snapshot`),
+`closing_odds` (wyłącznie diagnostyka CLV) oraz `cluster_id` (domyślnie cutoff).
+Wszystkie timestampy muszą zawierać strefę czasową. Wiersz z cutoffem po
+kickoffie, obserwacją po cutoffie, niepoprawnym prawdopodobieństwem albo ceną
+`closing` jako wykonawczą trafia do kwarantanny. Brak wymaganych kolumn odrzuca
+cały plik. Wynik importu zawiera SHA-256 pliku, liczbę zaakceptowanych i
+odrzuconych rekordów oraz błędy przypisane do numeru wiersza.
+
+Importer nie wylicza predykcji modelu ani nie odtwarza kursu, którego nie ma w
+zapisanym snapshotcie. Dane wejściowe muszą więc zawierać punktową predykcję i
+jej dolną granicę dostępną przed cutoffem; dopiero wtedy można złożyć je z
+historycznymi kwotowaniami i settlementem.
+
+## Uruchomienie nested replayu
+
+Komenda `replay-history` wykonuje nested walk-forward na powyższym wejściu i
+planie JSON. Plan definiuje strategię albo siatkę metod de-vig, progów EV i
+top-N oraz wewnętrzne i zewnętrzne foldy. `--by-stratum` stroi strategie
+oddzielnie dla każdego `stratum_id`, np. ligi.
+
+```powershell
+python -m model_buk replay-history `
+  --input runtime/replay/opportunities.csv `
+  --plan config/replay_plan.example.json `
+  --outdir runtime/replay/run-2026-09-23 `
+  --by-stratum
+```
+
+Domyślnie komenda zatrzyma się, jeśli importer skieruje choć jeden rekord do
+kwarantanny. `--allow-quarantine` pozwala kontynuować na poprawnych rekordach,
+ale zachowuje pełny wykaz odrzuceń w raporcie. Katalog raportu musi być nowy albo
+pusty. Wynik obejmuje wyniki inner foldów, wybrane strategie, ledger zewnętrzny,
+podsumowania outer foldów, kwarantannę i manifest z hashem danych oraz planem.
+
 ## Uruchomienie skanera
 
 Tryb live odczytuje klucz wyłącznie ze zmiennej środowiskowej:
@@ -109,3 +152,69 @@ klucza API; sekret musi być ustawiony w środowisku konta uruchamiającego zada
 Pipeline zakłada atomową blokadę dla katalogu przebiegu i odrzuci równoległe
 uruchomienie tego samego `run_id`. Po twardym przerwaniu procesu należy najpierw
 sprawdzić osierocony plik `.run-*.lock`, zamiast automatycznie go usuwać.
+
+## Stan lokalnych danych historycznych
+
+Lokalne archiwa `football_data` można wczytać bez rozpakowywania przez
+`load_football_data_uk_archives`. W sprawdzonej kopii adapter odczytał 92 327
+meczów z 22 lig (2014-07-25–2026-05-31) oraz 5 132 553 rekordy kursowe dla 1X2,
+Asian Handicap i totals, w wariantach opening i closing.
+
+Pliki football-data.co.uk nie zawierają timestampu pobrania poszczególnych
+kursów. Opening jest oznaczeniem rodzaju ceny w źródle, ale nie dowodzi, że
+konkretna cena była dostępna w wybranym cutoffie. Te dane nadają się do
+historycznej oceny prognoz względem rynku i diagnostyki closing-price; nie
+stanowią same w sobie audytowalnego dowodu wykonalnego ROI point-in-time. W
+archiwum jest również jeden timestampowany snapshot API-Football, ale to za mało
+do walidacji historycznej. Do pełnego replayu wykonania potrzebna jest seria
+snapshotów z `observed_at` przed kickoffem.
+
+Do celów eksploracyjnych można przygotować wiersze replayu z cen opening i
+zewnętrznych predykcji OOS. Komenda wymaga jawnego potwierdzenia założenia o
+dostępności kursu; oznacza każdy rekord jako `research_only`, a replay zapisuje
+blokadę promocji w manifeście.
+
+```powershell
+$archives = Get-ChildItem "$env:USERPROFILE\Desktop\Model Buk\*.zip" | ForEach-Object FullName
+python -m model_buk prepare-football-data-replay `
+  --archives $archives `
+  --predictions outputs/nested_oos_predictions.csv `
+  --out runtime/replay/football_data_opportunities.csv `
+  --assume-opening-available
+```
+
+`--predictions` musi zawierać `source_row_id`, `outer_fold`, `actual`, `p_home`,
+`p_draw` i `p_away` z nested OOS. Wiersze bez rozliczonego wyniku lub bez pełnego
+kursu opening nie trafią do replayu. Closing odds są dołączane tylko jako
+diagnostyka. Dla danych z prawdziwymi timestampami użyj importerów CSV/JSONL bez
+flagi `--assume-opening-available`.
+
+Predykcje per liga można wygenerować nested runnerem. Plan przykładowy obejmuje
+dwa modele count-data, wybór parametrów na inner OOF i kalibrację przed każdym
+outer foldem:
+
+```powershell
+python -m model_buk nested-goals-archives `
+  --archives $archives `
+  --plan config/nested_goals_plan.example.json `
+  --outdir runtime/replay/model-oof
+```
+
+Runner zapisuje predykcje w `nested_oos_predictions.csv`, wyniki selekcji per
+liga i manifest z hashami archiwów. Następnie ten plik podajesz do
+`prepare-football-data-replay`, a przygotowany CSV do `replay-history --by-stratum`.
+Przykładowa siatka strategii porównuje trzy metody de-vig, trzy progi EV i cztery
+limity top-N (36 wariantów) wewnątrz foldów.
+
+Do porównania prognoz z benchmarkiem rynku per liga służy `archive-promotion-gate`:
+
+```powershell
+python -m model_buk archive-promotion-gate `
+  --archives $archives `
+  --predictions runtime/replay/model-oof/nested_oos_predictions.csv `
+  --outdir runtime/replay/promotion-gate
+```
+
+Raport zawiera log-loss, Brier, ECE i klastrowany bootstrap po dacie meczu.
+Jest to wyłącznie bramka jakości prognoz: dla archiwów bez timestampów kursu
+`promotion_eligible` pozostaje `false`, niezależnie od wyniku metryk.

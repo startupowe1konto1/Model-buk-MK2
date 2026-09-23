@@ -51,6 +51,7 @@ class HistoricalOpportunity:
     execution_price_kind: ExecutionPriceKind = "snapshot"
     closing_odds: float | None = None
     cluster_id: str | None = None
+    stratum_id: str | None = None
 
     def __post_init__(self) -> None:
         cutoff = _aware_utc(self.cutoff, field="cutoff")
@@ -76,10 +77,14 @@ class HistoricalOpportunity:
         cluster = str(self.cluster_id).strip() if self.cluster_id is not None else cutoff.isoformat()
         if not cluster:
             raise ValueError("cluster_id must not be blank")
+        stratum = str(self.stratum_id).strip() if self.stratum_id is not None else None
+        if stratum == "":
+            raise ValueError("stratum_id must not be blank")
         object.__setattr__(self, "cutoff", cutoff)
         object.__setattr__(self, "kickoff", kickoff)
         object.__setattr__(self, "market_group_id", group)
         object.__setattr__(self, "cluster_id", cluster)
+        object.__setattr__(self, "stratum_id", stratum)
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,6 +390,7 @@ def replay_opportunities(
                     "strategy": strategy.name,
                     "cutoff": cutoff,
                     "cluster_id": item.cluster_id,
+                    "stratum_id": item.stratum_id,
                     "kickoff": item.kickoff,
                     "fixture_id": candidate.fixture_id,
                     "market_key": candidate.market_key,

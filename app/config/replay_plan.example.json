@@ -1,0 +1,42 @@
+{
+  "strategy_grid": {
+    "devig_methods": ["proportional", "power", "shin"],
+    "ev_thresholds": [0.0, 0.02, 0.05],
+    "top_ns": [1, 3, 5, 10],
+    "min_conservative_market_edge": 0.0,
+    "max_quote_age_seconds": 1800
+  },
+  "folds": [
+    {
+      "label": "outer-2025-26",
+      "outer_fold": {
+        "label": "season-2025-26",
+        "start": "2025-07-01T00:00:00Z",
+        "end": "2026-07-01T00:00:00Z"
+      },
+      "inner_folds": [
+        {
+          "label": "season-2022-23",
+          "start": "2022-07-01T00:00:00Z",
+          "end": "2023-07-01T00:00:00Z"
+        },
+        {
+          "label": "season-2023-24",
+          "start": "2023-07-01T00:00:00Z",
+          "end": "2024-07-01T00:00:00Z"
+        },
+        {
+          "label": "season-2024-25",
+          "start": "2024-07-01T00:00:00Z",
+          "end": "2025-07-01T00:00:00Z"
+        }
+      ]
+    }
+  ],
+  "evaluation": {
+    "min_inner_bets": 50,
+    "confidence_level": 0.95,
+    "bootstrap_resamples": 2000,
+    "seed": 42
+  }
+}

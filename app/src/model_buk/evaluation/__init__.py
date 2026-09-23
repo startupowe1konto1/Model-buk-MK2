@@ -47,6 +47,14 @@ from model_buk.evaluation.historical_replay import (
     replay_opportunities,
     replay_strategy_grid,
 )
+from model_buk.evaluation.replay_data import (
+    ReplayDataIssue,
+    ReplayDataLoadResult,
+    load_replay_data,
+)
+from model_buk.evaluation.archive_replay import build_football_data_replay_frame
+from model_buk.evaluation.archive_goal_runner import run_nested_archive_forecasts
+from model_buk.evaluation.archive_promotion import run_archive_promotion_gate
 
 __all__ = [
     "CalibrationFold",
@@ -87,4 +95,10 @@ __all__ = [
     "nested_walk_forward_replay",
     "replay_opportunities",
     "replay_strategy_grid",
+    "ReplayDataIssue",
+    "ReplayDataLoadResult",
+    "load_replay_data",
+    "build_football_data_replay_frame",
+    "run_nested_archive_forecasts",
+    "run_archive_promotion_gate",
 ]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+from datetime import timedelta
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,12 @@ from model_buk.paper_scan import (
     run_paper_scan,
 )
 from model_buk.current_pipeline import PipelineDataError, RunConflictError
+from model_buk.artifact_identity import sha256_file
+from model_buk.evaluation.archive_replay import build_football_data_replay_frame
+from model_buk.evaluation.archive_goal_runner import run_nested_archive_forecasts
+from model_buk.evaluation.archive_promotion import run_archive_promotion_gate
+from model_buk.evaluation.replay_runner import run_historical_replay
+from model_buk.ingestion.football_data_uk import load_football_data_uk_archives
 from model_buk.suite import load_live_corner_suite, predict_with_live_suite
 from model_buk.v02_backtest import run_v02_pipeline
 
@@ -100,6 +107,63 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--run-id", default=None)
     scan.add_argument("--dry-run", action="store_true")
     scan.add_argument("--out", default=None, help="Optional JSON summary output path")
+
+    replay = sub.add_parser(
+        "replay-history",
+        help="Run a plan-driven nested historical opportunity replay",
+    )
+    replay.add_argument("--input", required=True, help="CSV or JSONL replay observations")
+    replay.add_argument("--plan", required=True, help="JSON strategy and nested-fold plan")
+    replay.add_argument("--outdir", required=True, help="New or empty directory for replay evidence")
+    replay.add_argument(
+        "--allow-quarantine",
+        action="store_true",
+        help="Continue using valid rows while recording quarantined rows in the report",
+    )
+    replay.add_argument(
+        "--by-stratum",
+        action="store_true",
+        help="Select and score strategies independently for each input stratum_id (for example, league)",
+    )
+
+    prepare_replay = sub.add_parser(
+        "prepare-football-data-replay",
+        help="Join nested OOS 1X2 forecasts to local football-data.co.uk ZIP archives",
+    )
+    prepare_replay.add_argument("--archives", nargs="+", required=True, help="Source ZIP archive paths")
+    prepare_replay.add_argument("--predictions", required=True, help="CSV from nested OOS model forecasts")
+    prepare_replay.add_argument("--out", required=True, help="New output CSV path")
+    prepare_replay.add_argument(
+        "--assume-opening-available",
+        action="store_true",
+        help="Explicitly accept the research-only assumption that opening odds were available at cutoff",
+    )
+    prepare_replay.add_argument("--cutoff-lead-minutes", type=float, default=60.0)
+    prepare_replay.add_argument("--probability-haircut", type=float, default=0.05)
+    prepare_replay.add_argument("--tax-multiplier", type=float, default=0.88)
+    prepare_replay.add_argument("--execution-cost", type=float, default=0.0)
+
+    nested_goals = sub.add_parser(
+        "nested-goals-archives",
+        help="Fit per-league nested OOS 1X2 forecasts from football-data.co.uk ZIP archives",
+    )
+    nested_goals.add_argument("--archives", nargs="+", required=True, help="Source ZIP archive paths")
+    nested_goals.add_argument("--plan", required=True, help="JSON nested model and fold plan")
+    nested_goals.add_argument("--outdir", required=True, help="New or empty output directory")
+    nested_goals.add_argument("--league", action="append", default=None, help="Restrict to league code; repeatable")
+
+    promotion = sub.add_parser(
+        "archive-promotion-gate",
+        help="Compare nested OOS forecasts to the market, per league (timestamps still block promotion)",
+    )
+    promotion.add_argument("--archives", nargs="+", required=True, help="Source ZIP archive paths")
+    promotion.add_argument("--predictions", required=True, help="CSV from nested OOS forecasts")
+    promotion.add_argument("--outdir", required=True, help="New or empty output directory")
+    promotion.add_argument("--market-odds-kind", choices=("opening", "closing"), default="closing")
+    promotion.add_argument("--market-provider", default="market_average")
+    promotion.add_argument("--policy", default=None, help="Optional JSON promotion policy")
+    promotion.add_argument("--bootstrap-resamples", type=int, default=2000)
+    promotion.add_argument("--seed", type=int, default=42)
     return parser
 
 
@@ -186,6 +250,136 @@ def _scan_error(exc: Exception) -> tuple[str, int]:
 
 def main() -> None:
     args = build_parser().parse_args()
+
+    if args.command == "archive-promotion-gate":
+        try:
+            payload = run_archive_promotion_gate(
+                args.archives,
+                args.predictions,
+                args.outdir,
+                market_odds_kind=args.market_odds_kind,
+                market_provider=args.market_provider,
+                policy_path=args.policy,
+                bootstrap_resamples=args.bootstrap_resamples,
+                seed=args.seed,
+            )
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "promotion_gate_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": payload["status"],
+                "promotion_eligible": False,
+                "matched_predictions": payload["matched_predictions"],
+                "leagues": payload["leagues"],
+                "output_dir": str(Path(args.outdir).resolve()),
+            },
+            None,
+        )
+        return
+
+    if args.command == "nested-goals-archives":
+        try:
+            payload = run_nested_archive_forecasts(
+                args.archives,
+                args.plan,
+                args.outdir,
+                leagues=args.league,
+            )
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "nested_forecast_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": payload["status"],
+                "successful_leagues": payload["successful_leagues"],
+                "skipped_leagues": payload["skipped_leagues"],
+                "prediction_rows": payload["prediction_rows"],
+                "output_dir": str(Path(args.outdir).resolve()),
+            },
+            None,
+        )
+        return
+
+    if args.command == "prepare-football-data-replay":
+        output_path = Path(args.out)
+        manifest_path = output_path.with_suffix(output_path.suffix + ".manifest.json")
+        try:
+            if output_path.exists() or manifest_path.exists():
+                raise FileExistsError(f"output already exists: {output_path}")
+            batch = load_football_data_uk_archives(args.archives)
+            predictions = pd.read_csv(args.predictions)
+            replay_frame = build_football_data_replay_frame(
+                batch,
+                predictions,
+                assume_opening_available_at_cutoff=args.assume_opening_available,
+                cutoff_lead=timedelta(minutes=args.cutoff_lead_minutes),
+                probability_haircut=args.probability_haircut,
+                tax_multiplier=args.tax_multiplier,
+                execution_cost=args.execution_cost,
+            )
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            replay_frame.to_csv(output_path, index=False)
+            source_manifest = {
+                "status": "research_dataset_prepared",
+                "source_assumption": sorted(replay_frame["source_assumption"].unique().tolist()),
+                "rows_written": len(replay_frame),
+                "matched_fixtures": int(replay_frame["fixture_id"].nunique()),
+                "predictions_path": str(Path(args.predictions).resolve()),
+                "predictions_sha256": sha256_file(args.predictions),
+                "archives": [
+                    {"path": str(Path(path).resolve()), "sha256": sha256_file(path)}
+                    for path in args.archives
+                ],
+                "output_csv": str(output_path.resolve()),
+                "promotion_eligible": False,
+            }
+            manifest_path.write_text(
+                json.dumps(source_manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "replay_data_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": source_manifest["status"],
+                "rows_written": source_manifest["rows_written"],
+                "matched_fixtures": source_manifest["matched_fixtures"],
+                "promotion_eligible": False,
+                "output_csv": source_manifest["output_csv"],
+                "manifest": str(manifest_path.resolve()),
+            },
+            None,
+        )
+        return
+
+    if args.command == "replay-history":
+        try:
+            payload = run_historical_replay(
+                args.input,
+                args.plan,
+                args.outdir,
+                allow_quarantine=args.allow_quarantine,
+                by_stratum=args.by_stratum,
+            )
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print(
+                {"status": "replay_error", "message": str(exc)},
+                None,
+            )
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": payload["status"],
+                "source_sha256": payload["data"]["source_sha256"],
+                "rows_accepted": payload["data"]["rows_accepted"],
+                "rows_quarantined": payload["data"]["rows_quarantined"],
+                "selected_strategies": payload["selected_strategies"],
+                "output_dir": str(Path(args.outdir).resolve()),
+            },
+            None,
+        )
+        return
 
     if args.command == "scan-current":
         try:
