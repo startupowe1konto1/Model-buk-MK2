@@ -68,6 +68,37 @@ class BettingEvaluation:
 
 
 @dataclass(frozen=True)
+class SelectionReliability:
+    """Does the model deliver what it promised *on the legs it chose to bet*?
+
+    Aggregate calibration answers a different question.  It is computed over
+    every row, so it is dominated by the many fixtures the gate never touches,
+    and a model can be honest there while being wrong exactly where it stakes
+    money.
+
+    The market column is the control that makes this readable.  A negative
+    ``model_overstatement`` alone proves nothing: selections are chosen
+    *because* the model disagreed with the market upwards, so even a model with
+    no systematic bias will overstate on that subset - the noise that triggered
+    the selection is the same noise that regresses.  What the winner's curse
+    cannot explain is the model overstating much more than the market does on
+    the *same* legs: if those fixtures were merely hard, the market would miss
+    them too.
+
+    ``excess_overstatement`` is therefore the number to read, and it follows the
+    sign convention of ``ece_regression``: positive means the model is worse.
+    """
+
+    n: int
+    mean_model_probability: float
+    mean_market_probability: float
+    realised_rate: float
+    model_overstatement: float
+    market_overstatement: float
+    excess_overstatement: float
+
+
+@dataclass(frozen=True)
 class EvaluationReport:
     model: ProbabilityEvaluation
     market: ProbabilityEvaluation
@@ -77,6 +108,7 @@ class EvaluationReport:
     log_loss_improvement_ci: BootstrapInterval
     betting: BettingEvaluation | None = None
     net_yield_ci: BootstrapInterval | None = None
+    selection: SelectionReliability | None = None
 
 
 @dataclass(frozen=True)
@@ -451,6 +483,60 @@ def _selection_indices(
     return indices
 
 
+def selection_reliability(
+    hit: Sequence[bool] | np.ndarray,
+    model_probability: Sequence[float] | np.ndarray,
+    market_probability: Sequence[float] | np.ndarray,
+    *,
+    selected: Sequence[bool] | np.ndarray | None = None,
+) -> SelectionReliability | None:
+    """Compare promise against outcome on the selected legs only.
+
+    All three inputs are per-row and describe the *same* selection: whether it
+    won, what the model said about it, and what the de-vigged market said about
+    it.  Keeping the outcome column shared is what makes the two overstatements
+    comparable; scoring the model and the market on different subsets would
+    measure nothing.
+
+    Returns ``None`` when nothing was selected, because an overstatement
+    computed on zero legs is not a weaker signal - it is the absence of one.
+    """
+
+    hits = np.asarray(hit, dtype=bool)
+    model_values = np.asarray(model_probability, dtype=float)
+    market_values = np.asarray(market_probability, dtype=float)
+    if not (hits.shape == model_values.shape == market_values.shape):
+        raise ValueError("hit, model_probability and market_probability must align")
+    if hits.ndim != 1:
+        raise ValueError("selection reliability expects one value per row")
+    if selected is None:
+        mask = np.ones_like(hits, dtype=bool)
+    else:
+        mask = np.asarray(selected, dtype=bool)
+        if mask.shape != hits.shape:
+            raise ValueError("selected must contain one flag per row")
+    if not mask.any():
+        return None
+
+    chosen_hits = hits[mask]
+    chosen_model = model_values[mask]
+    chosen_market = market_values[mask]
+    realised = float(chosen_hits.mean())
+    mean_model = float(chosen_model.mean())
+    mean_market = float(chosen_market.mean())
+    model_overstatement = mean_model - realised
+    market_overstatement = mean_market - realised
+    return SelectionReliability(
+        n=int(mask.sum()),
+        mean_model_probability=mean_model,
+        mean_market_probability=mean_market,
+        realised_rate=realised,
+        model_overstatement=float(model_overstatement),
+        market_overstatement=float(market_overstatement),
+        excess_overstatement=float(model_overstatement - market_overstatement),
+    )
+
+
 def evaluate_model_against_market(
     actual: Sequence[Hashable] | np.ndarray,
     model_probabilities: Sequence[Sequence[float]] | np.ndarray,
@@ -510,6 +596,7 @@ def evaluate_model_against_market(
 
     betting: BettingEvaluation | None = None
     yield_ci: BootstrapInterval | None = None
+    selection_report: SelectionReliability | None = None
     if offered_odds is not None:
         odds_matrix = np.asarray(offered_odds, dtype=float)
         if odds_matrix.shape != model_matrix.shape:
@@ -517,12 +604,30 @@ def evaluate_model_against_market(
         selection_indices = _selection_indices(bet_selections, model_matrix, classes)
         row_indices = np.arange(len(actual_indices))
         chosen_odds = odds_matrix[row_indices, selection_indices]
+        selection_hits = actual_indices == selection_indices
         betting = evaluate_betting_returns(
-            actual_indices == selection_indices,
+            selection_hits,
             chosen_odds,
             selected=selected,
             tax_multiplier=tax_multiplier,
             execution_cost=execution_cost,
+        )
+        # Derived once and reused by the cluster bootstrap below: two independent
+        # copies of this expression could drift apart while both keep passing.
+        # No intersection with availability is needed - evaluate_betting_returns
+        # has already rejected any mask that is not a subset of the priceable
+        # rows, so by this line the two are the same set.
+        available_mask = np.isfinite(chosen_odds) & (chosen_odds > 1.0)
+        selected_mask = (
+            available_mask.copy() if selected is None else np.asarray(selected, dtype=bool)
+        )
+        # Scored on the legs that were actually bet, with the market judged on
+        # those same legs - see SelectionReliability for why the control matters.
+        selection_report = selection_reliability(
+            selection_hits,
+            model_matrix[row_indices, selection_indices],
+            market_matrix[row_indices, selection_indices],
+            selected=selected_mask,
         )
         if betting.bets:
             if bootstrap_clusters is None:
@@ -533,16 +638,9 @@ def evaluate_model_against_market(
                     seed=seed + 1,
                 )
             else:
-                available_mask = np.isfinite(chosen_odds) & (chosen_odds > 1.0)
-                selected_mask = (
-                    available_mask.copy()
-                    if selected is None
-                    else np.asarray(selected, dtype=bool)
-                )
-                bet_mask = selected_mask & available_mask
                 selected_clusters = tuple(
                     label
-                    for label, is_bet in zip(bootstrap_cluster_values, bet_mask)
+                    for label, is_bet in zip(bootstrap_cluster_values, selected_mask)
                     if is_bet
                 )
                 yield_ci = bootstrap_cluster_mean_interval(
@@ -562,6 +660,7 @@ def evaluate_model_against_market(
         log_loss_improvement_ci=improvement_ci,
         betting=betting,
         net_yield_ci=yield_ci,
+        selection=selection_report,
     )
 
 
