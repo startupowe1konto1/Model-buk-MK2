@@ -7,6 +7,7 @@ import pytest
 
 from model_buk.evaluation.gates import (
     PromotionPolicy,
+    selection_reliability,
     bootstrap_cluster_mean_interval,
     bootstrap_mean_interval,
     calibration_report,
@@ -205,3 +206,127 @@ def test_optional_net_yield_gate_uses_the_lower_confidence_bound() -> None:
     assert report.net_yield_ci is not None and report.net_yield_ci.upper < 0.0
     assert not decision.promote
     assert not decision.checks["net_yield_confident"]
+
+
+def _legs(model_p, market_p, n_hits, n_total):
+    """n_total legs sharing one model and one market price; n_hits of them won."""
+    hits = np.array([True] * n_hits + [False] * (n_total - n_hits))
+    return hits, np.full(n_total, model_p), np.full(n_total, market_p)
+
+
+class TestSelectionReliability:
+    def test_nothing_selected_returns_none(self):
+        hits, model_p, market_p = _legs(0.4, 0.2, 5, 10)
+        assert selection_reliability(hits, model_p, market_p, selected=np.zeros(10, bool)) is None
+
+    def test_overstatement_is_positive_when_promise_exceeds_outcome(self):
+        hits, model_p, market_p = _legs(0.40, 0.40, 10, 100)
+        report = selection_reliability(hits, model_p, market_p)
+        assert report.realised_rate == pytest.approx(0.10)
+        assert report.model_overstatement == pytest.approx(0.30)
+
+    def test_understatement_is_negative(self):
+        hits, model_p, market_p = _legs(0.10, 0.10, 40, 100)
+        assert selection_reliability(hits, model_p, market_p).model_overstatement == pytest.approx(-0.30)
+
+    def test_honest_selection_has_no_excess(self):
+        hits, model_p, market_p = _legs(0.25, 0.25, 25, 100)
+        report = selection_reliability(hits, model_p, market_p)
+        assert report.model_overstatement == pytest.approx(0.0)
+        assert report.excess_overstatement == pytest.approx(0.0)
+
+    def test_excess_isolates_the_model_from_hard_fixtures(self):
+        # Both sides overstate by 0.20: the legs were simply hard, and the
+        # market missed them exactly as badly. That is not a model defect.
+        hits, model_p, market_p = _legs(0.30, 0.30, 10, 100)
+        report = selection_reliability(hits, model_p, market_p)
+        assert report.model_overstatement == pytest.approx(0.20)
+        assert report.market_overstatement == pytest.approx(0.20)
+        assert report.excess_overstatement == pytest.approx(0.0)
+
+    def test_excess_is_positive_when_only_the_model_overstates(self):
+        # The shape measured on 1X2: the model promises far more than it
+        # delivers while the market, on the same legs, is nearly exact.
+        hits, model_p, market_p = _legs(0.3168, 0.2175, 2103, 10000)
+        report = selection_reliability(hits, model_p, market_p)
+        assert report.model_overstatement == pytest.approx(0.1065, abs=1e-4)
+        assert report.market_overstatement == pytest.approx(0.0072, abs=1e-4)
+        assert report.excess_overstatement == pytest.approx(0.0993, abs=1e-4)
+
+    def test_unselected_legs_cannot_move_the_result(self):
+        hits = np.array([True, False, False, False])
+        model_p = np.array([0.50, 0.50, 0.99, 0.99])
+        market_p = np.array([0.50, 0.50, 0.01, 0.01])
+        mask = np.array([True, True, False, False])
+        report = selection_reliability(hits, model_p, market_p, selected=mask)
+        assert report.n == 2
+        assert report.mean_model_probability == pytest.approx(0.50)
+        assert report.mean_market_probability == pytest.approx(0.50)
+
+    def test_both_sides_are_scored_on_the_same_outcomes(self):
+        # Swapping which legs won must move both overstatements together;
+        # if the market were scored on a different outcome column, the excess
+        # would change here and it must not.
+        hits_a = np.array([True, True, False, False])
+        hits_b = np.array([False, False, True, True])
+        model_p = np.full(4, 0.60)
+        market_p = np.full(4, 0.40)
+        a = selection_reliability(hits_a, model_p, market_p)
+        b = selection_reliability(hits_b, model_p, market_p)
+        assert a.excess_overstatement == pytest.approx(b.excess_overstatement)
+
+    def test_misaligned_inputs_are_refused(self):
+        with pytest.raises(ValueError):
+            selection_reliability(np.array([True, False]), np.array([0.5]), np.array([0.5]))
+
+    def test_misaligned_mask_is_refused(self):
+        hits, model_p, market_p = _legs(0.4, 0.2, 1, 3)
+        with pytest.raises(ValueError):
+            selection_reliability(hits, model_p, market_p, selected=np.array([True]))
+
+
+class TestSelectionReliabilityInReport:
+    def _report(self, **kwargs):
+        actual = np.array([0, 1, 0, 1, 0, 1, 0, 1])
+        model = np.tile(np.array([[0.70, 0.30]]), (8, 1))
+        market = np.tile(np.array([[0.50, 0.50]]), (8, 1))
+        return evaluate_model_against_market(
+            actual, model, market, classes=[0, 1], bootstrap_resamples=50, **kwargs
+        )
+
+    def test_absent_without_odds(self):
+        assert self._report().selection is None
+
+    def test_present_with_odds(self):
+        report = self._report(offered_odds=np.full((8, 2), 2.0))
+        assert report.selection is not None
+        assert report.selection.n == 8
+
+    def test_counts_exactly_the_legs_that_were_bet(self):
+        # The diagnostic must describe the same legs the betting evaluation
+        # priced - otherwise the two halves of the report disagree.
+        odds = np.full((8, 2), 2.0)
+        odds[0, 0] = float("nan")
+        report = self._report(offered_odds=odds)
+        assert report.selection.n == report.betting.bets
+
+    def test_respects_the_selected_mask(self):
+        mask = np.array([True, True, True, True, False, False, False, False])
+        report = self._report(offered_odds=np.full((8, 2), 2.0), selected=mask)
+        assert report.selection.n == 4
+
+    def test_selecting_an_unpriceable_leg_is_refused(self):
+        # This is what keeps the diagnostic and the betting evaluation on the
+        # same legs: a mask covering a missing price is rejected outright, so
+        # the two can never describe different sets. Pinned here because the
+        # diagnostic relies on it rather than re-checking availability itself.
+        odds = np.full((8, 2), 2.0)
+        odds[0, 0] = float("nan")
+        with pytest.raises(ValueError, match="subset of available"):
+            self._report(offered_odds=odds, selected=np.ones(8, dtype=bool))
+
+    def test_market_column_comes_from_the_market_matrix(self):
+        report = self._report(offered_odds=np.full((8, 2), 2.0))
+        # model says 0.70 on the selected side, market says 0.50
+        assert report.selection.mean_model_probability == pytest.approx(0.70)
+        assert report.selection.mean_market_probability == pytest.approx(0.50)
