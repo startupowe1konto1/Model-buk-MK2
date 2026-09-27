@@ -219,6 +219,42 @@ Nowe artefakty lokalne:
 - `model-oof-opening-market-residual-league-all/`;
 - `promotion-gate-opening-market-residual-league-all/`.
 
+## Ablacja świeżej formy 5/10
+
+27 września 2026 r. dodano do runnera residualnego możliwość testowania
+zestawów cech bez zmiany kontraktu walk-forward. Nowy plan porównuje trzy
+warianty: tylko ostatnie 5 meczów, tylko ostatnie 10 meczów oraz połączenie
+5+10. W każdym outer foldzie walidacja wybiera jednocześnie zestaw cech i siłę
+regularyzacji, a następnie model jest refitowany wyłącznie na wcześniejszych
+danych.
+
+Na tych samych 23 112 prognozach outer OOS ablation uzyskał log-loss
+0,999235 i Brier 0,597457, wobec 0,999644 i 0,597642 dla samego opening.
+Jest to lepsze niż poprzedni residual globalny, ale nadal za małe, by zmienić
+wniosek jakościowy. Rynek closing pozostaje wyraźnie lepszy z log-loss
+0,996215.
+
+Selekcja foldów była mieszana: dla sezonu 2023/24 wygrał wariant 5 meczów,
+a dla 2024/25 i 2025/26 wariant 5+10. Średnio na walidacji minimalnie najlepsze
+było okno 10 meczów, lecz różnice między 5, 10 i 5+10 były bardzo małe. Punktowo
+model poprawił opening w 15 z 22 lig, ale tylko liga P1 miała dodatnią dolną
+granicę CI względem opening. Względem closing model był punktowo lepszy w 4
+ligach i w żadnej nie miał dodatniej dolnej granicy CI.
+
+Pełna tabela okazji zawierała 503 882 rekordy, z czego 86 299 miało kurs ≤2,00.
+Żaden rekord nie miał dodatniego konserwatywnego EV po haircutcie 5%, podatku
+12% i kosztach wykonania. Punktowe dodatnie EV bez zabezpieczenia dolnym
+oszacowaniem wystąpiło tylko w 5 wierszach. Nie ma więc podstaw do replayu
+zakładów ani rekomendowania stawek.
+
+Nowe artefakty lokalne:
+
+- `model-oof-opening-market-residual-form-ablation-all/`;
+- `promotion-gate-opening-market-residual-form-ablation-all/`;
+- `promotion-gate-opening-market-residual-form-ablation-vs-opening-all/`;
+- `opportunities-opening-market-residual-form-ablation-all.csv` i manifest
+  źródłowy.
+
 ## Założenia dalszego rozwoju: świeża forma i kontekst meczu
 
 27 września 2026 r. doprecyzowano priorytet modelowania: wyników drużyny z

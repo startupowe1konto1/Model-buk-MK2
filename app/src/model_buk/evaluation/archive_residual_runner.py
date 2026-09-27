@@ -30,6 +30,31 @@ class MarketResidualFold:
     outer_end: pd.Timestamp
 
 
+@dataclass(frozen=True)
+class MarketResidualFeatureSet:
+    name: str
+    windows: tuple[int, ...] = (5, 10)
+    include_rest_days: bool = True
+    include_market_shape: bool = True
+
+    def __post_init__(self) -> None:
+        normalized_name = str(self.name).strip()
+        if not normalized_name:
+            raise ValueError("feature set name must not be blank")
+        normalized_windows = tuple(dict.fromkeys(int(window) for window in self.windows))
+        if not normalized_windows or any(window not in (5, 10) for window in normalized_windows):
+            raise ValueError("feature set windows must contain 5 and/or 10")
+        if not isinstance(self.include_rest_days, bool):
+            raise ValueError("include_rest_days must be a boolean")
+        if not isinstance(self.include_market_shape, bool):
+            raise ValueError("include_market_shape must be a boolean")
+        object.__setattr__(self, "name", normalized_name)
+        object.__setattr__(self, "windows", normalized_windows)
+
+
+DEFAULT_RESIDUAL_FEATURE_SET = MarketResidualFeatureSet(name="recent_form_5_10")
+
+
 def _timestamp(value: Any, *, field: str) -> pd.Timestamp:
     timestamp = pd.Timestamp(value)
     if pd.isna(timestamp):
@@ -45,12 +70,16 @@ def _object(value: Any, *, field: str) -> Mapping[str, Any]:
 
 def _load_residual_plan(
     path: str | Path,
-) -> tuple[tuple[MarketResidualConfig, ...], tuple[MarketResidualFold, ...]]:
+) -> tuple[
+    tuple[MarketResidualConfig, ...],
+    tuple[MarketResidualFold, ...],
+    tuple[MarketResidualFeatureSet, ...],
+]:
     try:
         plan = _object(json.loads(Path(path).read_text(encoding="utf-8")), field="plan")
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"cannot read residual plan: {exc}") from None
-    unknown = sorted(set(plan) - {"candidates", "folds"})
+    unknown = sorted(set(plan) - {"candidates", "folds", "feature_sets"})
     if unknown:
         raise ValueError(f"plan contains unknown fields: {', '.join(unknown)}")
     candidate_values = plan.get("candidates")
@@ -69,6 +98,19 @@ def _load_residual_plan(
         candidates.append(MarketResidualConfig(**row))
     if len({json.dumps(asdict(item), sort_keys=True) for item in candidates}) != len(candidates):
         raise ValueError("residual candidates must be unique")
+    feature_set_values = plan.get("feature_sets", [asdict(DEFAULT_RESIDUAL_FEATURE_SET)])
+    if not isinstance(feature_set_values, list) or not feature_set_values:
+        raise ValueError("plan.feature_sets must be a non-empty JSON array")
+    feature_sets: list[MarketResidualFeatureSet] = []
+    allowed_feature_set = set(MarketResidualFeatureSet.__dataclass_fields__)
+    for index, value in enumerate(feature_set_values):
+        row = _object(value, field=f"feature_sets[{index}]")
+        extra = sorted(set(row) - allowed_feature_set)
+        if extra:
+            raise ValueError(f"feature_sets[{index}] contains unknown fields: {', '.join(extra)}")
+        feature_sets.append(MarketResidualFeatureSet(**row))
+    if len({feature_set.name for feature_set in feature_sets}) != len(feature_sets):
+        raise ValueError("residual feature set names must be unique")
     folds: list[MarketResidualFold] = []
     prior_outer_end: pd.Timestamp | None = None
     for index, value in enumerate(fold_values):
@@ -91,7 +133,24 @@ def _load_residual_plan(
             raise ValueError("residual outer folds must be chronological and non-overlapping")
         folds.append(fold)
         prior_outer_end = fold.outer_end
-    return tuple(candidates), tuple(folds)
+    return tuple(candidates), tuple(folds), tuple(feature_sets)
+
+
+def _feature_columns_for_set(
+    feature_set: MarketResidualFeatureSet,
+    *,
+    league_columns: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    columns = [
+        column
+        for column in RESIDUAL_FEATURE_COLUMNS
+        if any(column.endswith(f"_r{window}_diff") for window in feature_set.windows)
+    ]
+    if feature_set.include_rest_days:
+        columns.append("rest_days_diff")
+    if feature_set.include_market_shape:
+        columns.extend(["opening_entropy", "opening_favourite_probability"])
+    return (*columns, *league_columns)
 
 
 def _loss(actual: np.ndarray, probabilities: np.ndarray) -> tuple[float, float]:
@@ -120,7 +179,7 @@ def run_archive_market_residual(
     output = Path(outdir)
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise FileExistsError(f"output directory is not empty: {output}")
-    candidates, folds = _load_residual_plan(plan_path)
+    candidates, folds, feature_sets = _load_residual_plan(plan_path)
     league_modes = {candidate.include_league_effects for candidate in candidates}
     if len(league_modes) != 1:
         raise ValueError("all residual candidates must agree on include_league_effects")
@@ -141,14 +200,17 @@ def run_archive_market_residual(
     market_matrix = data[market_columns].to_numpy(dtype=float)
     data["opening_entropy"] = -np.sum(market_matrix * np.log(market_matrix), axis=1)
     data["opening_favourite_probability"] = market_matrix.max(axis=1)
-    feature_columns = RESIDUAL_FEATURE_COLUMNS
+    league_columns: tuple[str, ...] = ()
     if next(iter(league_modes)):
         league_dummies = pd.get_dummies(
             data["league"].astype(str), prefix="league_", prefix_sep="_", dtype=float
         )
         data = pd.concat([data, league_dummies], axis=1)
         league_columns = tuple(sorted(column for column in league_dummies if column.startswith("league__")))
-        feature_columns = (*RESIDUAL_FEATURE_COLUMNS, *league_columns)
+    feature_columns_by_set = {
+        feature_set.name: _feature_columns_for_set(feature_set, league_columns=league_columns)
+        for feature_set in feature_sets
+    }
     kickoff = pd.to_datetime(data["kickoff"], errors="raise", utc=True, format="mixed")
 
     score_rows: list[dict[str, Any]] = []
@@ -160,42 +222,57 @@ def run_archive_market_residual(
         outer_mask = (kickoff >= fold.outer_start) & (kickoff < fold.outer_end)
         if min(int(train_mask.sum()), int(validation_mask.sum()), int(outer_mask.sum())) == 0:
             raise ValueError(f"fold {fold.label!r} has an empty train, validation or outer interval")
-        validation_scores: list[tuple[float, float, int, MarketResidualConfig]] = []
-        for candidate_index, config in enumerate(candidates):
-            model = fit_market_residual(
-                data.loc[train_mask],
-                data.loc[train_mask, market_columns].to_numpy(dtype=float),
-                data.loc[train_mask, "actual_index"].to_numpy(dtype=int),
-                config=config,
-                feature_columns=feature_columns,
-            )
-            probabilities = model.predict_proba(
-                data.loc[validation_mask],
-                data.loc[validation_mask, market_columns].to_numpy(dtype=float),
-            )
-            log_loss, brier = _loss(
-                data.loc[validation_mask, "actual_index"].to_numpy(dtype=int), probabilities
-            )
-            validation_scores.append((log_loss, brier, candidate_index, config))
-            score_rows.append(
-                {
-                    "outer_fold": fold.label,
-                    "candidate_index": candidate_index,
-                    **asdict(config),
-                    "validation_log_loss": log_loss,
-                    "validation_brier": brier,
-                    "training_rows": int(train_mask.sum()),
-                    "validation_rows": int(validation_mask.sum()),
-                }
-            )
-        selected_loss, selected_brier, selected_index, selected_config = min(validation_scores)
+        validation_scores: list[
+            tuple[float, float, str, int, MarketResidualConfig, tuple[str, ...]]
+        ] = []
+        for feature_set in feature_sets:
+            feature_columns = feature_columns_by_set[feature_set.name]
+            for candidate_index, config in enumerate(candidates):
+                model = fit_market_residual(
+                    data.loc[train_mask],
+                    data.loc[train_mask, market_columns].to_numpy(dtype=float),
+                    data.loc[train_mask, "actual_index"].to_numpy(dtype=int),
+                    config=config,
+                    feature_columns=feature_columns,
+                )
+                probabilities = model.predict_proba(
+                    data.loc[validation_mask],
+                    data.loc[validation_mask, market_columns].to_numpy(dtype=float),
+                )
+                log_loss, brier = _loss(
+                    data.loc[validation_mask, "actual_index"].to_numpy(dtype=int), probabilities
+                )
+                validation_scores.append(
+                    (log_loss, brier, feature_set.name, candidate_index, config, feature_columns)
+                )
+                score_rows.append(
+                    {
+                        "outer_fold": fold.label,
+                        "feature_set": feature_set.name,
+                        "candidate_index": candidate_index,
+                        "feature_column_count": len(feature_columns),
+                        **asdict(config),
+                        "validation_log_loss": log_loss,
+                        "validation_brier": brier,
+                        "training_rows": int(train_mask.sum()),
+                        "validation_rows": int(validation_mask.sum()),
+                    }
+                )
+        (
+            selected_loss,
+            selected_brier,
+            selected_feature_set,
+            selected_index,
+            selected_config,
+            selected_feature_columns,
+        ) = min(validation_scores)
         refit_mask = kickoff < fold.outer_start
         model = fit_market_residual(
             data.loc[refit_mask],
             data.loc[refit_mask, market_columns].to_numpy(dtype=float),
             data.loc[refit_mask, "actual_index"].to_numpy(dtype=int),
             config=selected_config,
-            feature_columns=feature_columns,
+            feature_columns=selected_feature_columns,
         )
         probabilities = model.predict_proba(
             data.loc[outer_mask], data.loc[outer_mask, market_columns].to_numpy(dtype=float)
@@ -211,16 +288,19 @@ def run_archive_market_residual(
         )
         outer["league_code"] = outer["league"].astype(str)
         outer["outer_fold"] = fold.label
-        outer["selected_candidate"] = f"market-residual-{selected_index}"
+        outer["selected_candidate"] = f"market-residual-{selected_feature_set}-{selected_index}"
         outer["selected_family"] = "opening_market_residual"
         outer["selected_parameters"] = [asdict(selected_config)] * len(outer)
+        outer["selected_feature_set"] = selected_feature_set
         outer["calibrated"] = True
         outer["calibration_status"] = "market-offset-residual"
         prediction_frames.append(outer)
         selection_rows.append(
             {
                 "outer_fold": fold.label,
+                "selected_feature_set": selected_feature_set,
                 "selected_candidate_index": selected_index,
+                "selected_feature_column_count": len(selected_feature_columns),
                 **asdict(selected_config),
                 "selection_log_loss": selected_loss,
                 "selection_brier": selected_brier,
@@ -244,7 +324,13 @@ def run_archive_market_residual(
         "source_assumptions": [
             "opening price explicitly assumed available at the forecast cutoff"
         ],
-        "feature_columns": list(feature_columns),
+        "feature_sets": [
+            {
+                **asdict(feature_set),
+                "feature_columns": list(feature_columns_by_set[feature_set.name]),
+            }
+            for feature_set in feature_sets
+        ],
         "source_rows": len(batch.matches),
         "model_rows": len(data),
         "prediction_rows": len(predictions),

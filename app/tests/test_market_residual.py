@@ -5,7 +5,10 @@ import pandas as pd
 from pathlib import Path
 
 from model_buk.cli import build_parser
-from model_buk.evaluation.archive_residual_runner import _load_residual_plan
+from model_buk.evaluation.archive_residual_runner import (
+    _feature_columns_for_set,
+    _load_residual_plan,
+)
 from model_buk.models.market_residual import (
     MarketResidualConfig,
     build_market_residual_features,
@@ -90,7 +93,7 @@ def test_missing_features_are_imputed_from_training_values() -> None:
 
 def test_example_residual_plan_is_valid_and_cli_accepts_explicit_assumption() -> None:
     plan = Path(__file__).parents[1] / "config" / "market_residual_plan.example.json"
-    candidates, folds = _load_residual_plan(plan)
+    candidates, folds, feature_sets = _load_residual_plan(plan)
     args = build_parser().parse_args(
         [
             "nested-opening-market-residual",
@@ -102,13 +105,35 @@ def test_example_residual_plan_is_valid_and_cli_accepts_explicit_assumption() ->
     )
     assert len(candidates) == 3
     assert len(folds) == 3
+    assert [feature_set.name for feature_set in feature_sets] == ["recent_form_5_10"]
     assert args.assume_opening_available is True
 
 
 def test_league_residual_plan_uses_partial_pooling_penalties() -> None:
     plan = Path(__file__).parents[1] / "config" / "market_residual_league_plan.example.json"
-    candidates, folds = _load_residual_plan(plan)
+    candidates, folds, feature_sets = _load_residual_plan(plan)
     assert len(folds) == 3
     assert len(candidates) == 4
+    assert [feature_set.name for feature_set in feature_sets] == ["recent_form_5_10"]
     assert all(candidate.include_league_effects for candidate in candidates)
     assert {candidate.league_l2_multiplier for candidate in candidates} == {5.0, 10.0, 20.0, 100.0}
+
+
+def test_form_ablation_plan_compares_5_and_10_match_windows() -> None:
+    plan = Path(__file__).parents[1] / "config" / "market_residual_form_ablation_plan.example.json"
+    candidates, folds, feature_sets = _load_residual_plan(plan)
+
+    assert len(candidates) == 3
+    assert len(folds) == 3
+    assert [feature_set.name for feature_set in feature_sets] == [
+        "recent_form_5",
+        "recent_form_10",
+        "recent_form_5_10",
+    ]
+    columns_by_name = {
+        feature_set.name: _feature_columns_for_set(feature_set)
+        for feature_set in feature_sets
+    }
+    assert all("_r5_" in column or not column.startswith(("goals", "shots", "sot", "corners", "points")) for column in columns_by_name["recent_form_5"])
+    assert all("_r10_" in column or not column.startswith(("goals", "shots", "sot", "corners", "points")) for column in columns_by_name["recent_form_10"])
+    assert len(columns_by_name["recent_form_5_10"]) > len(columns_by_name["recent_form_5"])

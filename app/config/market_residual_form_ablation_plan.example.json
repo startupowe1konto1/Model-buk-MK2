@@ -1,0 +1,50 @@
+{
+  "feature_sets": [
+    {
+      "name": "recent_form_5",
+      "windows": [5],
+      "include_rest_days": true,
+      "include_market_shape": true
+    },
+    {
+      "name": "recent_form_10",
+      "windows": [10],
+      "include_rest_days": true,
+      "include_market_shape": true
+    },
+    {
+      "name": "recent_form_5_10",
+      "windows": [5, 10],
+      "include_rest_days": true,
+      "include_market_shape": true
+    }
+  ],
+  "candidates": [
+    {"l2_strength": 0.01, "learning_rate": 0.02, "epochs": 30, "batch_size": 1024, "seed": 42, "max_logit_correction": 1.0},
+    {"l2_strength": 0.1, "learning_rate": 0.02, "epochs": 30, "batch_size": 1024, "seed": 42, "max_logit_correction": 1.0},
+    {"l2_strength": 1.0, "learning_rate": 0.02, "epochs": 30, "batch_size": 1024, "seed": 42, "max_logit_correction": 1.0}
+  ],
+  "folds": [
+    {
+      "label": "forecast-2023-24",
+      "validation_start": "2022-07-01",
+      "validation_end": "2023-07-01",
+      "outer_start": "2023-07-01",
+      "outer_end": "2024-07-01"
+    },
+    {
+      "label": "forecast-2024-25",
+      "validation_start": "2023-07-01",
+      "validation_end": "2024-07-01",
+      "outer_start": "2024-07-01",
+      "outer_end": "2025-07-01"
+    },
+    {
+      "label": "forecast-2025-26",
+      "validation_start": "2024-07-01",
+      "validation_end": "2025-07-01",
+      "outer_start": "2025-07-01",
+      "outer_end": "2026-07-01"
+    }
+  ]
+}
