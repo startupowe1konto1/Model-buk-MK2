@@ -164,6 +164,7 @@ def build_paper_scan(
             max_recommendations=config.max_recommendations,
             min_conservative_ev_net=config.min_conservative_ev_net,
             min_conservative_market_edge=config.min_conservative_market_edge,
+            max_decimal_odds=config.max_decimal_odds,
             max_quote_age=config.quote_freshness,
         ),
         clock=clock,

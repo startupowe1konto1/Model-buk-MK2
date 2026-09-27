@@ -12,8 +12,6 @@ import math
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
-from scipy.special import gammaln
 
 
 _MIN_ALPHA = 1e-8
@@ -35,9 +33,9 @@ def nb2_pmf(goals: int, mean: float, alpha: float) -> float:
     size = 1.0 / alpha
     probability = size / (size + mean)
     log_pmf = (
-        gammaln(goals + size)
-        - gammaln(size)
-        - gammaln(goals + 1.0)
+        math.lgamma(goals + size)
+        - math.lgamma(size)
+        - math.lgamma(goals + 1.0)
         + size * math.log(probability)
         + goals * math.log1p(-probability)
     )
@@ -145,6 +143,9 @@ def fit_negative_binomial(
     the other goal models, though this static model intentionally applies no
     recency weighting. Both team-effect vectors are zero-sum constrained.
     """
+    from scipy.optimize import minimize
+    from scipy.special import gammaln
+
     if not math.isfinite(l2_strength) or l2_strength < 0.0:
         raise ValueError("l2_strength must be non-negative and finite")
     if not isinstance(max_iterations, int) or max_iterations < 1:

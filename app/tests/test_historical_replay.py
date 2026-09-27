@@ -145,6 +145,25 @@ def test_replay_calls_production_selector_once_per_cutoff(monkeypatch: pytest.Mo
     assert result.ledger[result.ledger["selected"]]["selection"].tolist() == ["over", "over"]
 
 
+def test_replay_strategy_enforces_max_decimal_odds_before_selection() -> None:
+    opportunities = (
+        opportunity(
+            "f1", "totals-25", "over", lower=0.60, settlement="win", odds=2.01
+        ),
+        opportunity(
+            "f1", "totals-25", "under", lower=0.30, settlement="loss", odds=1.60
+        ),
+    )
+    strategy = ReplayStrategy(
+        "capped", "proportional", 0.0, 3, max_decimal_odds=2.0
+    )
+
+    result = replay_opportunities(opportunities, strategy, bootstrap_resamples=25)
+
+    assert result.selected == 0
+    assert result.rejection_counts["decimal_odds_above_limit"] == 1
+
+
 def test_replay_rejects_closing_as_execution_price_and_ignores_closing_odds() -> None:
     with pytest.raises(ValueError, match="closing is evaluation-only"):
         HistoricalOpportunity(

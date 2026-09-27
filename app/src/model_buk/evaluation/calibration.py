@@ -14,10 +14,36 @@ from typing import Hashable, Iterable, Sequence
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize_scalar
 
 
 _EPSILON = 1e-15
+
+
+def _bounded_golden_minimum(
+    function,
+    lower: float,
+    upper: float,
+    *,
+    iterations: int = 96,
+) -> float:
+    """Return a deterministic bounded scalar minimum without native dependencies."""
+    ratio = (np.sqrt(5.0) - 1.0) / 2.0
+    left = float(lower)
+    right = float(upper)
+    c = right - ratio * (right - left)
+    d = left + ratio * (right - left)
+    fc = float(function(c))
+    fd = float(function(d))
+    for _ in range(iterations):
+        if fc <= fd:
+            right, d, fd = d, c, fc
+            c = right - ratio * (right - left)
+            fc = float(function(c))
+        else:
+            left, c, fc = c, d, fd
+            d = left + ratio * (right - left)
+            fd = float(function(d))
+    return (left + right) / 2.0
 
 
 def _probability_matrix(probabilities: Sequence[Sequence[float]] | np.ndarray) -> np.ndarray:
@@ -125,12 +151,12 @@ class TemperatureScaler:
 
         # Optimising log(T) makes positivity structural.  The finite range is
         # intentionally broad while preventing useless numerical extremes.
-        result = minimize_scalar(loss, bounds=(-6.0, 6.0), method="bounded")
-        if not result.success or not np.isfinite(result.fun):
+        log_temperature = _bounded_golden_minimum(loss, -6.0, 6.0)
+        if not np.isfinite(loss(log_temperature)):
             raise RuntimeError("temperature scaling optimisation failed")
         cutoff = _utc_timestamp(fit_cutoff) if fit_cutoff is not None else None
         return cls(
-            temperature=float(np.exp(result.x)),
+            temperature=float(np.exp(log_temperature)),
             fit_cutoff=cutoff,
             n_samples=len(matrix),
         )

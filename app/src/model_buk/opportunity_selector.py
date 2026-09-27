@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import math
 from typing import Iterable
 
 
@@ -42,8 +43,8 @@ class OpportunityCandidate:
             raise ValueError("bookmaker must not be empty")
         if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
             raise ValueError("observed_at must be timezone-aware")
-        if self.decimal_odds <= 1.0:
-            raise ValueError("decimal_odds must be greater than 1.0")
+        if not math.isfinite(float(self.decimal_odds)) or self.decimal_odds <= 1.0:
+            raise ValueError("decimal_odds must be finite and greater than 1.0")
         if not 0.0 <= self.probability_lower_bound <= self.probability <= 1.0:
             raise ValueError(
                 "probabilities must satisfy 0 <= probability_lower_bound <= probability <= 1"
@@ -155,6 +156,7 @@ def select_opportunities(
     max_recommendations: int = 10,
     min_conservative_ev_net: float = 0.0,
     min_conservative_market_edge: float | None = None,
+    max_decimal_odds: float = 2.0,
     max_per_fixture: int = 2,
     max_per_correlation_group: int = 1,
     decision_time: datetime | None = None,
@@ -176,6 +178,8 @@ def select_opportunities(
         raise ValueError("min_conservative_ev_net must be non-negative")
     if min_conservative_market_edge is not None and min_conservative_market_edge < 0.0:
         raise ValueError("min_conservative_market_edge must be non-negative")
+    if not math.isfinite(float(max_decimal_odds)) or max_decimal_odds <= 1.0:
+        raise ValueError("max_decimal_odds must be finite and greater than 1.0")
     if (decision_time is None) != (max_quote_age is None):
         raise ValueError("decision_time and max_quote_age must be provided together")
     if decision_time is not None:
@@ -191,7 +195,13 @@ def select_opportunities(
             raise ValueError("candidate observed_at cannot be after decision_time")
 
     unique, rejected = _latest_snapshot_candidates(materialized)
-    priced, inferior = _best_executable_prices(unique)
+    within_odds_limit: list[OpportunityCandidate] = []
+    for candidate in unique:
+        if candidate.decimal_odds > max_decimal_odds:
+            rejected.append(RejectedOpportunity(candidate, "decimal_odds_above_limit"))
+        else:
+            within_odds_limit.append(candidate)
+    priced, inferior = _best_executable_prices(within_odds_limit)
     rejected.extend(inferior)
     eligible: list[OpportunityCandidate] = []
     for candidate in priced:

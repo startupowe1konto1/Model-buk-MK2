@@ -1,0 +1,62 @@
+{
+  "candidates": [
+    {
+      "name": "elo-davidson-slow",
+      "family": "elo_davidson",
+      "parameters": {"config": {"k_factor": 12.0}}
+    },
+    {
+      "name": "elo-davidson-medium",
+      "family": "elo_davidson",
+      "parameters": {"config": {"k_factor": 20.0}}
+    },
+    {
+      "name": "elo-davidson-fast",
+      "family": "elo_davidson",
+      "parameters": {"config": {"k_factor": 32.0}}
+    }
+  ],
+  "folds": [
+    {
+      "label": "forecast-2022-23",
+      "outer_fold": {"label": "season-2022-23", "start": "2022-07-01", "end": "2023-07-01"},
+      "inner_folds": [
+        {"label": "season-2019-20", "start": "2019-07-01", "end": "2020-07-01"},
+        {"label": "season-2020-21", "start": "2020-07-01", "end": "2021-07-01"},
+        {"label": "season-2021-22", "start": "2021-07-01", "end": "2022-07-01"}
+      ]
+    },
+    {
+      "label": "forecast-2023-24",
+      "outer_fold": {"label": "season-2023-24", "start": "2023-07-01", "end": "2024-07-01"},
+      "inner_folds": [
+        {"label": "season-2020-21", "start": "2020-07-01", "end": "2021-07-01"},
+        {"label": "season-2021-22", "start": "2021-07-01", "end": "2022-07-01"},
+        {"label": "season-2022-23", "start": "2022-07-01", "end": "2023-07-01"}
+      ]
+    },
+    {
+      "label": "forecast-2024-25",
+      "outer_fold": {"label": "season-2024-25", "start": "2024-07-01", "end": "2025-07-01"},
+      "inner_folds": [
+        {"label": "season-2021-22", "start": "2021-07-01", "end": "2022-07-01"},
+        {"label": "season-2022-23", "start": "2022-07-01", "end": "2023-07-01"},
+        {"label": "season-2023-24", "start": "2023-07-01", "end": "2024-07-01"}
+      ]
+    },
+    {
+      "label": "forecast-2025-26",
+      "outer_fold": {"label": "season-2025-26", "start": "2025-07-01", "end": "2026-07-01"},
+      "inner_folds": [
+        {"label": "season-2022-23", "start": "2022-07-01", "end": "2023-07-01"},
+        {"label": "season-2023-24", "start": "2023-07-01", "end": "2024-07-01"},
+        {"label": "season-2024-25", "start": "2024-07-01", "end": "2025-07-01"}
+      ]
+    }
+  ],
+  "training": {
+    "min_train_matches": 100,
+    "max_goals": 10,
+    "calibration_min_history": 100
+  }
+}

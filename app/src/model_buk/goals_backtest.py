@@ -12,8 +12,8 @@ from model_buk.models.dixon_coles import (
     score_matrix,
 )
 from model_buk.models.gas_poisson import GasPoissonConfig, fit_gas_poisson
+from model_buk.models.elo_davidson import EloDavidsonConfig, fit_elo_davidson
 from model_buk.models.negative_binomial import fit_negative_binomial
-from model_buk.evaluation.calibration import CalibrationFold, calibrate_chronologically
 
 
 @dataclass(frozen=True)
@@ -197,6 +197,71 @@ def walk_forward_gas_poisson(
     return pd.DataFrame(predictions)
 
 
+def walk_forward_elo_davidson(
+    matches: pd.DataFrame,
+    folds: Iterable[GoalsFold],
+    *,
+    config: EloDavidsonConfig | None = None,
+    min_train_matches: int = 100,
+    max_goals: int = 10,
+) -> pd.DataFrame:
+    """Generate one-step-ahead Elo-Davidson forecasts without goal-distribution fitting."""
+    del max_goals  # Kept for the common nested-runner signature.
+    if min_train_matches < 1:
+        raise ValueError("min_train_matches must be positive")
+    data = _prepare_matches(matches)
+    predictions: list[dict] = []
+    for fold in folds:
+        start, end = fold.bounds()
+        train_all = data[data["kickoff"] < start]
+        valid_all = data[(data["kickoff"] >= start) & (data["kickoff"] < end)]
+        for league, valid in valid_all.groupby("league", sort=True):
+            train = train_all[train_all["league"] == league]
+            if len(train) < min_train_matches:
+                continue
+            model = fit_elo_davidson(train.rename(columns={"kickoff": "date"}), config=config)
+            for kickoff, simultaneous in valid.groupby("kickoff", sort=True):
+                pending: list[tuple] = []
+                for row in simultaneous.itertuples(index=False):
+                    cold_start = row.home_team not in model.teams or row.away_team not in model.teams
+                    p_home, p_draw, p_away = model.probabilities(
+                        str(row.home_team), str(row.away_team)
+                    )
+                    actual = (
+                        "home"
+                        if row.home_goals > row.away_goals
+                        else "draw"
+                        if row.home_goals == row.away_goals
+                        else "away"
+                    )
+                    predictions.append(
+                        {
+                            "fold": fold.label,
+                            "source_row_id": getattr(row, "source_row_id", None),
+                            "league": league,
+                            "kickoff": kickoff,
+                            "home_team": row.home_team,
+                            "away_team": row.away_team,
+                            "home_goals": int(row.home_goals),
+                            "away_goals": int(row.away_goals),
+                            "p_home": p_home,
+                            "p_draw": p_draw,
+                            "p_away": p_away,
+                            "actual": actual,
+                            "cold_start": cold_start,
+                        }
+                    )
+                    pending.append(row)
+                for row in pending:
+                    model.observe_match(
+                        str(row.home_team),
+                        str(row.away_team),
+                        int(row.home_goals),
+                        int(row.away_goals),
+                    )
+    return pd.DataFrame(predictions)
+
+
 def walk_forward_negative_binomial(
     matches: pd.DataFrame,
     folds: Iterable[GoalsFold],
@@ -278,6 +343,11 @@ def calibrate_goal_predictions(
     the supplied folds, or folds without enough earlier forecasts, retain the
     raw probabilities and carry an explicit calibration status.
     """
+    from model_buk.evaluation.calibration import (
+        CalibrationFold,
+        calibrate_chronologically,
+    )
+
     required = {"kickoff", "actual", "p_home", "p_draw", "p_away"}
     missing = sorted(required - set(predictions.columns))
     if missing:

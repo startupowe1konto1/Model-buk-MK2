@@ -19,13 +19,20 @@ from model_buk.goals_backtest import (
     calibrate_goal_predictions,
     compare_goal_model_predictions,
     walk_forward_dixon_coles,
+    walk_forward_elo_davidson,
     walk_forward_gas_poisson,
     walk_forward_negative_binomial,
 )
 from model_buk.models.gas_poisson import GasPoissonConfig
+from model_buk.models.elo_davidson import EloDavidsonConfig
 
 
-GoalModelFamily = Literal["dixon_coles", "gas_poisson", "negative_binomial"]
+GoalModelFamily = Literal[
+    "dixon_coles",
+    "elo_davidson",
+    "gas_poisson",
+    "negative_binomial",
+]
 _PROBABILITY_COLUMNS = ("p_home", "p_draw", "p_away")
 
 
@@ -54,11 +61,17 @@ class GoalModelCandidate:
         name = self.name.strip()
         if not name:
             raise ValueError("candidate name must not be blank")
-        if self.family not in {"dixon_coles", "gas_poisson", "negative_binomial"}:
+        if self.family not in {
+            "dixon_coles",
+            "elo_davidson",
+            "gas_poisson",
+            "negative_binomial",
+        }:
             raise ValueError("candidate family is not supported")
         parameters = dict(self.parameters)
         allowed = {
             "dixon_coles": {"half_life_days", "l2_strength", "xg_weight"},
+            "elo_davidson": {"config"},
             "gas_poisson": {"config"},
             "negative_binomial": {"l2_strength"},
         }[self.family]
@@ -82,10 +95,14 @@ class GoalModelCandidate:
             l2_strength = parameters.get("l2_strength")
             if l2_strength is not None and (not _is_number(l2_strength) or l2_strength < 0):
                 raise ValueError("l2_strength must be non-negative")
-        else:
+        elif self.family == "gas_poisson":
             config = parameters.get("config")
             if config is not None and not isinstance(config, GasPoissonConfig):
                 raise TypeError("gas_poisson config must be a GasPoissonConfig")
+        else:
+            config = parameters.get("config")
+            if config is not None and not isinstance(config, EloDavidsonConfig):
+                raise TypeError("elo_davidson config must be an EloDavidsonConfig")
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "parameters", MappingProxyType(parameters))
 
@@ -93,7 +110,11 @@ class GoalModelCandidate:
         """Return serialisable configuration metadata for audit dataframes."""
         result: dict[str, object] = {}
         for key, value in self.parameters.items():
-            result[key] = asdict(value) if isinstance(value, GasPoissonConfig) else value
+            result[key] = (
+                asdict(value)
+                if isinstance(value, (EloDavidsonConfig, GasPoissonConfig))
+                else value
+            )
         return result
 
 
@@ -197,6 +218,10 @@ def _walk_forward(
         )
     if candidate.family == "gas_poisson":
         return walk_forward_gas_poisson(
+            matches, folds, min_train_matches=min_train_matches, max_goals=max_goals, **params
+        )
+    if candidate.family == "elo_davidson":
+        return walk_forward_elo_davidson(
             matches, folds, min_train_matches=min_train_matches, max_goals=max_goals, **params
         )
     return walk_forward_negative_binomial(

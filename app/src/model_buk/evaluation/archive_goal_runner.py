@@ -14,6 +14,8 @@ from model_buk.evaluation.nested_goals import (
     nested_walk_forward_goals,
 )
 from model_buk.goals_backtest import GoalsFold
+from model_buk.models.gas_poisson import GasPoissonConfig
+from model_buk.models.elo_davidson import EloDavidsonConfig
 from model_buk.artifact_identity import sha256_file
 from model_buk.ingestion.football_data_uk import load_football_data_uk_archives
 
@@ -52,11 +54,39 @@ def _load_plan(path: str | Path) -> tuple[tuple[GoalModelCandidate, ...], tuple[
         row = _mapping(value, name=f"candidates[{index}]")
         if set(row) - {"name", "family", "parameters"}:
             raise ValueError(f"candidates[{index}] contains unknown fields")
+        family = str(row.get("family", ""))
+        parameters = dict(
+            _mapping(row.get("parameters", {}), name=f"candidates[{index}].parameters")
+        )
+        if family == "gas_poisson" and "config" in parameters:
+            config = _mapping(
+                parameters["config"], name=f"candidates[{index}].parameters.config"
+            )
+            allowed_config = set(GasPoissonConfig.__dataclass_fields__)
+            unknown_config = sorted(set(config) - allowed_config)
+            if unknown_config:
+                raise ValueError(
+                    f"candidates[{index}].parameters.config contains unknown fields: "
+                    f"{', '.join(unknown_config)}"
+                )
+            parameters["config"] = GasPoissonConfig(**config)
+        if family == "elo_davidson" and "config" in parameters:
+            config = _mapping(
+                parameters["config"], name=f"candidates[{index}].parameters.config"
+            )
+            allowed_config = set(EloDavidsonConfig.__dataclass_fields__)
+            unknown_config = sorted(set(config) - allowed_config)
+            if unknown_config:
+                raise ValueError(
+                    f"candidates[{index}].parameters.config contains unknown fields: "
+                    f"{', '.join(unknown_config)}"
+                )
+            parameters["config"] = EloDavidsonConfig(**config)
         candidates.append(
             GoalModelCandidate(
                 name=str(row.get("name", "")),
-                family=row.get("family"),
-                parameters=_mapping(row.get("parameters", {}), name=f"candidates[{index}].parameters"),
+                family=family,
+                parameters=parameters,
             )
         )
     folds: list[NestedGoalsFold] = []

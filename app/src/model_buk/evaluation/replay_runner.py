@@ -51,6 +51,7 @@ def _strategy(value: Any, index: int) -> ReplayStrategy:
         "min_conservative_ev_net",
         "max_recommendations",
         "min_conservative_market_edge",
+        "max_decimal_odds",
         "max_per_fixture",
         "max_per_correlation_group",
         "max_quote_age_seconds",
@@ -63,6 +64,7 @@ def _strategy(value: Any, index: int) -> ReplayStrategy:
             min_conservative_ev_net=row["min_conservative_ev_net"],
             max_recommendations=row["max_recommendations"],
             min_conservative_market_edge=row.get("min_conservative_market_edge", 0.0),
+            max_decimal_odds=row.get("max_decimal_odds", 2.0),
             max_per_fixture=row.get("max_per_fixture", 2),
             max_per_correlation_group=row.get("max_per_correlation_group", 1),
             max_quote_age=timedelta(seconds=row.get("max_quote_age_seconds", 1800)),
@@ -124,6 +126,7 @@ def _parse_plan(path: str | Path) -> tuple[list[ReplayStrategy], list[NestedRepl
                 "ev_thresholds",
                 "top_ns",
                 "min_conservative_market_edge",
+                "max_decimal_odds",
                 "max_quote_age_seconds",
             },
             field="strategy_grid",
@@ -137,6 +140,7 @@ def _parse_plan(path: str | Path) -> tuple[list[ReplayStrategy], list[NestedRepl
                 ev_thresholds=grid["ev_thresholds"],
                 top_ns=grid["top_ns"],
                 min_conservative_market_edge=grid.get("min_conservative_market_edge", 0.0),
+                max_decimal_odds=grid.get("max_decimal_odds", 2.0),
                 max_quote_age=timedelta(seconds=grid.get("max_quote_age_seconds", 1800)),
             )
         )

@@ -14,6 +14,7 @@ include_recent_observations = false
 max_recommendations = 10
 min_conservative_ev_net = 0.02
 min_conservative_market_edge = 0.0
+max_decimal_odds = 2.0
 devig_method = "proportional"
 tax_multiplier = 0.88
 execution_cost = 0.0

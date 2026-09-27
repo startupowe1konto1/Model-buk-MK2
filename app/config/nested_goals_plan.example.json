@@ -15,6 +15,65 @@
       "parameters": {
         "l2_strength": 0.1
       }
+    },
+    {
+      "name": "gas-poisson-slow",
+      "family": "gas_poisson",
+      "parameters": {
+        "config": {
+          "attack_step": 0.02,
+          "defence_step": 0.02,
+          "persistence": 0.99,
+          "min_rate": 0.05,
+          "max_rate": 8.0
+        }
+      }
+    },
+    {
+      "name": "gas-poisson-medium",
+      "family": "gas_poisson",
+      "parameters": {
+        "config": {
+          "attack_step": 0.04,
+          "defence_step": 0.04,
+          "persistence": 0.98,
+          "min_rate": 0.05,
+          "max_rate": 8.0
+        }
+      }
+    },
+    {
+      "name": "elo-davidson-slow",
+      "family": "elo_davidson",
+      "parameters": {
+        "config": {
+          "k_factor": 12.0,
+          "rating_scale": 400.0,
+          "initial_rating": 1500.0
+        }
+      }
+    },
+    {
+      "name": "elo-davidson-medium",
+      "family": "elo_davidson",
+      "parameters": {
+        "config": {
+          "k_factor": 20.0,
+          "rating_scale": 400.0,
+          "initial_rating": 1500.0
+        }
+      }
+    },
+    {
+      "name": "elo-davidson-fast",
+      "family": "elo_davidson",
+      "parameters": {
+        "config": {
+          "k_factor": 32.0,
+          "rating_scale": 400.0,
+          "initial_rating": 1500.0
+        }
+      }
     }
   ],
   "folds": [

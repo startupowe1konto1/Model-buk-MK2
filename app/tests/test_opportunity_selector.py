@@ -74,6 +74,31 @@ def test_net_ev_gate_uses_probability_lower_bound_and_tax() -> None:
     assert result.rejection_counts == {"conservative_ev_below_threshold": 1}
 
 
+def test_decimal_odds_limit_is_inclusive_and_applied_before_best_price() -> None:
+    result = select_opportunities(
+        [
+            candidate("m1", "a", odds=2.01, bookmaker="book-a"),
+            candidate("m1", "a", odds=2.00, bookmaker="book-b"),
+        ],
+        max_decimal_odds=2.0,
+    )
+
+    assert [item.candidate.decimal_odds for item in result.selected] == [2.0]
+    assert result.rejection_counts == {"decimal_odds_above_limit": 1}
+
+
+@pytest.mark.parametrize("limit", [1.0, float("nan"), float("inf")])
+def test_decimal_odds_limit_must_be_finite_and_greater_than_one(limit: float) -> None:
+    with pytest.raises(ValueError, match="max_decimal_odds must be finite and greater"):
+        select_opportunities([], max_decimal_odds=limit)
+
+
+@pytest.mark.parametrize("odds", [float("nan"), float("inf")])
+def test_candidate_decimal_odds_must_be_finite(odds: float) -> None:
+    with pytest.raises(ValueError, match="decimal_odds must be finite"):
+        candidate("m1", "a", odds=odds)
+
+
 def test_fresh_snapshot_supersedes_stale_better_looking_quote() -> None:
     stale = candidate(
         "m1",
@@ -199,8 +224,11 @@ def test_keeps_latest_quote_per_bookmaker_then_best_executable_price():
     result = select_opportunities(candidates)
 
     assert len(result.selected) == 1
-    assert result.selected[0].candidate.bookmaker == "book-b"
-    assert result.rejection_counts == {"superseded_snapshot": 1, "inferior_price": 1}
+    assert result.selected[0].candidate.bookmaker == "book-a"
+    assert result.rejection_counts == {
+        "superseded_snapshot": 1,
+        "decimal_odds_above_limit": 1,
+    }
 
 
 def test_freshness_gate_rejects_old_quote() -> None:

@@ -85,6 +85,7 @@ class CurrentPipelinePolicy:
     max_recommendations: int = 10
     min_conservative_ev_net: float = 0.0
     min_conservative_market_edge: float | None = None
+    max_decimal_odds: float = 2.0
     max_per_fixture: int = 2
     max_per_correlation_group: int = 1
     max_quote_age: timedelta | None = None
@@ -98,6 +99,8 @@ class CurrentPipelinePolicy:
             raise ValueError("min_conservative_ev_net must be non-negative")
         if self.min_conservative_market_edge is not None and self.min_conservative_market_edge < 0.0:
             raise ValueError("min_conservative_market_edge must be non-negative or None")
+        if not math.isfinite(float(self.max_decimal_odds)) or self.max_decimal_odds <= 1.0:
+            raise ValueError("max_decimal_odds must be finite and greater than 1.0")
         if self.max_per_fixture < 1:
             raise ValueError("max_per_fixture must be at least 1")
         if self.max_per_correlation_group < 1:
@@ -125,6 +128,7 @@ class CurrentPipelinePolicy:
             "max_recommendations": self.max_recommendations,
             "min_conservative_ev_net": self.min_conservative_ev_net,
             "min_conservative_market_edge": self.min_conservative_market_edge,
+            "max_decimal_odds": self.max_decimal_odds,
             "max_per_fixture": self.max_per_fixture,
             "max_per_correlation_group": self.max_per_correlation_group,
             "max_quote_age_seconds": (
@@ -501,6 +505,7 @@ class CurrentDataPipeline:
             "max_recommendations": self._policy.max_recommendations,
             "min_conservative_ev_net": self._policy.min_conservative_ev_net,
             "min_conservative_market_edge": self._policy.min_conservative_market_edge,
+            "max_decimal_odds": self._policy.max_decimal_odds,
             "max_per_fixture": self._policy.max_per_fixture,
             "max_per_correlation_group": self._policy.max_per_correlation_group,
         }

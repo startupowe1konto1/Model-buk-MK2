@@ -10,9 +10,6 @@ from pathlib import Path
 import pandas as pd
 from requests import RequestException
 
-from model_buk.config import load_corner_v02_config
-from model_buk.inference import attach_total_market_price, load_corner_engine, predict_fixture
-from model_buk.live_fit import fit_live_corner_models
 from model_buk.paper_config import PaperScanConfig, PaperScanConfigError, load_paper_scan_config
 from model_buk.paper_scan import (
     PaperScanError,
@@ -25,10 +22,14 @@ from model_buk.artifact_identity import sha256_file
 from model_buk.evaluation.archive_replay import build_football_data_replay_frame
 from model_buk.evaluation.archive_goal_runner import run_nested_archive_forecasts
 from model_buk.evaluation.archive_promotion import run_archive_promotion_gate
+from model_buk.evaluation.archive_market_pool import run_archive_market_pool
+from model_buk.evaluation.archive_residual_runner import run_archive_market_residual
+from model_buk.evaluation.forecast_blend import (
+    blend_nested_predictions,
+    walk_forward_blend_nested_predictions,
+)
 from model_buk.evaluation.replay_runner import run_historical_replay
 from model_buk.ingestion.football_data_uk import load_football_data_uk_archives
-from model_buk.suite import load_live_corner_suite, predict_with_live_suite
-from model_buk.v02_backtest import run_v02_pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -88,6 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--max-fixtures", type=int, default=None)
     scan.add_argument("--max-recommendations", type=int, default=None)
     scan.add_argument("--min-ev-net", type=float, default=None)
+    scan.add_argument("--max-decimal-odds", type=float, default=None)
     scan.add_argument("--tax-multiplier", type=float, default=None)
     scan.add_argument("--execution-cost", type=float, default=None)
     scan.add_argument("--probability-haircut", type=float, default=None)
@@ -152,6 +154,64 @@ def build_parser() -> argparse.ArgumentParser:
     nested_goals.add_argument("--outdir", required=True, help="New or empty output directory")
     nested_goals.add_argument("--league", action="append", default=None, help="Restrict to league code; repeatable")
 
+    blend = sub.add_parser(
+        "blend-nested-goals",
+        help="Combine aligned nested OOS forecasts using externally fixed weights",
+    )
+    blend.add_argument(
+        "--prediction",
+        action="append",
+        required=True,
+        help="Named input in NAME=CSV form; repeat at least twice",
+    )
+    blend.add_argument(
+        "--weight",
+        action="append",
+        required=True,
+        help="Fixed weight in NAME=VALUE form; repeat for every input",
+    )
+    blend.add_argument("--outdir", required=True, help="New or empty output directory")
+
+    adaptive_blend = sub.add_parser(
+        "blend-nested-goals-walk-forward",
+        help="Select two-model blend weights using completed outer folds only",
+    )
+    adaptive_blend.add_argument(
+        "--prediction",
+        action="append",
+        required=True,
+        help="Named input in NAME=CSV form; repeat exactly twice",
+    )
+    adaptive_blend.add_argument("--outdir", required=True, help="New or empty output directory")
+
+    market_pool = sub.add_parser(
+        "pool-nested-goals-with-opening-market",
+        help="Walk-forward pool OOS model forecasts with pre-match opening 1X2 prices",
+    )
+    market_pool.add_argument("--archives", nargs="+", required=True, help="Source ZIP archive paths")
+    market_pool.add_argument("--predictions", required=True, help="Nested OOS forecast CSV")
+    market_pool.add_argument("--outdir", required=True, help="New or empty output directory")
+    market_pool.add_argument("--market-provider", default="market_average")
+    market_pool.add_argument(
+        "--assume-opening-available",
+        action="store_true",
+        help="Accept the research-only assumption that opening prices existed at cutoff",
+    )
+
+    residual = sub.add_parser(
+        "nested-opening-market-residual",
+        help="Fit point-in-time form corrections around opening-market probabilities",
+    )
+    residual.add_argument("--archives", nargs="+", required=True, help="Source ZIP archive paths")
+    residual.add_argument("--plan", required=True, help="Residual candidate and fold plan")
+    residual.add_argument("--outdir", required=True, help="New or empty output directory")
+    residual.add_argument("--market-provider", default="market_average")
+    residual.add_argument(
+        "--assume-opening-available",
+        action="store_true",
+        help="Accept the research-only assumption that opening prices existed at cutoff",
+    )
+
     promotion = sub.add_parser(
         "archive-promotion-gate",
         help="Compare nested OOS forecasts to the market, per league (timestamps still block promotion)",
@@ -183,6 +243,17 @@ def _write_and_print(payload_obj: dict, out: str | None) -> None:
     print(payload)
 
 
+def _named_values(values: list[str], *, option: str, numeric: bool = False) -> dict:
+    result: dict = {}
+    for value in values:
+        name, separator, raw = value.partition("=")
+        name = name.strip()
+        if not separator or not name or not raw.strip() or name in result:
+            raise ValueError(f"{option} values must use unique NAME=VALUE entries")
+        result[name] = float(raw) if numeric else raw
+    return result
+
+
 def _paper_config_from_args(args: argparse.Namespace) -> PaperScanConfig:
     config = load_paper_scan_config(args.config)
     overrides: dict = {}
@@ -192,6 +263,7 @@ def _paper_config_from_args(args: argparse.Namespace) -> PaperScanConfig:
         "max_fixtures": "max_fixtures",
         "max_recommendations": "max_recommendations",
         "min_ev_net": "min_conservative_ev_net",
+        "max_decimal_odds": "max_decimal_odds",
         "tax_multiplier": "tax_multiplier",
         "execution_cost": "execution_cost",
         "probability_haircut": "probability_haircut",
@@ -250,6 +322,91 @@ def _scan_error(exc: Exception) -> tuple[str, int]:
 
 def main() -> None:
     args = build_parser().parse_args()
+
+    if args.command == "blend-nested-goals":
+        try:
+            inputs = _named_values(args.prediction, option="--prediction")
+            weights = _named_values(args.weight, option="--weight", numeric=True)
+            payload = blend_nested_predictions(inputs, weights, args.outdir)
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "forecast_blend_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": payload["status"],
+                "prediction_rows": payload["prediction_rows"],
+                "weights": payload["weights"],
+                "output_dir": str(Path(args.outdir).resolve()),
+            },
+            None,
+        )
+        return
+
+    if args.command == "blend-nested-goals-walk-forward":
+        try:
+            inputs = _named_values(args.prediction, option="--prediction")
+            payload = walk_forward_blend_nested_predictions(inputs, args.outdir)
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "forecast_blend_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": payload["status"],
+                "prediction_rows": payload["prediction_rows"],
+                "evaluated_outer_folds": payload["evaluated_outer_folds"],
+                "output_dir": str(Path(args.outdir).resolve()),
+            },
+            None,
+        )
+        return
+
+    if args.command == "pool-nested-goals-with-opening-market":
+        try:
+            payload = run_archive_market_pool(
+                args.archives,
+                args.predictions,
+                args.outdir,
+                market_provider=args.market_provider,
+                assume_opening_available_at_cutoff=args.assume_opening_available,
+            )
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "market_pool_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": payload["status"],
+                "prediction_rows": payload["prediction_rows"],
+                "evaluated_outer_folds": payload["evaluated_outer_folds"],
+                "promotion_eligible": payload["promotion_eligible"],
+                "output_dir": str(Path(args.outdir).resolve()),
+            },
+            None,
+        )
+        return
+
+    if args.command == "nested-opening-market-residual":
+        try:
+            payload = run_archive_market_residual(
+                args.archives,
+                args.plan,
+                args.outdir,
+                market_provider=args.market_provider,
+                assume_opening_available_at_cutoff=args.assume_opening_available,
+            )
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "market_residual_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": payload["status"],
+                "model_rows": payload["model_rows"],
+                "prediction_rows": payload["prediction_rows"],
+                "promotion_eligible": payload["promotion_eligible"],
+                "output_dir": str(Path(args.outdir).resolve()),
+            },
+            None,
+        )
+        return
 
     if args.command == "archive-promotion-gate":
         try:
@@ -408,12 +565,18 @@ def main() -> None:
         return
 
     if args.command == "backtest-corners-v02":
+        from model_buk.config import load_corner_v02_config
+        from model_buk.v02_backtest import run_v02_pipeline
+
         cfg = load_corner_v02_config(args.config)
         summary = run_v02_pipeline(args.data, cfg, args.outdir, args.modeldir)
         print(json.dumps(summary, indent=2))
         return
 
     if args.command == "fit-live-corners":
+        from model_buk.config import load_corner_v02_config
+        from model_buk.live_fit import fit_live_corner_models
+
         cfg = load_corner_v02_config(args.config)
         registry = fit_live_corner_models(
             args.data,
@@ -426,6 +589,10 @@ def main() -> None:
         return
 
     if args.command == "predict-corners":
+        from model_buk.config import load_corner_v02_config
+        from model_buk.inference import attach_total_market_price
+        from model_buk.suite import load_live_corner_suite, predict_with_live_suite
+
         cfg = load_corner_v02_config(args.config)
         history = pd.read_csv(args.history)
         suite = load_live_corner_suite(args.model_root)
@@ -451,6 +618,13 @@ def main() -> None:
         return
 
     if args.command == "predict-corners-v02":
+        from model_buk.config import load_corner_v02_config
+        from model_buk.inference import (
+            attach_total_market_price,
+            load_corner_engine,
+            predict_fixture,
+        )
+
         cfg = load_corner_v02_config(args.config)
         history = pd.read_csv(args.history)
         engine = load_corner_engine(args.modeldir)

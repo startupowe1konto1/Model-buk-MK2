@@ -7,8 +7,6 @@ from typing import Sequence
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
-from scipy.special import gammaln
 
 
 @dataclass(frozen=True)
@@ -116,6 +114,9 @@ def fit_dixon_coles(
     ``home_goals`` and ``away_goals``. Attack strengths are constrained to sum
     to zero, which makes the parametrisation identifiable.
     """
+    from scipy.optimize import minimize
+    from scipy.special import gammaln
+
     if not math.isfinite(l2_strength) or l2_strength < 0.0:
         raise ValueError("l2_strength must be non-negative and finite")
     if not math.isfinite(xg_weight) or xg_weight < 0.0:

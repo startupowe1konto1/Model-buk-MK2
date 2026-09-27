@@ -157,7 +157,7 @@ def test_real_nested_walk_forward_returns_normalised_calibrated_outer_probabilit
     result = nested_walk_forward_goals(
         _matches(),
         [
-            GoalModelCandidate("dc", "dixon_coles", {"half_life_days": 60.0}),
+            GoalModelCandidate("elo", "elo_davidson"),
             GoalModelCandidate("gas", "gas_poisson"),
         ],
         [_nested_fold()],

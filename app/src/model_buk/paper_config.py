@@ -73,6 +73,7 @@ class PaperScanConfig:
     max_recommendations: int = MAX_RECOMMENDATIONS
     min_conservative_ev_net: float = 0.02
     min_conservative_market_edge: float | None = None
+    max_decimal_odds: float = 2.0
     devig_method: str = "proportional"
     tax_multiplier: float = 0.88
     execution_cost: float = 0.0
@@ -132,10 +133,13 @@ class PaperScanConfig:
         tax = _float(self.tax_multiplier, field_name="tax_multiplier")
         haircut = _float(self.probability_haircut, field_name="probability_haircut")
         quality = _float(self.min_data_quality, field_name="min_data_quality")
+        max_odds = _float(self.max_decimal_odds, field_name="max_decimal_odds")
         if ev < 0.0:
             raise PaperScanConfigError("min_conservative_ev_net must be non-negative")
         if edge is not None and edge < 0.0:
             raise PaperScanConfigError("min_conservative_market_edge must be non-negative or null")
+        if max_odds <= 1.0:
+            raise PaperScanConfigError("max_decimal_odds must be greater than 1.0")
         method = _non_blank(self.devig_method, field_name="devig_method")
         if method not in {"proportional", "power", "shin"}:
             raise PaperScanConfigError("devig_method must be one of: proportional, power, shin")
@@ -149,6 +153,7 @@ class PaperScanConfig:
             raise PaperScanConfigError("min_data_quality must be between 0 and 100")
         object.__setattr__(self, "min_conservative_ev_net", ev)
         object.__setattr__(self, "min_conservative_market_edge", edge)
+        object.__setattr__(self, "max_decimal_odds", max_odds)
         object.__setattr__(self, "devig_method", method)
         object.__setattr__(self, "execution_cost", cost)
         object.__setattr__(self, "tax_multiplier", tax)
@@ -200,6 +205,7 @@ class PaperScanConfig:
             "max_recommendations": self.max_recommendations,
             "min_conservative_ev_net": self.min_conservative_ev_net,
             "min_conservative_market_edge": self.min_conservative_market_edge,
+            "max_decimal_odds": self.max_decimal_odds,
             "devig_method": self.devig_method,
             "tax_multiplier": self.tax_multiplier,
             "execution_cost": self.execution_cost,

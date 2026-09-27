@@ -1,0 +1,86 @@
+{
+  "candidates": [
+    {
+      "name": "gas-poisson-slow",
+      "family": "gas_poisson",
+      "parameters": {
+        "config": {
+          "attack_step": 0.02,
+          "defence_step": 0.02,
+          "persistence": 0.99,
+          "min_rate": 0.05,
+          "max_rate": 8.0
+        }
+      }
+    },
+    {
+      "name": "gas-poisson-medium",
+      "family": "gas_poisson",
+      "parameters": {
+        "config": {
+          "attack_step": 0.04,
+          "defence_step": 0.04,
+          "persistence": 0.98,
+          "min_rate": 0.05,
+          "max_rate": 8.0
+        }
+      }
+    },
+    {
+      "name": "gas-poisson-fast",
+      "family": "gas_poisson",
+      "parameters": {
+        "config": {
+          "attack_step": 0.08,
+          "defence_step": 0.08,
+          "persistence": 0.95,
+          "min_rate": 0.05,
+          "max_rate": 8.0
+        }
+      }
+    }
+  ],
+  "folds": [
+    {
+      "label": "forecast-2022-23",
+      "outer_fold": {"label": "season-2022-23", "start": "2022-07-01", "end": "2023-07-01"},
+      "inner_folds": [
+        {"label": "season-2019-20", "start": "2019-07-01", "end": "2020-07-01"},
+        {"label": "season-2020-21", "start": "2020-07-01", "end": "2021-07-01"},
+        {"label": "season-2021-22", "start": "2021-07-01", "end": "2022-07-01"}
+      ]
+    },
+    {
+      "label": "forecast-2023-24",
+      "outer_fold": {"label": "season-2023-24", "start": "2023-07-01", "end": "2024-07-01"},
+      "inner_folds": [
+        {"label": "season-2020-21", "start": "2020-07-01", "end": "2021-07-01"},
+        {"label": "season-2021-22", "start": "2021-07-01", "end": "2022-07-01"},
+        {"label": "season-2022-23", "start": "2022-07-01", "end": "2023-07-01"}
+      ]
+    },
+    {
+      "label": "forecast-2024-25",
+      "outer_fold": {"label": "season-2024-25", "start": "2024-07-01", "end": "2025-07-01"},
+      "inner_folds": [
+        {"label": "season-2021-22", "start": "2021-07-01", "end": "2022-07-01"},
+        {"label": "season-2022-23", "start": "2022-07-01", "end": "2023-07-01"},
+        {"label": "season-2023-24", "start": "2023-07-01", "end": "2024-07-01"}
+      ]
+    },
+    {
+      "label": "forecast-2025-26",
+      "outer_fold": {"label": "season-2025-26", "start": "2025-07-01", "end": "2026-07-01"},
+      "inner_folds": [
+        {"label": "season-2022-23", "start": "2022-07-01", "end": "2023-07-01"},
+        {"label": "season-2023-24", "start": "2023-07-01", "end": "2024-07-01"},
+        {"label": "season-2024-25", "start": "2024-07-01", "end": "2025-07-01"}
+      ]
+    }
+  ],
+  "training": {
+    "min_train_matches": 100,
+    "max_goals": 10,
+    "calibration_min_history": 100
+  }
+}

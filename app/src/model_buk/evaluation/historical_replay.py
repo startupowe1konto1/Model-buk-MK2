@@ -96,6 +96,7 @@ class ReplayStrategy:
     min_conservative_ev_net: float
     max_recommendations: int
     min_conservative_market_edge: float | None = 0.0
+    max_decimal_odds: float = 2.0
     max_per_fixture: int = 2
     max_per_correlation_group: int = 1
     max_quote_age: timedelta = timedelta(minutes=30)
@@ -117,6 +118,8 @@ class ReplayStrategy:
             or self.min_conservative_market_edge < 0
         ):
             raise ValueError("min_conservative_market_edge must be finite and non-negative or None")
+        if not math.isfinite(float(self.max_decimal_odds)) or self.max_decimal_odds <= 1.0:
+            raise ValueError("max_decimal_odds must be finite and greater than 1.0")
         if self.max_per_fixture < 1 or self.max_per_correlation_group < 1:
             raise ValueError("portfolio limits must be positive")
         if self.max_quote_age <= timedelta(0):
@@ -131,6 +134,7 @@ class ReplayStrategy:
                 "min_conservative_ev_net": float(self.min_conservative_ev_net),
                 "max_recommendations": self.max_recommendations,
                 "min_conservative_market_edge": self.min_conservative_market_edge,
+                "max_decimal_odds": self.max_decimal_odds,
                 "max_per_fixture": self.max_per_fixture,
                 "max_per_correlation_group": self.max_per_correlation_group,
                 "max_quote_age_seconds": self.max_quote_age.total_seconds(),
@@ -219,6 +223,7 @@ def replay_strategy_grid(
     ev_thresholds: Iterable[float] = (0.0, 0.02, 0.05),
     top_ns: Iterable[int] = (1, 3, 5, 10),
     min_conservative_market_edge: float | None = 0.0,
+    max_decimal_odds: float = 2.0,
     max_quote_age: timedelta = timedelta(minutes=30),
 ) -> tuple[ReplayStrategy, ...]:
     """Build the auditable de-vig × EV × top-N search grid."""
@@ -234,6 +239,7 @@ def replay_strategy_grid(
                         min_conservative_ev_net=float(threshold),
                         max_recommendations=int(top_n),
                         min_conservative_market_edge=min_conservative_market_edge,
+                        max_decimal_odds=max_decimal_odds,
                         max_quote_age=max_quote_age,
                     )
                 )
@@ -368,6 +374,7 @@ def replay_opportunities(
             max_recommendations=strategy.max_recommendations,
             min_conservative_ev_net=strategy.min_conservative_ev_net,
             min_conservative_market_edge=strategy.min_conservative_market_edge,
+            max_decimal_odds=strategy.max_decimal_odds,
             max_per_fixture=strategy.max_per_fixture,
             max_per_correlation_group=strategy.max_per_correlation_group,
             decision_time=cutoff,

@@ -10,13 +10,26 @@ from model_buk.evaluation import archive_goal_runner
 from model_buk.evaluation.archive_goal_runner import _load_plan, run_nested_archive_forecasts
 from model_buk.evaluation.nested_goals import NestedGoalsResult
 from model_buk.ingestion.football_data_uk import FootballDataUKBatch
+from model_buk.models.gas_poisson import GasPoissonConfig
+from model_buk.models.elo_davidson import EloDavidsonConfig
 
 
 def test_nested_archive_example_plan_is_valid() -> None:
     plan = Path(__file__).parents[1] / "config" / "nested_goals_plan.example.json"
     candidates, folds, training = _load_plan(plan)
 
-    assert {candidate.family for candidate in candidates} == {"dixon_coles", "negative_binomial"}
+    assert {candidate.family for candidate in candidates} == {
+        "dixon_coles",
+        "elo_davidson",
+        "gas_poisson",
+        "negative_binomial",
+    }
+    gas_candidates = [candidate for candidate in candidates if candidate.family == "gas_poisson"]
+    assert len(gas_candidates) == 2
+    assert all(isinstance(candidate.parameters["config"], GasPoissonConfig) for candidate in gas_candidates)
+    elo_candidates = [candidate for candidate in candidates if candidate.family == "elo_davidson"]
+    assert len(elo_candidates) == 3
+    assert all(isinstance(candidate.parameters["config"], EloDavidsonConfig) for candidate in elo_candidates)
     assert len(folds) == 4
     assert len(folds[-1].inner_folds) == 3
     assert training["min_train_matches"] == 100
@@ -35,6 +48,19 @@ def test_nested_archive_cli_accepts_repeatable_league_filter() -> None:
     )
     assert args.command == "nested-goals-archives"
     assert args.league == ["E0", "D1"]
+
+
+def test_elo_screen_plan_builds_typed_configs() -> None:
+    plan = Path(__file__).parents[1] / "config" / "nested_goals_elo_screen.example.json"
+    candidates, folds, _training = _load_plan(plan)
+
+    assert len(folds) == 4
+    assert len(candidates) == 3
+    assert all(candidate.family == "elo_davidson" for candidate in candidates)
+    assert all(
+        isinstance(candidate.parameters["config"], EloDavidsonConfig)
+        for candidate in candidates
+    )
 
 
 def test_nested_archive_runner_writes_per_league_oos_predictions(tmp_path, monkeypatch) -> None:
