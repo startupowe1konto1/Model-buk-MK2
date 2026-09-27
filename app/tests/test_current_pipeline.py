@@ -184,6 +184,50 @@ def test_future_available_snapshot_is_rejected_before_prediction(tmp_path):
     assert not predictor_called
 
 
+def test_invalid_context_availability_is_rejected_before_prediction(tmp_path):
+    predictor_called = False
+
+    def predictor(frame, context):
+        nonlocal predictor_called
+        predictor_called = True
+        return []
+
+    pipeline = CurrentDataPipeline(
+        adapters={
+            "fake": lambda context: [
+                snapshot(
+                    feature_group="context_availability",
+                    payload={"features": {"lineups": "unknown-status"}},
+                )
+            ]
+        },
+        predictor=predictor,
+        output_dir=tmp_path,
+    )
+
+    with pytest.raises(PipelineDataError, match="invalid context availability status"):
+        pipeline.run("invalid-context-availability", cutoff=CUTOFF)
+    assert not predictor_called
+
+
+def test_context_availability_without_fixture_is_rejected_before_prediction(tmp_path):
+    pipeline = CurrentDataPipeline(
+        adapters={
+            "fake": lambda context: [
+                snapshot(
+                    feature_group="context_availability",
+                    payload={"features": {"lineups": "observed_empty"}},
+                )
+            ]
+        },
+        predictor=lambda frame, context: [],
+        output_dir=tmp_path,
+    )
+
+    with pytest.raises(PipelineDataError, match="does not match the fixture snapshot set"):
+        pipeline.run("context-without-fixture", cutoff=CUTOFF)
+
+
 def test_completeness_and_freshness_are_enforced(tmp_path):
     policy = CurrentPipelinePolicy(
         required_feature_groups={"fixtures": 1, "odds": 1},

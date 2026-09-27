@@ -20,6 +20,8 @@ def test_scan_parser_accepts_repeatable_scope_and_safe_flags():
             "--day-offset", "2",
             "--no-include-context",
             "--include-recent-observations",
+            "--no-archive-live-snapshots",
+            "--snapshot-archive-dir", "archive",
             "--dry-run",
         ]
     )
@@ -29,7 +31,38 @@ def test_scan_parser_accepts_repeatable_scope_and_safe_flags():
     assert args.day_offset == [0, 2]
     assert args.include_context is False
     assert args.include_recent_observations is True
+    assert args.archive_live_snapshots is False
+    assert args.snapshot_archive_dir == "archive"
     assert args.dry_run is True
+
+
+def test_context_export_parser_has_safe_explicit_output():
+    args = cli.build_parser().parse_args(
+        [
+            "export-context-features",
+            "--archive-dir", "archive",
+            "--out", "context.csv",
+        ]
+    )
+
+    assert args.archive_dir == "archive"
+    assert args.out == "context.csv"
+
+
+def test_context_training_parser_requires_features_outcomes_and_output():
+    args = cli.build_parser().parse_args(
+        [
+            "prepare-context-training",
+            "--features", "context.csv",
+            "--outcomes", "outcomes.csv",
+            "--out", "training.csv",
+        ]
+    )
+
+    assert args.features == "context.csv"
+    assert args.outcomes == "outcomes.csv"
+    assert args.out == "training.csv"
+    assert args.allow_outcome_quarantine is False
 
 
 def test_cli_overrides_versioned_config_without_reading_a_secret(monkeypatch, tmp_path):
@@ -45,6 +78,7 @@ def test_cli_overrides_versioned_config_without_reading_a_secret(monkeypatch, tm
             "--snapshots", "snapshots.json",
             "--history", "override.csv",
             "--outdir", "other-runs",
+            "--snapshot-archive-dir", "other-archive",
             "--max-fixtures", "4",
             "--max-recommendations", "3",
             "--min-ev-net", "0.04",
@@ -55,6 +89,7 @@ def test_cli_overrides_versioned_config_without_reading_a_secret(monkeypatch, tm
     config = cli._paper_config_from_args(args)
     assert config.history_path == Path("override.csv")
     assert config.output_dir == Path("other-runs")
+    assert config.snapshot_archive_dir == Path("other-archive")
     assert config.max_fixtures == 4
     assert config.max_recommendations == 3
     assert config.min_conservative_ev_net == 0.04

@@ -15,6 +15,10 @@ from typing import Any, Protocol
 
 import pandas as pd
 
+from model_buk.context_coverage import (
+    CONTEXT_AVAILABILITY_FEATURE_GROUP,
+    context_availability_payload,
+)
 from model_buk.current_pipeline import RunContext
 from model_buk.snapshots import SnapshotRecord
 
@@ -191,8 +195,15 @@ class ApiFootballSnapshotAdapter:
         records: list[SnapshotRecord] = []
         errors = tuple(str(error) for error in (context_payload.get("errors") or []))
         failed = {error.partition(":")[0].strip() for error in errors}
+        statuses: dict[str, str] = {}
 
-        for quote in [] if "odds" in failed else (context_payload.get("odds") or []):
+        odds = context_payload.get("odds")
+        statuses["odds"] = self._availability_status(
+            present="odds" in context_payload,
+            value=odds,
+            failed="odds" in failed,
+        )
+        for quote in [] if statuses["odds"] in {"missing", "provider_error"} else (odds or []):
             available_at = cutoff
             if quote.get("update"):
                 available_at = _utc(quote["update"], field="odds update")
@@ -211,9 +222,15 @@ class ApiFootballSnapshotAdapter:
             )
 
         for feature_group in ("injuries", "lineups"):
-            if feature_group in failed:
+            value = context_payload.get(feature_group)
+            statuses[feature_group] = self._availability_status(
+                present=feature_group in context_payload,
+                value=value,
+                failed=feature_group in failed,
+            )
+            if statuses[feature_group] in {"missing", "provider_error"}:
                 continue
-            payload = list(context_payload.get(feature_group) or [])
+            payload = list(value or [])
             records.append(
                 self._record(
                     entity_id=f"fixture:{fixture_id}",
@@ -227,8 +244,18 @@ class ApiFootballSnapshotAdapter:
             )
 
         recent_failed = any(name.startswith("recent_") for name in failed)
-        if self.policy.include_recent_observations and not recent_failed:
-            recent = context_payload.get("recent_observations") or {}
+        recent = context_payload.get("recent_observations")
+        if not self.policy.include_recent_observations:
+            statuses["team_form"] = "not_requested"
+        elif recent_failed:
+            statuses["team_form"] = "provider_error"
+        else:
+            statuses["team_form"] = self._team_form_availability_status(
+                present="recent_observations" in context_payload,
+                value=recent,
+            )
+        if statuses["team_form"] in {"available", "observed_empty"}:
+            recent = recent or {}
             fixture = context_payload.get("fixture") or {}
             for side in ("home", "away"):
                 team = fixture.get(side) or {}
@@ -246,8 +273,35 @@ class ApiFootballSnapshotAdapter:
                         source_record_id=f"{fixture_id}:{side}",
                     )
                 )
+        records.append(
+            self._record(
+                entity_id=f"fixture:{fixture_id}",
+                feature_group=CONTEXT_AVAILABILITY_FEATURE_GROUP,
+                event_time=kickoff,
+                available_at=cutoff,
+                ingested_at=ingested_at,
+                payload=context_availability_payload(statuses),
+                source_record_id=str(fixture_id),
+            )
+        )
         # external_prediction_benchmark is intentionally not copied.
         return records
+
+    @staticmethod
+    def _availability_status(*, present: bool, value: Any, failed: bool) -> str:
+        if failed:
+            return "provider_error"
+        if not present or value is None:
+            return "missing"
+        return "observed_empty" if not value else "available"
+
+    @staticmethod
+    def _team_form_availability_status(*, present: bool, value: Any) -> str:
+        if not present or not isinstance(value, Mapping):
+            return "missing"
+        if "home" not in value or "away" not in value:
+            return "missing"
+        return "available" if value["home"] or value["away"] else "observed_empty"
 
     @staticmethod
     def _record(

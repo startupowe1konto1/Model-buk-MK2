@@ -12,7 +12,9 @@
 ## P1 — production data layer
 
 1. Canonical team/competition/provider IDs.
-2. Daily append-only match and odds archive.
+2. Daily append-only match, odds and context archive — the first immutable,
+   checksummed JSONL segment store is wired into live paper scans; scheduling
+   and retention monitoring remain operational work.
 3. Provider timestamp and prediction horizon on live inputs; `known_at` and
    `fetched_at` are accepted as feed aliases for the internal `available_at`
    and `ingested_at` snapshot fields.

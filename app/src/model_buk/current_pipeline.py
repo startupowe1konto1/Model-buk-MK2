@@ -22,6 +22,11 @@ from typing import Any, Protocol
 
 import pandas as pd
 
+from model_buk.context_coverage import summarize_context_coverage
+from model_buk.context_features import (
+    CONTEXT_FEATURE_SCHEMA_VERSION,
+    build_match_context_features,
+)
 from model_buk.opportunity_selector import (
     OpportunityCandidate,
     OpportunitySelection,
@@ -47,6 +52,7 @@ class RunContext:
 
     run_id: str
     cutoff: datetime
+    dry_run: bool = False
 
 
 class SnapshotAdapter(Protocol):
@@ -274,7 +280,7 @@ class CurrentDataPipeline:
         if not normalized_run_id:
             raise ValueError("run_id must not be blank")
         cutoff_utc = _utc(cutoff if cutoff is not None else self._clock(), field_name="cutoff")
-        context = RunContext(normalized_run_id, cutoff_utc)
+        context = RunContext(normalized_run_id, cutoff_utc, dry_run=dry_run)
         request = self._request_descriptor(context)
         request_digest = _digest(request)
         run_dir = self._run_dir(normalized_run_id)
@@ -318,8 +324,26 @@ class CurrentDataPipeline:
         normalized_run_id = context.run_id
         cutoff_utc = context.cutoff
 
-        frame, adapter_counts = self._fetch(context)
+        frame, adapter_counts, adapter_metadata = self._fetch(context)
         as_of = self._validate_as_of(frame, context)
+        try:
+            context_coverage = summarize_context_coverage(as_of)
+        except ValueError as exc:
+            raise PipelineDataError(str(exc)) from exc
+        context_features: pd.DataFrame | None = None
+        if context_coverage is not None:
+            try:
+                context_features = build_match_context_features(
+                    as_of,
+                    cutoff_utc,
+                    known_by=as_of["ingested_at"].max(),
+                )
+            except ValueError as exc:
+                raise PipelineDataError(str(exc)) from exc
+            if len(context_features) != context_coverage["fixture_count"]:
+                raise PipelineDataError(
+                    "context availability does not match the fixture snapshot set"
+                )
         candidates, model_id = self._predict(as_of, context)
         selection = self._select(candidates, cutoff_utc)
         selected, rejection_counts = _serialize_selection(selection)
@@ -353,6 +377,15 @@ class CurrentDataPipeline:
             "policy": self._policy.as_dict(),
             "contains_raw_payloads": False,
         }
+        if context_coverage is not None:
+            manifest["context_coverage"] = context_coverage
+            manifest["context_features"] = {
+                "schema_version": CONTEXT_FEATURE_SCHEMA_VERSION,
+                "row_count": len(context_features) if context_features is not None else 0,
+                "used_in_model": False,
+            }
+        if adapter_metadata:
+            manifest["adapter_metadata"] = adapter_metadata
         run = PipelineRun(manifest=manifest, result=result, reused=False, persisted=not dry_run)
         if not dry_run:
             self._commit(run_dir, run)
@@ -401,10 +434,14 @@ class CurrentDataPipeline:
         # Hashing prevents path traversal and keeps arbitrary scheduler ids usable.
         return self._output_dir / f"run-{sha256(run_id.encode('utf-8')).hexdigest()[:24]}"
 
-    def _fetch(self, context: RunContext) -> tuple[pd.DataFrame, dict[str, int]]:
+    def _fetch(
+        self,
+        context: RunContext,
+    ) -> tuple[pd.DataFrame, dict[str, int], dict[str, Any]]:
         records: list[SnapshotRecord] = []
         sources: list[str] = []
         counts: dict[str, int] = {}
+        metadata: dict[str, Any] = {}
         for name in sorted(self._adapters):
             adapter = self._adapters[name]
             operation = getattr(adapter, "fetch", adapter)
@@ -423,9 +460,14 @@ class CurrentDataPipeline:
                 sources.append(name)
                 count += 1
             counts[name] = count
+            adapter_metadata = getattr(adapter, "run_metadata", None)
+            if callable(adapter_metadata):
+                adapter_metadata = adapter_metadata()
+            if adapter_metadata:
+                metadata[name] = dict(adapter_metadata)
         frame = snapshots_frame(records)
         frame["source_adapter"] = sources
-        return frame, counts
+        return frame, counts, metadata
 
     def _validate_as_of(self, frame: pd.DataFrame, context: RunContext) -> pd.DataFrame:
         try:

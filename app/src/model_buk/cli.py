@@ -18,6 +18,7 @@ from model_buk.paper_scan import (
     run_paper_scan,
 )
 from model_buk.current_pipeline import PipelineDataError, RunConflictError
+from model_buk.context_dataset import export_context_feature_dataset
 from model_buk.artifact_identity import sha256_file
 from model_buk.evaluation.archive_replay import build_football_data_replay_frame
 from model_buk.evaluation.archive_goal_runner import run_nested_archive_forecasts
@@ -29,6 +30,7 @@ from model_buk.evaluation.forecast_blend import (
     walk_forward_blend_nested_predictions,
 )
 from model_buk.evaluation.replay_runner import run_historical_replay
+from model_buk.evaluation.outcome_join import prepare_labeled_context_dataset
 from model_buk.ingestion.football_data_uk import load_football_data_uk_archives
 
 
@@ -84,6 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--cache-dir", default="runtime/api_cache/paper-scan")
     scan.add_argument("--history", default=None)
     scan.add_argument("--outdir", default=None)
+    scan.add_argument("--snapshot-archive-dir", default=None)
     scan.add_argument("--league", action="append", default=None)
     scan.add_argument("--day-offset", action="append", type=int, default=None)
     scan.add_argument("--max-fixtures", type=int, default=None)
@@ -105,10 +108,31 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=None,
     )
+    scan.add_argument(
+        "--archive-live-snapshots",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
     scan.add_argument("--cutoff", default=None, help="Timezone-aware ISO-8601 timestamp")
     scan.add_argument("--run-id", default=None)
     scan.add_argument("--dry-run", action="store_true")
     scan.add_argument("--out", default=None, help="Optional JSON summary output path")
+
+    export_context = sub.add_parser(
+        "export-context-features",
+        help="Build an unlabeled context-feature CSV from the prospective snapshot archive",
+    )
+    export_context.add_argument("--archive-dir", default="runtime/snapshot-archive")
+    export_context.add_argument("--out", required=True)
+
+    label_context = sub.add_parser(
+        "prepare-context-training",
+        help="Join frozen context features to post-match regular-time outcomes",
+    )
+    label_context.add_argument("--features", required=True)
+    label_context.add_argument("--outcomes", required=True)
+    label_context.add_argument("--out", required=True)
+    label_context.add_argument("--allow-outcome-quarantine", action="store_true")
 
     replay = sub.add_parser(
         "replay-history",
@@ -260,6 +284,7 @@ def _paper_config_from_args(args: argparse.Namespace) -> PaperScanConfig:
     mapping = {
         "history": "history_path",
         "outdir": "output_dir",
+        "snapshot_archive_dir": "snapshot_archive_dir",
         "max_fixtures": "max_fixtures",
         "max_recommendations": "max_recommendations",
         "min_ev_net": "min_conservative_ev_net",
@@ -270,6 +295,7 @@ def _paper_config_from_args(args: argparse.Namespace) -> PaperScanConfig:
         "min_data_quality": "min_data_quality",
         "include_context": "include_context",
         "include_recent_observations": "include_recent_observations",
+        "archive_live_snapshots": "archive_live_snapshots",
     }
     for argument, field_name in mapping.items():
         value = getattr(args, argument)
@@ -322,6 +348,49 @@ def _scan_error(exc: Exception) -> tuple[str, int]:
 
 def main() -> None:
     args = build_parser().parse_args()
+
+    if args.command == "export-context-features":
+        try:
+            payload = export_context_feature_dataset(args.archive_dir, args.out)
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "context_export_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": "context_features_exported",
+                "archive_segment_count": payload["archive_segment_count"],
+                "feature_row_count": payload["feature_row_count"],
+                "contains_outcomes": False,
+                "promotion_eligible": False,
+                "output_csv": str(Path(args.out).resolve()),
+            },
+            None,
+        )
+        return
+
+    if args.command == "prepare-context-training":
+        try:
+            payload = prepare_labeled_context_dataset(
+                args.features,
+                args.outcomes,
+                args.out,
+                allow_outcome_quarantine=args.allow_outcome_quarantine,
+            )
+        except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
+            _write_and_print({"status": "context_label_error", "message": str(exc)}, None)
+            raise SystemExit(5) from None
+        _write_and_print(
+            {
+                "status": "context_training_dataset_prepared",
+                "matched_rows": payload["matched_rows"],
+                "unmatched_rows": payload["unmatched_rows"],
+                "outcome_rows_quarantined": payload["outcome_rows_quarantined"],
+                "promotion_eligible": False,
+                "output_csv": str(Path(args.out).resolve()),
+            },
+            None,
+        )
+        return
 
     if args.command == "blend-nested-goals":
         try:

@@ -1,6 +1,8 @@
 [paper_scan]
 version = "paper-scan-v1"
 output_dir = "runtime/paper-runs"
+snapshot_archive_dir = "runtime/snapshot-archive"
+archive_live_snapshots = true
 history_path = "data/multileague/europe16_matches_v05.csv.gz"
 model_id = "pure-multimarket-v1"
 # Optional engine artifact id. Credentials stay out of this file; the adapter

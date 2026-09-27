@@ -10,11 +10,70 @@ są umieszczane w artefaktach przebiegu.
 2. Pipeline odrzuca rekordy z `available_at > cutoff`.
 3. Dla każdej encji, grupy cech i dostawcy pozostaje najnowsza znana wersja.
 4. Kontrole kompletności i świeżości zatrzymują przebieg z niepełnymi danymi.
+   Dla kontekstu meczu manifest dodatkowo rozróżnia dane dostępne, poprawną
+   pustą odpowiedź, brak pola, błąd dostawcy i dane celowo niepobrane.
 5. Wersjonowany predyktor tworzy `OpportunityCandidate`.
 6. Selekcja używa dolnej granicy prawdopodobieństwa i EV po podatku oraz
    kosztach wykonania. Nie uzupełnia rankingu słabszymi typami.
 7. `result.json` i `manifest.json` są zapisywane atomowo i mogą zostać ponownie
    odczytane bez powtórnego pobierania danych.
+
+## Prospektywne archiwum snapshotów
+
+Live paper scan domyślnie opakowuje adapter w `ArchivingSnapshotAdapter` i
+zapisuje jeden niezmienny segment JSONL na `run_id` w
+`runtime/snapshot-archive`. Obok segmentu powstaje manifest z cutoffem, wersją
+adaptera, liczbą rekordów i SHA-256. Dane uwierzytelniające API nie trafiają do
+snapshotów; archiwum zawiera jednak znormalizowane payloady dostawcy i powinno
+mieć ograniczony dostęp.
+
+Zapis jest atomowy i append-only. Ponowienie tego samego `run_id` odczytuje
+zatwierdzony segment przed wywołaniem dostawcy. Inny cutoff, wersja adaptera lub
+zawartość pod tym samym identyfikatorem powoduje błąd zamiast nadpisania danych.
+`--dry-run` nie zapisuje segmentu. Archiwizację można wyłączyć jawnie przez
+`--no-archive-live-snapshots`, ale taki przebieg nie buduje próbki do późniejszej
+walidacji kontekstu.
+
+Zatwierdzone segmenty można okresowo wyeksportować do jednej tabeli cech:
+
+```powershell
+.venv\Scripts\python -m model_buk export-context-features `
+  --archive-dir runtime/snapshot-archive `
+  --out runtime/context-datasets/context-features.csv
+```
+
+Eksport nie nadpisuje istniejącego pliku. Obok CSV zapisuje manifest z hashem
+wyniku i zbiorczym hashem manifestów źródłowych. Tabela zachowuje osobny wiersz
+dla każdego cutoffu i meczu. Nie zawiera rezultatów ani etykiet, więc sama nie
+może służyć do trenowania lub promocji modelu; kolejnym krokiem będzie
+point-in-time join z później poznanym wynikiem spotkania.
+
+## Dołączenie wyników po meczu
+
+Plik wyników CSV lub JSONL wymaga: `fixture_id`, `kickoff`, `completed_at`,
+`available_at`, `ingested_at`, `home_goals`, `away_goals`, `result_scope`,
+`provider` i `provider_version`. Dozwolony zakres wyniku to obecnie wyłącznie
+`regular_time`; aliasy `known_at` i `fetched_at` działają tak samo jak w
+snapshotach. Czas udostępnienia wyniku musi przypadać po zakończeniu meczu i po
+cutoffie prognozy.
+
+```powershell
+.venv\Scripts\python -m model_buk prepare-context-training `
+  --features runtime/context-datasets/context-features.csv `
+  --outcomes runtime/context-datasets/fixture-outcomes.csv `
+  --out runtime/context-datasets/context-training.csv
+```
+
+Niepoprawne wyniki trafiają do kwarantanny, a komenda domyślnie zatrzymuje się,
+jeśli kwarantanna nie jest pusta. Sprzeczne wyniki różnych dostawców również
+zatrzymują join. Zamrożone kolumny cech są kopiowane bez uzupełniania na
+podstawie rezultatu. Manifest nadal ustawia `promotion_eligible=false`.
+
+Plan `config/context_ablation_plan.example.json` zamraża przyszłe porównanie:
+sam rynek, rynek ze świeżą formą, rynek z kontekstem oraz pełne połączenie.
+Wybór odbywa się przez nested walk-forward po log-loss; kurs zamknięcia pozostaje
+wyłącznie diagnostyką. Plan nie jest jeszcze uruchamiany, dopóki nie powstanie
+wystarczająca liczba prospektywnych, rozliczonych obserwacji.
 
 ## Minimalny przykład
 
@@ -51,6 +110,18 @@ bieżącej formy. Limity dni oraz liczby spotkań są jawne, aby kontrolować ko
 API. Kurs z czasem aktualizacji późniejszym niż `cutoff` jest pomijany — adapter
 nie próbuje odtwarzać nieznanej wcześniejszej ceny. Zewnętrzna predykcja
 API-Football jest celowo wykluczona z cech PURE.
+
+Adapter zapisuje również `context_availability` dla każdego meczu. Pusta lista
+składów po udanym zapytaniu ma status `observed_empty`; brak pola ma status
+`missing`, a nieudane wywołanie endpointu `provider_error`. Dzięki temu brak
+informacji nie może zostać po cichu potraktowany jako neutralny kontekst.
+
+Snapshoty można zamienić na wersjonowaną tabelę cech przez
+`build_match_context_features`. Warstwa ta utrzymuje świeżą formę poza
+kontekstem meczu, aby przyszły test mógł osobno porównać `form`, `context` oraz
+`form + context`. Nieznane wartości liczbowe pozostają `NaN` i mają jawne maski
+statusu. Na tym etapie cechy są rejestrowane do treningu i audytu, ale nie
+zmieniają jeszcze prawdopodobieństw obecnego modelu.
 
 `MultiMarketSnapshotPredictor` uruchamia istniejący silnik PURE wyłącznie na
 terminarzu i danych zespołów, a kursy dołącza dopiero po obliczeniu
@@ -133,7 +204,8 @@ $env:API_FOOTBALL_KEY = "..."
 
 Powtórzenie tego samego `run_id` i `cutoff` odczyta zatwierdzony wynik bez
 ponownego zużywania API. `--dry-run` nie zapisuje wyniku pipeline'u, ale w trybie
-live nadal może wykonać requesty i uzupełnić lokalny cache.
+live nadal może wykonać requesty i uzupełnić lokalny cache. Nie zapisuje również
+segmentu prospektywnego archiwum.
 
 Tryb offline nie tworzy klienta API:
 

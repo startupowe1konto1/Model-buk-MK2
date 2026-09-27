@@ -19,6 +19,8 @@ def test_default_paper_scan_config_is_versioned_and_typed() -> None:
 
     assert config.version == CONFIG_VERSION
     assert isinstance(config.output_dir, Path)
+    assert config.snapshot_archive_dir == Path("runtime/snapshot-archive")
+    assert config.archive_live_snapshots is True
     assert isinstance(config.history_path, Path)
     assert config.history_path == Path("data/multileague/europe16_matches_v05.csv.gz")
     assert config.api_day_offsets == (0, 1)
@@ -56,6 +58,7 @@ def test_config_id_is_stable_and_changes_with_configuration() -> None:
         ("min_data_quality", 101.0),
         ("quote_freshness", timedelta(0)),
         ("required_feature_groups", {}),
+        ("archive_live_snapshots", "yes"),
     ],
 )
 def test_ranges_are_validated(field_name: str, value: object) -> None:

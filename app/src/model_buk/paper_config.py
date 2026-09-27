@@ -62,6 +62,8 @@ class PaperScanConfig:
 
     version: str = CONFIG_VERSION
     output_dir: Path = Path("runtime/paper-runs")
+    snapshot_archive_dir: Path = Path("runtime/snapshot-archive")
+    archive_live_snapshots: bool = True
     history_path: Path = Path("data/multileague/europe16_matches_v05.csv.gz")
     model_id: str | None = "pure-multimarket-v1"
     engine_id: str | None = None
@@ -87,7 +89,14 @@ class PaperScanConfig:
     def __post_init__(self) -> None:
         object.__setattr__(self, "version", _non_blank(self.version, field_name="version"))
         object.__setattr__(self, "output_dir", _path(self.output_dir, field_name="output_dir"))
+        object.__setattr__(
+            self,
+            "snapshot_archive_dir",
+            _path(self.snapshot_archive_dir, field_name="snapshot_archive_dir"),
+        )
         object.__setattr__(self, "history_path", _path(self.history_path, field_name="history_path"))
+        if not isinstance(self.archive_live_snapshots, bool):
+            raise PaperScanConfigError("archive_live_snapshots must be a boolean")
 
         for field_name in ("model_id", "engine_id"):
             value = getattr(self, field_name)
@@ -194,6 +203,8 @@ class PaperScanConfig:
         return {
             "version": self.version,
             "output_dir": str(self.output_dir),
+            "snapshot_archive_dir": str(self.snapshot_archive_dir),
+            "archive_live_snapshots": self.archive_live_snapshots,
             "history_path": str(self.history_path),
             "model_id": self.model_id,
             "engine_id": self.engine_id,

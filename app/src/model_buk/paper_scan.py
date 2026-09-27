@@ -26,6 +26,7 @@ from model_buk.live_provider import ApiFootballClient
 from model_buk.multimarket import MultiMarketEngine
 from model_buk.paper_config import PaperScanConfig
 from model_buk.snapshot_predictor import MultiMarketSnapshotPredictor, SnapshotPredictorPolicy
+from model_buk.snapshot_archive import ArchivingSnapshotAdapter, SnapshotArchive
 from model_buk.snapshots import SnapshotRecord
 
 
@@ -146,6 +147,11 @@ def build_paper_scan(
             ),
             clock=clock,
         )
+        if config.archive_live_snapshots:
+            adapter = ArchivingSnapshotAdapter(
+                adapter,
+                SnapshotArchive(config.snapshot_archive_dir),
+            )
         adapter_name = "api-football"
     else:
         if snapshots_path is None:

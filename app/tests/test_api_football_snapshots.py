@@ -103,7 +103,7 @@ def test_adapter_builds_future_fixture_context_and_skips_post_cutoff_quote():
     assert client.deep_values == [True]
     assert client.benchmark_values == [False]
     assert {record.feature_group for record in records} == {
-        "fixture", "odds", "injuries", "lineups", "team_form"
+        "fixture", "odds", "injuries", "lineups", "team_form", "context_availability"
     }
     assert sum(record.feature_group == "odds" for record in records) == 1
     assert all(record.entity_id != "fixture:12" for record in records)
@@ -122,8 +122,24 @@ def test_adapter_integrates_with_current_pipeline_without_network_or_raw_artifac
 
     run = pipeline.run("scheduled-1", cutoff=CUTOFF, dry_run=True)
 
-    assert run.manifest["record_count"] == 6
+    assert run.manifest["record_count"] == 7
     assert run.manifest["feature_group_counts"]["odds"] == 1
+    assert run.manifest["context_coverage"] == {
+        "fixture_count": 1,
+        "incomplete_fixture_count": 0,
+        "provider_error_fixture_count": 0,
+        "status_counts": {
+            "injuries": {"available": 1},
+            "lineups": {"observed_empty": 1},
+            "odds": {"available": 1},
+            "team_form": {"available": 1},
+        },
+    }
+    assert run.manifest["context_features"] == {
+        "schema_version": "match-context-features-v1",
+        "row_count": 1,
+        "used_in_model": False,
+    }
     assert run.result["selected"] == []
     assert list(tmp_path.iterdir()) == []
 
@@ -184,3 +200,49 @@ def test_failed_context_endpoint_is_not_misrepresented_as_empty_data():
     assert "injuries" not in groups
     assert "team_form" not in groups
     assert "lineups" in groups
+    availability = next(
+        record for record in records if record.feature_group == "context_availability"
+    )
+    assert availability.payload["features"] == {
+        "injuries": "provider_error",
+        "lineups": "observed_empty",
+        "odds": "available",
+        "team_form": "provider_error",
+    }
+
+
+def test_missing_context_key_is_not_misrepresented_as_observed_empty():
+    client = FakeClient()
+    original = client.match_context
+
+    def incomplete_context(*args, **kwargs):
+        payload = original(*args, **kwargs)
+        del payload["lineups"]
+        return payload
+
+    client.match_context = incomplete_context
+    records = _adapter(client).fetch(RunContext("run-1", CUTOFF))
+
+    assert not any(record.feature_group == "lineups" for record in records)
+    availability = next(
+        record for record in records if record.feature_group == "context_availability"
+    )
+    assert availability.payload["features"]["lineups"] == "missing"
+
+
+def test_empty_recent_observations_are_reported_as_observed_empty():
+    client = FakeClient()
+    original = client.match_context
+
+    def empty_recent_context(*args, **kwargs):
+        payload = original(*args, **kwargs)
+        payload["recent_observations"] = {"home": [], "away": []}
+        return payload
+
+    client.match_context = empty_recent_context
+    records = _adapter(client).fetch(RunContext("run-1", CUTOFF))
+
+    availability = next(
+        record for record in records if record.feature_group == "context_availability"
+    )
+    assert availability.payload["features"]["team_form"] == "observed_empty"

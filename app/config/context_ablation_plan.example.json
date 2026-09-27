@@ -1,0 +1,32 @@
+{
+  "schema_version": "context-ablation-plan-v1",
+  "target": "result_1x2_regular_time",
+  "validation": {
+    "method": "nested_walk_forward",
+    "selection_metric": "log_loss",
+    "secondary_metrics": ["brier", "ece"]
+  },
+  "variants": [
+    {
+      "name": "market",
+      "feature_families": ["market"]
+    },
+    {
+      "name": "market_recent_form",
+      "feature_families": ["market", "recent_form"]
+    },
+    {
+      "name": "market_context",
+      "feature_families": ["market", "context"]
+    },
+    {
+      "name": "market_recent_form_context",
+      "feature_families": ["market", "recent_form", "context"]
+    }
+  ],
+  "benchmark": {
+    "opening_market_role": "prior_and_benchmark",
+    "closing_market_role": "diagnostic_only"
+  },
+  "promotion_eligible": false
+}
