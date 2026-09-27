@@ -13,7 +13,9 @@
 
 1. Canonical team/competition/provider IDs.
 2. Daily append-only match and odds archive.
-3. `known_at`, `fetched_at`, provider timestamp and prediction horizon on live inputs.
+3. Provider timestamp and prediction horizon on live inputs; `known_at` and
+   `fetched_at` are accepted as feed aliases for the internal `available_at`
+   and `ingested_at` snapshot fields.
 4. Market snapshots from Polish executable bookmakers.
 5. Data-quality and provider-disagreement flags.
 

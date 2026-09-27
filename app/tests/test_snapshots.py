@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import pytest
 
-from model_buk.snapshots import SnapshotRecord, latest_as_of, snapshots_frame
+from model_buk.snapshots import SnapshotRecord, latest_as_of, snapshots_frame, validate_snapshots
 
 
 def _record(*, version: str, available_at: str, ingested_at: str, status: str) -> SnapshotRecord:
@@ -78,6 +78,64 @@ def test_future_event_is_allowed_when_information_is_already_available():
         known_by="2026-09-19T12:00:00+00:00",
     )
     assert len(selected) == 1
+
+
+def test_known_at_and_fetched_at_aliases_are_normalized_for_point_in_time_feeds():
+    frame = pd.DataFrame(
+        [
+            {
+                "entity_id": "fixture:1",
+                "feature_group": "injuries",
+                "event_time": "2026-09-20T18:00:00Z",
+                "known_at": "2026-09-20T10:00:00Z",
+                "fetched_at": "2026-09-20T10:00:05Z",
+                "provider": "provider",
+                "provider_version": "v1",
+                "payload": {"items": [{"player": "A"}]},
+            },
+            {
+                "entity_id": "fixture:1",
+                "feature_group": "lineups",
+                "event_time": "2026-09-20T18:00:00Z",
+                "known_at": "2026-09-20T10:01:00Z",
+                "fetched_at": "2026-09-20T10:01:05Z",
+                "provider": "provider",
+                "provider_version": "v1",
+                "payload": {"items": [{"player": "B"}]},
+            },
+        ]
+    )
+
+    selected = latest_as_of(
+        frame,
+        "2026-09-20T10:00:30Z",
+        known_by="2026-09-20T10:00:30Z",
+    )
+
+    assert list(selected["feature_group"]) == ["injuries"]
+    assert selected["available_at"].iloc[0] == pd.Timestamp("2026-09-20T10:00:00Z")
+    assert selected["ingested_at"].iloc[0] == pd.Timestamp("2026-09-20T10:00:05Z")
+
+
+def test_conflicting_known_at_alias_is_rejected():
+    frame = pd.DataFrame(
+        [
+            {
+                "entity_id": "fixture:1",
+                "feature_group": "injuries",
+                "event_time": "2026-09-20T18:00:00Z",
+                "available_at": "2026-09-20T10:00:00Z",
+                "known_at": "2026-09-20T10:00:01Z",
+                "ingested_at": "2026-09-20T10:00:05Z",
+                "provider": "provider",
+                "provider_version": "v1",
+                "payload": {},
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="conflicting available_at and known_at"):
+        validate_snapshots(frame)
 
 
 def test_snapshot_rejects_timezone_free_timestamps():

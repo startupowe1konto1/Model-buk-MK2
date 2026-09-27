@@ -17,6 +17,10 @@ SNAPSHOT_REQUIRED_COLUMNS = {
     "provider",
     "provider_version",
 }
+SNAPSHOT_TIME_ALIASES = {
+    "known_at": "available_at",
+    "fetched_at": "ingested_at",
+}
 
 
 def _utc_timestamp(value: str | datetime | pd.Timestamp, *, field: str) -> pd.Timestamp:
@@ -86,11 +90,21 @@ def snapshots_frame(records: Iterable[SnapshotRecord]) -> pd.DataFrame:
 
 def validate_snapshots(frame: pd.DataFrame) -> pd.DataFrame:
     """Validate and return a UTC-normalized copy of a snapshot table."""
-    missing = sorted(SNAPSHOT_REQUIRED_COLUMNS - set(frame.columns))
+    output = frame.copy()
+    for alias, canonical in SNAPSHOT_TIME_ALIASES.items():
+        if canonical not in output.columns and alias in output.columns:
+            output[canonical] = output[alias]
+        elif canonical in output.columns and alias in output.columns:
+            canonical_values = pd.to_datetime(output[canonical], errors="coerce", utc=True, format="mixed")
+            alias_values = pd.to_datetime(output[alias], errors="coerce", utc=True, format="mixed")
+            mismatch = canonical_values.notna() & alias_values.notna() & canonical_values.ne(alias_values)
+            if mismatch.any():
+                raise ValueError(f"snapshots contain conflicting {canonical} and {alias} values")
+
+    missing = sorted(SNAPSHOT_REQUIRED_COLUMNS - set(output.columns))
     if missing:
         raise ValueError(f"snapshots are missing required columns: {', '.join(missing)}")
 
-    output = frame.copy()
     for column in ("event_time", "available_at", "ingested_at"):
         parsed = pd.to_datetime(output[column], errors="coerce", utc=True, format="mixed")
         if parsed.isna().any():
