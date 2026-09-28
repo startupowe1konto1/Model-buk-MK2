@@ -26,7 +26,7 @@ podatku, a nie single.
 | Mecze z API-Football: wyniki, statystyki drużyn, zdarzenia, składy, statystyki zawodników | 47 lig, 2015–2025, 130 474 mecze | gotowe, tabele w `Documents\Model-Buk-Data\api-football\tables\history.sqlite` |
 | Kursy historyczne z football-data (Pinnacle, Bet365, średnia i maksimum rynku): zdjęcie kilka dni przed meczem i zamknięcie | 20 lig z top 20 i 8 z drugiej fali, 2012–2026 | na dysku: `Desktop\Model Buk\football_data-*.zip` |
 | Kursy bieżące z czasem pobrania, wszystkie ligi i rynki, ok. 9 bukmacherów (w tym Pinnacle i Betfair) | od 28.09.2026 | kolektor co godzinę, zadanie `\ModelBuk\OddsCollector` |
-| Kursy polskich bukmacherów | brak | historia: wycena w toku; bieżące: feed do decyzji (odds-api.io) |
+| Kursy polskich bukmacherów | brak | historia: do kupienia tylko od grudnia 2025 (tanio) albo od 2023 (drogo), patrz niżej; bieżące: feed do decyzji (odds-api.io) |
 
 Kursy historyczne istnieją tylko dla trzech rynków:
 
@@ -153,7 +153,7 @@ tuż przed meczem.
   reprezentacyjnej pierwszy pomiar: jak często Bet365, 1xBet, Betano i inni
   odstają od Pinnacle, o ile i jak długo. To przybliżenie tego, czego szukamy u
   polskich bukmacherów.
-- Uzupełnianie planu o wynik wyceny polskich kursów historycznych.
+- Aktualizacja tego planu po każdym zakończonym kroku.
 
 ## Decyzje po Twojej stronie
 
@@ -161,7 +161,34 @@ tuż przed meczem.
 |---|---|---|
 | Przedłużenie API-Football Pro | przed 28.10.2026 | inaczej kolektor staje |
 | Feed polskich kursów (np. odds-api.io, £49–99/mies.) | po dniach 4–5 | dopiero wynik testu kontra rynek pokaże, czy warto płacić |
-| Zakup historycznych polskich kursów | po wycenie | przydatny tylko do pytania 3 |
+| Zakup historycznych polskich kursów | po dniach 4–5 | przydatny tylko do pytania 3; szczegóły niżej |
+
+### Wycena historycznych kursów polskich bukmacherów
+
+Pełne notatki ze źródłami: [koszt_kursow_historycznych.md](../research_notes/Koszt%20historycznych%20kursow%20PL/koszt_kursow_historycznych.md).
+
+- Żaden dostawca nie ma licencji od samych bukmacherów; wszyscy zbierają kursy
+  wyświetlane na ich stronach. Ryzyko prawne leży głównie po stronie dostawcy,
+  ale to nie jest opinia prawna.
+- **Wariant minimalny, ok. 600–2 100 zł jednorazowo:** OddsPapi (Fortuna PL i
+  Superbet PL, pełna historia zmian od stycznia 2026, ok. 50 USD za miesiąc) i
+  odds-api.io (kursy zamknięcia od grudnia 2025, plan £99–179 za miesiąc;
+  obecność historii STS, Betclic PL, Fortuny PL, LVbet i Betfanu trzeba
+  sprawdzić w 7-dniowym okresie zwrotu). Pokrywa ok. 20–30% zakresu trzech
+  sezonów.
+- **Pełny zakres od marca 2023:** tylko OddsMarket Odds Archive (STS, Fortuna,
+  Superbet, iForBET; nie wiadomo, czy wersje polskie). Wycena indywidualna,
+  orientacyjnie 19–58 tys. zł. Demo i wycenę zamawiasz Ty.
+- **Alternatywa bez zakupu:** starsze sezony przybliżamy kursami Pinnacle,
+  Bet365 i średnią rynku z football-data, a relację polskich kursów do tej
+  referencji kalibrujemy na okresie od grudnia 2025.
+- Livesport (właściciel BetExplorera i OddsPortal) nie ma publicznej oferty
+  danych; jedyna droga to zapytanie o licencję na info@livesport.eu.
+
+Rekomendacja: nic nie kupować przed wynikiem dni 4–5. Jeśli test kontra rynek
+da sygnał, najpierw wariant minimalny razem z bieżącym feedem odds-api.io
+(ten sam plan daje oba), a OddsMarket tylko wtedy, gdy potrzebny będzie
+backtest na dłuższej historii polskich cen.
 
 ## Kryterium po pierwszych dniach
 
