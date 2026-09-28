@@ -157,6 +157,60 @@ def test_scan_with_nothing_tracked_writes_no_raw_file_but_logs_the_scan(tmp_path
     assert archive.summary()["scans"] == 1
 
 
+def test_all_leagues_mode_keeps_every_league(tmp_path):
+    archive = OddsArchive(tmp_path)
+    day = NOW.date().isoformat()
+    client = FakeClient({day: [[odds_object(1), odds_object(2, league_id=UNTRACKED)]]})
+    report = OddsCollector(client, archive, RequestBudget(max_requests=100), league_ids=None).run(NOW, [NOW.date()])
+
+    assert report.fixtures_seen == 2
+
+
+def test_raw_file_only_holds_fixtures_the_provider_refreshed(tmp_path):
+    archive = OddsArchive(tmp_path)
+    day = NOW.date().isoformat()
+    run_scan(archive, {day: [[odds_object(1), odds_object(2)]]})
+
+    refreshed = odds_object(2, home_odd=2.30)
+    refreshed["update"] = "2026-10-03T09:30:00+00:00"
+    later = NOW + timedelta(hours=1)
+    report, _ = run_scan(archive, {day: [[odds_object(1), refreshed]]}, now=later)
+
+    # Both fixtures are observed, but only fixture 2 changed at the provider.
+    assert report.fixtures_seen == 2
+    files = sorted((tmp_path / "raw" / day).glob("*.jsonl.gz"))
+    assert len(files) == 2
+    second = [json.loads(line) for line in gzip.decompress(files[1].read_bytes()).decode("utf-8").splitlines()]
+    assert [row["odds"]["fixture"]["id"] for row in second] == [2]
+
+
+def test_unchanged_scan_writes_no_raw_file(tmp_path):
+    archive = OddsArchive(tmp_path)
+    day = NOW.date().isoformat()
+    run_scan(archive, {day: [[odds_object(1)]]})
+    run_scan(archive, {day: [[odds_object(1)]]}, now=NOW + timedelta(hours=1))
+
+    assert len(list((tmp_path / "raw" / day).glob("*.jsonl.gz"))) == 1
+    assert archive.summary()["observations"] == 2
+
+
+def test_existing_database_is_migrated(tmp_path):
+    import sqlite3
+
+    conn = sqlite3.connect(tmp_path / "odds.sqlite3")
+    conn.execute(
+        "CREATE TABLE fixtures (fixture_id INTEGER PRIMARY KEY, league_id INTEGER NOT NULL, season INTEGER, "
+        "kickoff_utc TEXT NOT NULL, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+    archive = OddsArchive(tmp_path)
+    day = NOW.date().isoformat()
+    report, _ = run_scan(archive, {day: [[odds_object(1)]]})
+    assert report.fixtures_seen == 1
+
+
 def test_scan_dates_covers_today_through_horizon():
     assert scan_dates(NOW, days_ahead=2) == [date(2026, 10, 3), date(2026, 10, 4), date(2026, 10, 5)]
     assert len(scan_dates(NOW, days_ahead=2, wide_days=4)) == 7

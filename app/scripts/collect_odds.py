@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from download_history import RealHistoryClient  # noqa: E402  (same scripts/ folder)
 from model_buk.ingestion.api_football_history import RequestBudget  # noqa: E402
 from model_buk.ingestion.api_football_odds_archive import (  # noqa: E402
+    TRACKED_LEAGUE_IDS,
     OddsArchive,
     OddsCollector,
     scan_dates,
@@ -40,6 +41,12 @@ def main() -> int:
     parser.add_argument("--wide-every-hours", type=int, default=6)
     parser.add_argument("--max-requests", type=int, default=150, help="Hard cap on API calls for this run")
     parser.add_argument("--reserve", type=int, default=1500, help="Stop when the daily remaining quota drops to this")
+    parser.add_argument(
+        "--leagues",
+        choices=("all", "tracked"),
+        default="all",
+        help="all = every league the feed returns (same request cost); tracked = the 47 archived leagues",
+    )
     args = parser.parse_args()
 
     api_key = os.environ.get("API_FOOTBALL_KEY", "").strip()
@@ -56,6 +63,7 @@ def main() -> int:
         RealHistoryClient(api_key),
         archive,
         RequestBudget(max_requests=args.max_requests, reserve=args.reserve),
+        league_ids=None if args.leagues == "all" else TRACKED_LEAGUE_IDS,
     )
     report = collector.run(now, dates)
     summary = archive.summary()

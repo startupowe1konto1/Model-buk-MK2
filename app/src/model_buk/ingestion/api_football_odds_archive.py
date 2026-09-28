@@ -104,6 +104,9 @@ CREATE TABLE IF NOT EXISTS quote_state (
 CREATE INDEX IF NOT EXISTS idx_fixtures_kickoff ON fixtures (kickoff_utc);
 """
 
+# Columns added after the first release; applied to existing databases.
+_MIGRATIONS = (("fixtures", "last_api_update", "TEXT"),)
+
 
 def _iso(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).isoformat(timespec="seconds")
@@ -146,10 +149,31 @@ class OddsArchive:
         self.db_path = self.root / "odds.sqlite3"
         with closing(self._connect()) as conn:
             conn.executescript(_SCHEMA)
+            for table, column, sql_type in _MIGRATIONS:
+                existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path, timeout=60)
+
+    def changed_since_last_scan(self, objects: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+        """Objects that are new or whose provider ``update`` differs from the last one stored.
+
+        With every league tracked, most fixtures are unchanged between hourly
+        scans; writing only these keeps the raw archive close to change-only
+        while every scan still records its observations.
+        """
+
+        if not objects:
+            return []
+        with closing(self._connect()) as conn:
+            last = dict(conn.execute("SELECT fixture_id, last_api_update FROM fixtures").fetchall())
+        return [
+            obj for obj in objects
+            if last.get(int(obj["fixture"]["id"]), object()) != obj.get("update")
+        ]
 
     def write_raw(self, scan_id: str, fetched_at: datetime, objects: Sequence[Mapping[str, Any]]) -> str:
         day_dir = self.root / "raw" / fetched_at.astimezone(timezone.utc).strftime("%Y-%m-%d")
@@ -174,14 +198,17 @@ class OddsArchive:
                 fixture = obj.get("fixture") or {}
                 league = obj.get("league") or {}
                 fixture_id = int(fixture["id"])
-                conn.execute(
-                    """INSERT INTO fixtures (fixture_id, league_id, season, kickoff_utc, first_seen_at, last_seen_at)
-                       VALUES (?, ?, ?, ?, ?, ?)
-                       ON CONFLICT(fixture_id) DO UPDATE SET
-                         kickoff_utc=excluded.kickoff_utc, last_seen_at=excluded.last_seen_at""",
-                    (fixture_id, league.get("id"), league.get("season"), fixture.get("date"), fetched, fetched),
-                )
                 api_update = obj.get("update")
+                conn.execute(
+                    """INSERT INTO fixtures (fixture_id, league_id, season, kickoff_utc, first_seen_at, last_seen_at,
+                                             last_api_update)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(fixture_id) DO UPDATE SET
+                         kickoff_utc=excluded.kickoff_utc, last_seen_at=excluded.last_seen_at,
+                         last_api_update=excluded.last_api_update""",
+                    (fixture_id, league.get("id"), league.get("season"), fixture.get("date"), fetched, fetched,
+                     api_update),
+                )
                 for bookmaker in obj.get("bookmakers") or []:
                     bookmaker_id = int(bookmaker["id"])
                     conn.execute(
@@ -269,7 +296,12 @@ class OddsArchive:
 
 
 class OddsCollector:
-    """One budget-aware scan of upcoming pre-match odds for tracked leagues."""
+    """One budget-aware scan of upcoming pre-match odds.
+
+    ``league_ids=None`` keeps every league the feed returns. A date call
+    returns all leagues anyway, so this costs no extra requests; only storage
+    grows.
+    """
 
     def __init__(
         self,
@@ -277,12 +309,12 @@ class OddsCollector:
         archive: OddsArchive,
         budget: RequestBudget,
         *,
-        league_ids: Iterable[int] = TRACKED_LEAGUE_IDS,
+        league_ids: Iterable[int] | None = TRACKED_LEAGUE_IDS,
     ):
         self.client = client
         self.archive = archive
         self.budget = budget
-        self.league_ids = frozenset(league_ids)
+        self.league_ids = None if league_ids is None else frozenset(league_ids)
 
     def run(self, now: datetime, dates: Sequence[date]) -> OddsScanReport:
         scan_id = now.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -304,7 +336,7 @@ class OddsCollector:
                 for obj in payload.get("response") or []:
                     league_id = (obj.get("league") or {}).get("id")
                     kickoff = (obj.get("fixture") or {}).get("date")
-                    if league_id not in self.league_ids or not kickoff:
+                    if not kickoff or (self.league_ids is not None and league_id not in self.league_ids):
                         continue
                     # Pre-match only: a price seen after kickoff is not a
                     # pre-match quote and must never enter this archive.
@@ -315,7 +347,10 @@ class OddsCollector:
             if report.stopped_reason != "completed":
                 break
 
-        raw_file = self.archive.write_raw(scan_id, now, kept) if kept else None
+        # Raw provenance only for fixtures the provider actually refreshed;
+        # observations and change-only quotes are still recorded for all.
+        fresh = self.archive.changed_since_last_scan(kept)
+        raw_file = self.archive.write_raw(scan_id, now, fresh) if fresh else None
         report.fixtures_seen, report.quotes_changed = self.archive.record(scan_id, now, kept)
         self.archive.finish_scan(report, datetime.now(timezone.utc), raw_file)
         return report
