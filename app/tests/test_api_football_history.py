@@ -6,7 +6,11 @@ from model_buk.ingestion.api_football_history import (
     HistoryStore,
     LeagueSeason,
     RequestBudget,
+    TOP20_LEAGUES,
+    WAVE2_LEAGUES,
+    all_planned_league_seasons,
     top20_league_seasons,
+    wave2_league_seasons,
 )
 
 
@@ -16,10 +20,11 @@ LS = LeagueSeason(999, "TESTLG", "Test League", "Testland", 2020)
 class FakeClient:
     """Canned, offline responses keyed by endpoint+params; counts every call."""
 
-    def __init__(self, n_fixtures: int, *, quota_start: int = 1000, missing_ids: set[int] | None = None):
+    def __init__(self, n_fixtures: int, *, quota_start: int = 1000, missing_ids: set[int] | None = None, id_start: int = 1000):
         self.n_fixtures = n_fixtures
         self.quota = quota_start
         self.missing_ids = missing_ids or set()
+        self.id_start = id_start
         self.calls: list[tuple[str, dict]] = []
 
     def get(self, endpoint, params):
@@ -27,8 +32,11 @@ class FakeClient:
         self.quota -= 1
         headers = {"x-ratelimit-requests-remaining": str(self.quota)}
         if "league" in params and "season" in params:
+            # Real fixture ids are globally unique across every league and
+            # season; id_start lets tests simulate two distinct
+            # league-seasons in the same store without an artificial clash.
             response = [
-                {"fixture": {"id": 1000 + i}, "league": {"id": params["league"]}}
+                {"fixture": {"id": self.id_start + i}, "league": {"id": params["league"]}}
                 for i in range(self.n_fixtures)
             ]
             return {"response": response}, headers
@@ -157,7 +165,7 @@ def test_progress_reports_multiple_league_seasons_independently(tmp_path):
     other = LeagueSeason(998, "OTHERLG", "Other League", "Otherland", 2021)
     downloader = HistoryDownloader(FakeClient(n_fixtures=5), store, RequestBudget(max_requests=100))
     downloader.run([LS])
-    downloader2 = HistoryDownloader(FakeClient(n_fixtures=7), store, RequestBudget(max_requests=100))
+    downloader2 = HistoryDownloader(FakeClient(n_fixtures=7, id_start=5000), store, RequestBudget(max_requests=100))
     downloader2.run([other])
 
     progress = {(p["league_id"], p["season"]): p for p in store.progress()}
@@ -193,3 +201,41 @@ def test_top20_league_seasons_scope_is_stable_and_reasonable():
     # No duplicate (league, season) pairs.
     pairs = [(ls.league_id, ls.season) for ls in seasons]
     assert len(pairs) == len(set(pairs))
+
+
+def test_wave2_league_seasons_scope_is_stable_and_disjoint_from_top20():
+    wave2 = wave2_league_seasons()
+    codes = {ls.code for ls in wave2}
+    assert len(codes) == 27
+    assert "LEAGUEONE" in codes and "ALLSVENSKAN" in codes
+    assert all(2015 <= ls.season <= 2025 for ls in wave2)
+    pairs = [(ls.league_id, ls.season) for ls in wave2]
+    assert len(pairs) == len(set(pairs))
+
+    # No league id appears in both waves.
+    top20_ids = {ls.league_id for ls in TOP20_LEAGUES}
+    wave2_ids = {ls.league_id for ls in WAVE2_LEAGUES}
+    assert top20_ids.isdisjoint(wave2_ids)
+
+
+def test_all_planned_league_seasons_is_top20_then_wave2():
+    combined = all_planned_league_seasons()
+    assert combined == TOP20_LEAGUES + WAVE2_LEAGUES
+    assert len(combined) == len(TOP20_LEAGUES) + len(WAVE2_LEAGUES)
+
+
+def test_all_planned_scope_skips_already_archived_league_seasons_for_free(tmp_path):
+    # A league-season already saved in the store must not cost a request
+    # even when it is handed to the downloader again as part of a larger,
+    # combined scope (this is exactly how a same-day continuation run works).
+    store = HistoryStore(tmp_path / "archive")
+    HistoryDownloader(FakeClient(n_fixtures=5), store, RequestBudget(max_requests=100)).run([LS])
+
+    other = LeagueSeason(998, "OTHERLG", "Other League", "Otherland", 2021)
+    client2 = FakeClient(n_fixtures=3, id_start=5000)
+    report = HistoryDownloader(client2, store, RequestBudget(max_requests=100)).run([LS, other])
+    # Both are reported complete (LS was already done before this call), but
+    # only OTHERLG cost any requests this run.
+    assert set(report.league_seasons_completed) == {"TESTLG:2020", "OTHERLG:2021"}
+    assert len(client2.calls) == 2  # 1 ids call + 1 batch call, both for OTHERLG only
+    assert all(params.get("league") != 999 for _, params in client2.calls)

@@ -100,6 +100,69 @@ def top20_league_seasons() -> tuple[LeagueSeason, ...]:
     return TOP20_LEAGUES
 
 
+# Second wave: the rest of the 65 European leagues with confirmed fixture
+# statistics from the 2026-09-28 catalog probe, minus the 20 leagues above,
+# minus women's competitions and minus leagues with fewer than 3 seasons of
+# stats coverage (too little history to be useful for training). Generated
+# from app/runtime/api_catalog/leagues_2026-09-28.json by
+# app/runtime/api_catalog/gen_expansion_leagues.py; season_to is capped at
+# 2025 (last fully completed season) for the same reason as TOP20_LEAGUES.
+# Includes the Russian top two divisions: they are excluded from most
+# European bookmakers' current odds coverage (sanctions since 2022), but
+# their historical match statistics remain legitimate training data.
+WAVE2_LEAGUES: tuple[LeagueSeason, ...] = tuple(
+    LeagueSeason(league_id, code, name, country, season)
+    for league_id, code, name, country, season_from, season_to in (
+        (219, "2LIGA", "2. Liga", "Austria", 2015, 2025),
+        (116, "PREMIERLEAGUE", "Premier League", "Belarus", 2020, 2025),
+        (145, "CHALLENGERPROL", "Challenger Pro League", "Belgium", 2023, 2025),
+        (172, "FIRSTLEAGUE", "First League", "Bulgaria", 2018, 2025),
+        (210, "HNL", "HNL", "Croatia", 2019, 2025),
+        (318, "1DIVISION", "1. Division", "Cyprus", 2018, 2025),
+        (345, "CZECHLIGA", "Czech Liga", "Czech-Republic", 2019, 2025),
+        (41, "LEAGUEONE", "League One", "England", 2015, 2025),
+        (42, "LEAGUETWO", "League Two", "England", 2017, 2025),
+        (244, "VEIKKAUSLIIGA", "Veikkausliiga", "Finland", 2015, 2025),
+        (80, "3LIGA", "3. Liga", "Germany", 2017, 2025),
+        (271, "NBI", "NB I", "Hungary", 2019, 2025),
+        (357, "PREMIERDIVISIO", "Premier Division", "Ireland", 2023, 2025),
+        (383, "LIGATHAAL", "Ligat Ha'al", "Israel", 2021, 2025),
+        (89, "EERSTEDIVISIE", "Eerste Divisie", "Netherlands", 2016, 2025),
+        (103, "ELITESERIEN", "Eliteserien", "Norway", 2016, 2025),
+        (95, "SEGUNDALIGA", "Segunda Liga", "Portugal", 2019, 2025),
+        (283, "LIGAI", "Liga I", "Romania", 2016, 2025),
+        (235, "PREMIERLEAGUE2", "Premier League", "Russia", 2016, 2025),
+        (236, "FIRSTLEAGUE2", "First League", "Russia", 2021, 2025),
+        (286, "SUPERLIGA", "Super Liga", "Serbia", 2019, 2025),
+        (332, "SUPERLIGA2", "Super Liga", "Slovakia", 2019, 2025),
+        (373, "1SNL", "1. SNL", "Slovenia", 2019, 2023),
+        (113, "ALLSVENSKAN", "Allsvenskan", "Sweden", 2016, 2025),
+        (114, "SUPERETTAN", "Superettan", "Sweden", 2020, 2025),
+        (204, "1LIG", "1. Lig", "Turkey", 2016, 2025),
+        (333, "PREMIERLEAGUE3", "Premier League", "Ukraine", 2016, 2025),
+    )
+    for season in range(season_from, season_to + 1)
+)
+
+
+def wave2_league_seasons() -> tuple[LeagueSeason, ...]:
+    """Second-wave scope: the rest of the covered European leagues."""
+
+    return WAVE2_LEAGUES
+
+
+def all_planned_league_seasons() -> tuple[LeagueSeason, ...]:
+    """Full planned scope: top-20 first, then the second wave.
+
+    Safe to hand straight to :meth:`HistoryDownloader.run` even after the
+    top-20 leagues are already fully archived: ``HistoryStore.has_ids``
+    makes each already-completed league-season a zero-request no-op, so a
+    run only ever spends budget on genuinely pending work.
+    """
+
+    return TOP20_LEAGUES + WAVE2_LEAGUES
+
+
 class HistoryHttpClient(Protocol):
     def get(
         self, endpoint: str, params: Mapping[str, Any]
@@ -389,6 +452,9 @@ __all__ = [
     "LeagueSeason",
     "TOP20_LEAGUES",
     "top20_league_seasons",
+    "WAVE2_LEAGUES",
+    "wave2_league_seasons",
+    "all_planned_league_seasons",
     "HistoryHttpClient",
     "RequestBudget",
     "HistoryStore",

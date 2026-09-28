@@ -32,7 +32,7 @@ from model_buk.ingestion.api_football_history import (  # noqa: E402
     HistoryDownloader,
     HistoryStore,
     RequestBudget,
-    top20_league_seasons,
+    all_planned_league_seasons,
 )
 
 
@@ -81,9 +81,10 @@ def main() -> None:
     budget = RequestBudget(max_requests=args.max_requests, reserve=args.reserve)
     downloader = HistoryDownloader(client, store, budget, sleep_between_requests=args.sleep)
 
+    scope = all_planned_league_seasons()
     print(f"Data dir: {args.data_dir}")
-    print(f"Scope: {len(top20_league_seasons())} league-seasons")
-    report = downloader.run(top20_league_seasons())
+    print(f"Scope: {len(scope)} league-seasons (already-archived ones cost 0 requests)")
+    report = downloader.run(scope)
 
     print(f"Requests spent this run: {report.requests_spent}")
     print(f"Stopped: {report.stopped_reason}")
