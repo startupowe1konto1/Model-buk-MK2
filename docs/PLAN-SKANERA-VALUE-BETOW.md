@@ -23,10 +23,26 @@ podatku, a nie single.
 
 | Dane | Zakres | Stan |
 |---|---|---|
-| Mecze z API-Football: wyniki, statystyki drużyn, zdarzenia, składy, statystyki zawodników | 47 lig, 2015–2025, 130 474 mecze | gotowe, tabele w `Documents\Model-Buk-Data\api-football\tables\history.sqlite` |
-| Kursy historyczne z football-data (Pinnacle, Bet365, średnia i maksimum rynku): zdjęcie kilka dni przed meczem i zamknięcie | 20 lig z top 20 i 8 z drugiej fali, 2012–2026 | na dysku: `Desktop\Model Buk\football_data-*.zip` |
+| Mecze z API-Football: wyniki, statystyki drużyn, zdarzenia, składy, statystyki zawodników | 47 lig, 2015–2026, ok. 134 tys. meczów | gotowe, tabele w `Documents\Model-Buk-Data\api-football\tables\history.sqlite`; bieżący sezon dociągany co godzinę (`\ModelBuk\RefreshRecentMatches`) i przy logowaniu (`RefreshCurrentSeason`) |
+| Kontuzje i absencje (wstecz: kto nie zagrał), trenerzy, transfery, przerwy zawodników | kontuzje 2021–2026 (135 tys.), transfery 374 tys. ruchów, przerwy 45,6 tys. zawodników od 2023 | gotowe, `api-football-extras\tables\extras.sqlite`; kontuzje historyczne **przeciekają** jako cecha, bo nie wiadomo, kiedy stały się znane |
+| Kontuzje, składy i predykcje API ze znacznikiem czasu przed meczem | od 29.09.2026 | kolektor co 20 minut, `\ModelBuk\PrematchCollector`; to jest uczciwe źródło cech „na dzień meczu” |
+| Kursy historyczne z football-data (Pinnacle, Bet365, średnia i maksimum rynku): zdjęcie kilka dni przed meczem i zamknięcie | 20 lig z top 20 i 8 z drugiej fali, 2012–2026 | połączone 1:1 z meczami API-Football: 99,92% meczów top 20 z lat 2015–2025, `joined\fd_af_matches.sqlite` |
 | Kursy bieżące z czasem pobrania, wszystkie ligi i rynki, ok. 9 bukmacherów (w tym Pinnacle i Betfair) | od 28.09.2026 | kolektor co godzinę, zadanie `\ModelBuk\OddsCollector` |
 | Kursy polskich bukmacherów | brak | historia: do kupienia tylko od grudnia 2025 (tanio) albo od 2023 (drogo), patrz niżej; bieżące: feed do decyzji (odds-api.io) |
+
+Budżet API-Football (7 500 zapytań dziennie): kursy ok. 600, wyniki ok. 150,
+kolektor przedmeczowy ok. 300–450. Zostaje ok. 6 000 dziennie na dalsze
+uzupełnienia; każdy skrypt zatrzymuje się przy rezerwie 1 500.
+
+## Postęp (29.09.2026)
+
+| Krok | Stan | Gdzie |
+|---|---|---|
+| Dzień 1.1: łączenie football-data z API-Football | gotowe: 99,92% top 20, niepołączone z przyczyną | `ingestion/fd_af_join.py`, raport `joined\unmatched_report.md` |
+| Dzień 1.2: matematyka decyzji | gotowe: Kelly z podatkiem, próg PIT, τ per bukmacher, CLV na wziętym kursie, jeden typ na mecz, bramka EV z niepewnością, AKO | `markets/pricing.py`, `markets/staking.py`, `decision.py`; stare wywołania (`current_pipeline`, `historical_replay`, `backtest/gate.py`) jeszcze na dawnych ustawieniach |
+| Dzień 2: rama ewaluacji | gotowe; baseline 1X2: log-loss 1,0742 na 68,8 tys. meczów (2021–2025) | `evaluation/framework.py`, raport `reports/Rama ewaluacji - baseline.md` |
+| Stały protokół porównania modeli | gotowe: sezony testowe 2022–2025, rynki 1X2, gole 1,5/2,5/3,5, BTTS | `evaluation/protocol.py` |
+| Dni 3–5 i 5–7 | w toku | modele, porównanie, model kontra rynek, rożne/kartki/strzały |
 
 Kursy historyczne istnieją tylko dla trzech rynków:
 
@@ -51,8 +67,9 @@ rozstrzyga pytanie 2, a o pieniądzach pytanie 3.
 
 ## Najbliższe dni
 
-Pracuję w sesjach, które otwierasz. Między sesjami działa tylko kolektor kursów
-w Harmonogramie zadań. „Dzień” oznacza tu jeden blok pracy. Pracę
+Pracuję w sesjach, które otwierasz. Między sesjami działają tylko kolektory w
+Harmonogramie zadań (folder `\ModelBuk\`: kursy, wyniki, dane przedmeczowe).
+Komputer nie jest wybudzany, więc w czasie uśpienia dane przepadają. „Dzień” oznacza tu jeden blok pracy. Pracę
 implementacyjną zlecam subagentom na tańszym modelu (Sonnet), a sam przeglądam
 wyniki i diff przed każdym commitem.
 
@@ -228,4 +245,4 @@ backtest na dłuższej historii polskich cen.
 - Pinnacle i Betfair są tylko źródłem cen; system nigdy nie rekomenduje tam
   zakładu (art. 107 KKS).
 - Przed każdym commitem czytany jest diff, a pełny zestaw testów musi przejść
-  (dziś 346).
+  (dziś 657 w `app/` i 130 w katalogu głównym).
