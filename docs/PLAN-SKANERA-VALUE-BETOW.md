@@ -13,14 +13,25 @@ które u konkretnego legalnego polskiego bukmachera mają dodatnią wartość
 oczekiwaną po podatku. Wybiera kupony z najwyższą dolną granicą EV, a nie z
 najwyższą szansą trafienia. Może nie wskazać niczego.
 
-Horyzont (ustalony 29.09.2026): skaner szuka value betów wśród **wszystkich
-dzisiejszych** meczów w obsługiwanych rozgrywkach, które jeszcze się nie
-zaczęły, i robi to wielokrotnie w ciągu dnia (częstotliwość ustalimy w
-testach), bo kursy i składy się zmieniają. Jeśli dziś w obsługiwanych
-rozgrywkach nie ma żadnego meczu, przechodzi na najbliższy dzień z meczami
-(do 7 dni naprzód) i wyraźnie to zaznacza. Dziś `paper_scan` patrzy sztywno
-na dziś i jutro (`day_offsets=(0, 1)`, maks. 20 meczów, 16 lig), więc ta
-reguła wchodzi przy budowie skanera produkcyjnego.
+Pula kandydatów (ustalone 29.09.2026): value betów jest mało, więc skaner
+musi mieć **jak najwięcej meczów i kursów** do przejrzenia:
+
+- wszystkie mecze, które jeszcze się nie zaczęły i mają wystawione kursy: dziś
+  i kolejne dni, dopóki bukmacherzy publikują ceny (kolektor już teraz co 6
+  godzin zbiera kursy do 6 dni naprzód, a co godzinę na dziś i 2 kolejne dni);
+- wszystkie rozgrywki, dla których mamy model (od 30.09: 89), i dokładanie
+  kolejnych, gdy dane pozwolą;
+- wszystkie rynki, dla których mamy model (1X2, gole, BTTS, handicap, rożne,
+  kartki, strzały), i wszyscy bukmacherzy z feedu;
+- skan wielokrotnie w ciągu dnia (częstotliwość ustalimy w testach), bo kursy
+  i składy się zmieniają; kursy na dalsze dni są mniej dopracowane przez
+  bukmacherów, co może dawać więcej okazji, ale też więcej ruchu ceny do
+  meczu.
+
+Bez sztucznych limitów liczby meczów. Wynik to lista posortowana po dolnej
+granicy EV, pogrupowana po dniu meczu, z dzisiejszymi na górze. Dziś
+`paper_scan` patrzy sztywno na dziś i jutro (`day_offsets=(0, 1)`, maks. 20
+meczów, 16 lig), więc ta reguła wchodzi przy budowie skanera produkcyjnego.
 
 Progi, które wyznaczają cały projekt (τ = 0,88, czyli podatek 12% od stawki):
 singiel wychodzi na zero przy kursie o 13,6% wyższym od uczciwego, AKO z 3 nóg
