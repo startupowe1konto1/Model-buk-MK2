@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from model_buk.ingestion.api_football_history import TOP20_LEAGUES, WAVE2_LEAGUES
+from model_buk.ingestion.api_football_history import all_planned_league_seasons
 
 SCHEMA_VERSION = "api-football-history-tables-v1"
 DEFAULT_FILES_PER_TRANSACTION = 200
@@ -346,14 +346,14 @@ _INSERT_SQL: dict[str, str] = {
 
 # Fallback when the archive has no state.sqlite3 (e.g. a copied subset):
 # the downloader's own league catalog still maps league ids to codes.
-_CATALOG_LEAGUE_CODES: dict[int, str] = {ls.league_id: ls.code for ls in TOP20_LEAGUES + WAVE2_LEAGUES}
+_CATALOG_LEAGUE_CODES: dict[int, str] = {ls.league_id: ls.code for ls in all_planned_league_seasons()}
 # Several wave-2 codes are ambiguous on their own (PREMIERLEAGUE is Belarus,
 # PREMIERLEAGUE2 Russia...), so the quality report also shows the country.
-_CATALOG_COUNTRIES: dict[int, str] = {ls.league_id: ls.country for ls in TOP20_LEAGUES + WAVE2_LEAGUES}
-# Report order: top-20 leagues first, then the second wave, as planned.
+_CATALOG_COUNTRIES: dict[int, str] = {ls.league_id: ls.country for ls in all_planned_league_seasons()}
+# Report order: top-20 leagues first, then the later waves and cups, as planned.
 _CATALOG_ORDER: dict[int, int] = {
     league_id: position
-    for position, league_id in enumerate(dict.fromkeys(ls.league_id for ls in TOP20_LEAGUES + WAVE2_LEAGUES))
+    for position, league_id in enumerate(dict.fromkeys(ls.league_id for ls in all_planned_league_seasons()))
 }
 
 _EMPTY: Mapping[str, Any] = {}

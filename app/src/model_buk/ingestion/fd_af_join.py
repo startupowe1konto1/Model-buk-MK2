@@ -85,8 +85,8 @@ class Division:
 
 
 # football-data division / country-file code -> API-Football league id.  Divisions
-# that are absent here (Conference, Scottish lower tiers, non-European extras,
-# the Swiss Challenge League) have no league in the history archive and are
+# that are absent here (Conference, Scottish lower tiers, the Swiss Challenge
+# League) have no league in the history archive and are
 # reported as "no league mapping" instead of being guessed.
 DIVISIONS: tuple[Division, ...] = (
     Division("E0", 39, "Premier League (Anglia)"),
@@ -117,6 +117,14 @@ DIVISIONS: tuple[Division, ...] = (
     Division("IRL", 357, "Premier Division (Irlandia)"),
     Division("ROU", 283, "Liga I (Rumunia)"),
     Division("RUS", 235, "Premier Liga (Rosja)"),
+    # Third wave (non-European leagues archived from 2026-09-30 on). The ARG
+    # file also carries the separate Copa de la Liga, which is not mapped.
+    Division("ARG", 128, "Liga Profesional (Argentyna)", league_name="Liga Profesional"),
+    Division("BRA", 71, "Serie A (Brazylia)"),
+    Division("MEX", 262, "Liga MX (Meksyk)"),
+    Division("USA", 253, "MLS (USA)"),
+    Division("JPN", 98, "J1 League (Japonia)"),
+    Division("CHN", 169, "Super League (Chiny)"),
 )
 
 DIVISION_BY_CODE: dict[str, Division] = {division.code: division for division in DIVISIONS}

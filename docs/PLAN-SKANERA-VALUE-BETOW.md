@@ -13,8 +13,10 @@ które u konkretnego legalnego polskiego bukmachera mają dodatnią wartość
 oczekiwaną po podatku. Wybiera kupony z najwyższą dolną granicą EV, a nie z
 najwyższą szansą trafienia. Może nie wskazać niczego.
 
-Horyzont (ustalony 29.09.2026): skaner szuka value betów na **dzisiejsze**
-mecze, które jeszcze się nie zaczęły. Jeśli dziś w obsługiwanych
+Horyzont (ustalony 29.09.2026): skaner szuka value betów wśród **wszystkich
+dzisiejszych** meczów w obsługiwanych rozgrywkach, które jeszcze się nie
+zaczęły, i robi to wielokrotnie w ciągu dnia (częstotliwość ustalimy w
+testach), bo kursy i składy się zmieniają. Jeśli dziś w obsługiwanych
 rozgrywkach nie ma żadnego meczu, przechodzi na najbliższy dzień z meczami
 (do 7 dni naprzód) i wyraźnie to zaznacza. Dziś `paper_scan` patrzy sztywno
 na dziś i jutro (`day_offsets=(0, 1)`, maks. 20 meczów, 16 lig), więc ta
@@ -50,6 +52,7 @@ uzupełnienia; każdy skrypt zatrzymuje się przy rezerwie 1 500.
 | Dzień 2: rama ewaluacji | gotowe; baseline 1X2: log-loss 1,0742 na 68,8 tys. meczów (2021–2025) | `evaluation/framework.py`, raport `reports/Rama ewaluacji - baseline.md` |
 | Stały protokół porównania modeli | gotowe: sezony testowe 2022–2025, rynki 1X2, gole 1,5/2,5/3,5, BTTS | `evaluation/protocol.py` |
 | Dni 3–5 i 5–7 | w toku | modele, porównanie, model kontra rynek, rożne/kartki/strzały |
+| Rozszerzenie zakresu: 26 męskich lig spoza Europy i 16 pucharów klubowych (LM, LE, LKE, Libertadores, Sudamericana, krajowe puchary) | pobieranie od nocy 30.09 (`\ModelBuk\NightlyHistoryBuild`, 02:15, do 5 000 zapytań na noc), potem co noc przebudowa tabel i połączenia z football-data | `api_football_history.py` (`WAVE3_LEAGUES`, `CUP_COMPETITIONS`); kursy Pinnacle dla USA, Brazylii, Argentyny, Meksyku, Japonii i Chin są już w plikach football-data. Protokół porównania modeli zostaje na 47 ligach europejskich |
 
 Kursy historyczne istnieją tylko dla trzech rynków:
 
@@ -241,6 +244,25 @@ backtest na dłuższej historii polskich cen.
    godzinach przed meczem co 10–15 minut. Rekomendacja tylko przy kursach
    młodszych niż 10 minut. Powiadomienia tylko dla bukmacherów, u których masz
    konto.
+
+## Na później: sygnały przepływu pieniędzy (pomysł z 29.09.2026)
+
+Idea: wyłapać moment, w którym duże („ostre”) pieniądze przesuwają kurs,
+zanim polski bukmacher go poprawi. Przepływ pieniędzy jest już zawarty w
+cenie Pinnacle i Betfair, więc zarobić da się tylko na **opóźnieniu**
+miękkiego bukmachera. To rozwinięcie strategii „czysta referencja” z dni 4–5
+o dynamikę ruchu kursu. Wracamy do tego po wyniku testu kontra rynek i po
+kilku tygodniach danych z kolektora.
+
+| Źródło | Co daje | Stan i przeszkody |
+|---|---|---|
+| Własny detektor spadków kursów | Ruch kursu Pinnacle i Betfair między zdjęciami z naszego kolektora (9 bukmacherów, od 28.09) przy stojącym kursie miękkiego bukmachera | Darmowe, dane już się zbierają. Kolektor co godzinę gubi szybsze ruchy; w ostatnich godzinach przed meczem trzeba częściej (i tak jest w planie produkcji). Test: czy taki ruch przewiduje dalszy ruch do zamknięcia i wynik lepiej niż sama cena |
+| Giełda Betfair: obrót na wynik | Prawdziwy wolumen stawek (ile pieniędzy na każdy wynik) | Wymaga konta Betfair i klucza API. Betfair nie ma polskiej licencji, więc najpierw sprawdzenie prawne (art. 107 KKS); zasada planu: Betfair tylko jako źródło cen. Dane historyczne Betfair są płatne |
+| OddsPortal „Dropping Odds” | Lista kursów, które mocno spadły u wielu bukmacherów | Brak API; właściciel (Livesport) nie ma publicznej oferty danych, a scraping łamie regulamin. Najwyżej ręczne porównanie z naszym detektorem |
+| Skanery komercyjne: RebelBetting, BetBurger, Breaking-Bet, OddsJam, TxOdds | Gotowe porównanie cen miękkich z ostrymi, „sharp money”, arbitraże | Płatne; zwykle bez polskich bukmacherów i bez podatku 12%. Przydatne jako punkt odniesienia; opis konkurencji w `research_notes/Weryfikacja modeli i value bettingu/analiza_serwisow_konkurencji.md` |
+
+Kolejność: najpierw własny detektor (koszt zero), potem decyzja o Betfair
+po opinii prawnej, a skanery komercyjne tylko jako porównanie.
 
 ## Stałe zasady
 

@@ -151,16 +151,95 @@ def wave2_league_seasons() -> tuple[LeagueSeason, ...]:
     return WAVE2_LEAGUES
 
 
+# Third wave (added 2026-09-29): every men's league outside Europe with at
+# least 3 seasons of fixture statistics in the 2026-09-28 catalog probe.
+# Calendar-year leagues (MLS, Brazil, Japan, ...) use the year as the season,
+# so 2025 is their last completed season just as for the European ones; the
+# running 2026 season is handled by CurrentSeasonRefresher. season_from is
+# the first season with statistics, never earlier than 2015.
+WAVE3_LEAGUES: tuple[LeagueSeason, ...] = tuple(
+    LeagueSeason(league_id, code, name, country, season)
+    for league_id, code, name, country, season_from, season_to in (
+        (128, "ARG", "Liga Profesional Argentina", "Argentina", 2015, 2025),
+        (188, "AUS", "A-League", "Australia", 2015, 2025),
+        (344, "BOL", "Primera Division", "Bolivia", 2023, 2025),
+        (71, "BRA", "Serie A", "Brazil", 2015, 2025),
+        (72, "BRA2", "Serie B", "Brazil", 2017, 2025),
+        (475, "PAULISTA", "Paulista - A1", "Brazil", 2020, 2025),
+        (479, "CAN", "Canadian Premier League", "Canada", 2020, 2025),
+        (265, "CHI", "Primera Division", "Chile", 2018, 2025),
+        (169, "CHN", "Super League", "China", 2016, 2025),
+        (239, "COL", "Primera A", "Colombia", 2016, 2025),
+        (242, "ECU", "Liga Pro", "Ecuador", 2018, 2025),
+        (233, "EGY", "Premier League", "Egypt", 2021, 2025),
+        (323, "IND", "Indian Super League", "India", 2018, 2025),
+        (98, "JPN", "J1 League", "Japan", 2015, 2025),
+        (262, "MEX", "Liga MX", "Mexico", 2016, 2025),
+        (200, "MAR", "Botola Pro", "Morocco", 2022, 2025),
+        (281, "PER", "Primera Division", "Peru", 2017, 2025),
+        (305, "QAT", "Stars League", "Qatar", 2023, 2025),
+        (307, "KSA", "Pro League", "Saudi-Arabia", 2016, 2025),
+        (288, "RSA", "Premier Soccer League", "South-Africa", 2019, 2025),
+        (292, "KOR", "K League 1", "South-Korea", 2020, 2025),
+        (296, "THA", "Thai League 1", "Thailand", 2023, 2025),
+        (253, "MLS", "Major League Soccer", "USA", 2015, 2025),
+        (301, "UAE", "Pro League", "United-Arab-Emirates", 2018, 2025),
+        (268, "URU", "Primera Division", "Uruguay", 2021, 2025),
+        (270, "URUCLAUSURA", "Primera Division - Clausura", "Uruguay", 2020, 2023),
+    )
+    for season in range(season_from, season_to + 1)
+)
+
+# Club cups (added 2026-09-29): the daily scanner needs the midweek European
+# and South American cups and the main domestic cups of the covered
+# countries. National-team competitions, super cups and friendlies are left
+# out on purpose (few matches, little history per team).
+CUP_COMPETITIONS: tuple[LeagueSeason, ...] = tuple(
+    LeagueSeason(league_id, code, name, country, season)
+    for league_id, code, name, country, season_from, season_to in (
+        (2, "UCL", "UEFA Champions League", "World", 2015, 2025),
+        (3, "UEL", "UEFA Europa League", "World", 2015, 2025),
+        (848, "UECL", "UEFA Europa Conference League", "World", 2021, 2025),
+        (13, "LIBERTADORES", "CONMEBOL Libertadores", "World", 2019, 2025),
+        (11, "SUDAMERICANA", "CONMEBOL Sudamericana", "World", 2019, 2025),
+        (45, "FACUP", "FA Cup", "England", 2015, 2025),
+        (48, "EFLCUP", "League Cup", "England", 2015, 2025),
+        (81, "DFBPOKAL", "DFB Pokal", "Germany", 2015, 2025),
+        (137, "COPPAITALIA", "Coppa Italia", "Italy", 2016, 2025),
+        (143, "COPADELREY", "Copa del Rey", "Spain", 2018, 2025),
+        (66, "COUPEDEFRANCE", "Coupe de France", "France", 2015, 2025),
+        (90, "KNVBBEKER", "KNVB Beker", "Netherlands", 2019, 2025),
+        (96, "TACAPORTUGAL", "Taca de Portugal", "Portugal", 2019, 2025),
+        (206, "TURKCUP", "Turkiye Kupasi", "Turkey", 2016, 2025),
+        (108, "PUCHARPOLSKI", "Puchar Polski", "Poland", 2019, 2024),
+        (73, "COPADOBRASIL", "Copa Do Brasil", "Brazil", 2016, 2025),
+    )
+    for season in range(season_from, season_to + 1)
+)
+
+
+def wave3_league_seasons() -> tuple[LeagueSeason, ...]:
+    """Third-wave scope: covered men's leagues outside Europe."""
+
+    return WAVE3_LEAGUES
+
+
+def cup_seasons() -> tuple[LeagueSeason, ...]:
+    """Club cup competitions."""
+
+    return CUP_COMPETITIONS
+
+
 def all_planned_league_seasons() -> tuple[LeagueSeason, ...]:
-    """Full planned scope: top-20 first, then the second wave.
+    """Full planned scope: top-20, second wave, third wave, then cups.
 
     Safe to hand straight to :meth:`HistoryDownloader.run` even after the
-    top-20 leagues are already fully archived: ``HistoryStore.has_ids``
+    earlier waves are already fully archived: ``HistoryStore.has_ids``
     makes each already-completed league-season a zero-request no-op, so a
     run only ever spends budget on genuinely pending work.
     """
 
-    return TOP20_LEAGUES + WAVE2_LEAGUES
+    return TOP20_LEAGUES + WAVE2_LEAGUES + WAVE3_LEAGUES + CUP_COMPETITIONS
 
 
 class HistoryHttpClient(Protocol):
@@ -637,6 +716,10 @@ __all__ = [
     "top20_league_seasons",
     "WAVE2_LEAGUES",
     "wave2_league_seasons",
+    "WAVE3_LEAGUES",
+    "wave3_league_seasons",
+    "CUP_COMPETITIONS",
+    "cup_seasons",
     "all_planned_league_seasons",
     "HistoryHttpClient",
     "RequestBudget",

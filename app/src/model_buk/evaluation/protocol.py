@@ -32,6 +32,7 @@ from model_buk.evaluation.framework import (
     WalkForwardResult,
     over_under,
 )
+from model_buk.ingestion.api_football_history import TOP20_LEAGUES, WAVE2_LEAGUES
 
 PROTOCOL_ID = "goals-protocol-v1"
 DATA_ROOT = Path(r"C:\Users\oskar\Documents\Model-Buk-Data")
@@ -43,6 +44,11 @@ COMPARISON_CONFIG = WalkForwardConfig(
     scope="per_league",
     inner_seasons=1,
     select_per="pooled",
+)
+
+# The 47 European leagues the protocol was fixed on (top-20 + second wave).
+PROTOCOL_LEAGUE_IDS: frozenset[int] = frozenset(
+    ls.league_id for ls in TOP20_LEAGUES + WAVE2_LEAGUES
 )
 
 MATCH_COLUMNS = (
@@ -89,12 +95,23 @@ GOAL_MARKETS: tuple[Market, ...] = (
 )
 
 
-def load_history_matches(db_path: str | Path = HISTORY_DB) -> pd.DataFrame:
-    """Read the API-Football ``matches`` table read-only (all seasons, all statuses)."""
+def load_history_matches(
+    db_path: str | Path = HISTORY_DB,
+    league_ids: frozenset[int] | None = PROTOCOL_LEAGUE_IDS,
+) -> pd.DataFrame:
+    """Read the API-Football ``matches`` table read-only (all seasons, all statuses).
+
+    Limited to the protocol's 47 European leagues by default, so leagues and
+    cups added to the archive later do not change stored comparisons; pass
+    ``league_ids=None`` for everything in the archive.
+    """
 
     path = Path(db_path)
     with closing(sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)) as connection:
-        return pd.read_sql_query(f"SELECT {', '.join(MATCH_COLUMNS)} FROM matches", connection)
+        frame = pd.read_sql_query(f"SELECT {', '.join(MATCH_COLUMNS)} FROM matches", connection)
+    if league_ids is not None:
+        frame = frame[frame["league_id"].isin(league_ids)].reset_index(drop=True)
+    return frame
 
 
 def _table_name(market: Market) -> str:
@@ -148,6 +165,7 @@ __all__ = [
     "DATA_ROOT",
     "HISTORY_DB",
     "PREDICTIONS_DIR",
+    "PROTOCOL_LEAGUE_IDS",
     "COMPARISON_CONFIG",
     "MATCH_COLUMNS",
     "MARKET_BTTS",

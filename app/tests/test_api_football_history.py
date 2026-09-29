@@ -218,10 +218,11 @@ def test_wave2_league_seasons_scope_is_stable_and_disjoint_from_top20():
     assert top20_ids.isdisjoint(wave2_ids)
 
 
-def test_all_planned_league_seasons_is_top20_then_wave2():
+def test_all_planned_league_seasons_is_top20_then_waves_then_cups():
+    from model_buk.ingestion.api_football_history import CUP_COMPETITIONS, WAVE3_LEAGUES
+
     combined = all_planned_league_seasons()
-    assert combined == TOP20_LEAGUES + WAVE2_LEAGUES
-    assert len(combined) == len(TOP20_LEAGUES) + len(WAVE2_LEAGUES)
+    assert combined == TOP20_LEAGUES + WAVE2_LEAGUES + WAVE3_LEAGUES + CUP_COMPETITIONS
 
 
 def test_all_planned_scope_skips_already_archived_league_seasons_for_free(tmp_path):
@@ -308,3 +309,19 @@ def test_current_season_scope_has_one_entry_per_league():
     scope = current_season_scope(2026)
     assert len({ls.league_id for ls in scope}) == len(scope) > 40
     assert {ls.season for ls in scope} == {2026}
+
+
+def test_third_wave_and_cups_are_disjoint_and_uniquely_coded():
+    from model_buk.ingestion.api_football_history import CUP_COMPETITIONS, WAVE3_LEAGUES
+
+    waves = (TOP20_LEAGUES, WAVE2_LEAGUES, WAVE3_LEAGUES, CUP_COMPETITIONS)
+    ids = [{ls.league_id for ls in wave} for wave in waves]
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            assert not ids[i] & ids[j]
+    code_by_id: dict[int, str] = {}
+    for ls in all_planned_league_seasons():
+        assert code_by_id.setdefault(ls.league_id, ls.code) == ls.code
+    assert len(set(code_by_id.values())) == len(code_by_id)
+    assert len(ids[2]) == 26 and len(ids[3]) == 16
+    assert all(2015 <= ls.season <= 2025 for ls in WAVE3_LEAGUES + CUP_COMPETITIONS)

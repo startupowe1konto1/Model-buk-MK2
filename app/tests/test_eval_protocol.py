@@ -59,3 +59,15 @@ def test_save_and_load_round_trip_and_stale_protocol_is_rejected(tmp_path):
         connection.commit()
     with pytest.raises(ValueError, match="protocol"):
         load_predictions(result.model, MARKET_BTTS, tmp_path)
+
+
+def test_protocol_matches_are_limited_to_the_47_european_leagues(tmp_path):
+    from model_buk.evaluation.protocol import MATCH_COLUMNS, PROTOCOL_LEAGUE_IDS, load_history_matches
+
+    assert len(PROTOCOL_LEAGUE_IDS) == 47
+    db = tmp_path / "history.sqlite"
+    rows = pd.DataFrame([{c: None for c in MATCH_COLUMNS} | {"fixture_id": i, "league_id": lid} for i, lid in enumerate((39, 253, 2))])
+    with closing(sqlite3.connect(db)) as connection:
+        rows.to_sql("matches", connection, index=False)
+    assert load_history_matches(db)["league_id"].tolist() == [39]
+    assert sorted(load_history_matches(db, league_ids=None)["league_id"]) == [2, 39, 253]

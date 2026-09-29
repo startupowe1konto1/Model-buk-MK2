@@ -161,8 +161,11 @@ def test_fixture_dates_are_today_and_tomorrow_utc():
 
 
 def test_tracked_leagues_come_from_the_planned_scope():
-    assert {39, 106, 140} <= TRACKED_LEAGUE_IDS
-    assert len(TRACKED_LEAGUE_IDS) == 47
+    from model_buk.ingestion.api_football_history import all_planned_league_seasons
+
+    assert {39, 106, 140, 253, 2} <= TRACKED_LEAGUE_IDS  # European leagues, MLS, Champions League
+    assert TRACKED_LEAGUE_IDS == {ls.league_id for ls in all_planned_league_seasons()}
+    assert len(TRACKED_LEAGUE_IDS) == 89
 
 
 def test_listing_keeps_tracked_upcoming_fixtures_and_skips_the_rest(tmp_path):
