@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 import math
 from typing import Iterable
+
+from model_buk.markets.pricing import TaxProfiles, UnknownBookmakerError
 
 
 @dataclass(frozen=True)
@@ -14,6 +16,11 @@ class OpportunityCandidate:
     ``probability_lower_bound`` is deliberately separate from the point estimate.
     Selection is based on the lower bound so that uncertainty cannot be hidden by
     a high point estimate.
+
+    ``tax_multiplier`` defaults to 1.0 (no tax) only for backward compatibility.
+    Pass ``tax_profiles`` to :func:`select_opportunities` to have the selector
+    take each candidate's multiplier from its bookmaker instead (unknown
+    bookmakers are then rejected rather than assumed).
     """
 
     fixture_id: str
@@ -129,6 +136,26 @@ def _latest_snapshot_candidates(
     return list(current.values()), rejected
 
 
+def _apply_tax_profiles(
+    candidates: Iterable[OpportunityCandidate],
+    tax_profiles: TaxProfiles,
+) -> tuple[list[OpportunityCandidate], list[RejectedOpportunity]]:
+    """Set each candidate's tax multiplier from its bookmaker; drop unknown books."""
+    resolved: list[OpportunityCandidate] = []
+    rejected: list[RejectedOpportunity] = []
+    for candidate in candidates:
+        try:
+            multiplier = tax_profiles.tax_multiplier(candidate.bookmaker)
+        except UnknownBookmakerError:
+            rejected.append(RejectedOpportunity(candidate, "unknown_bookmaker_tax"))
+            continue
+        if multiplier == candidate.tax_multiplier:
+            resolved.append(candidate)
+        else:
+            resolved.append(replace(candidate, tax_multiplier=multiplier))
+    return resolved, rejected
+
+
 def _best_executable_prices(
     candidates: Iterable[OpportunityCandidate],
 ) -> tuple[list[OpportunityCandidate], list[RejectedOpportunity]]:
@@ -157,16 +184,31 @@ def select_opportunities(
     min_conservative_ev_net: float = 0.0,
     min_conservative_market_edge: float | None = None,
     max_decimal_odds: float = 2.0,
-    max_per_fixture: int = 2,
+    max_per_fixture: int = 1,
     max_per_correlation_group: int = 1,
     decision_time: datetime | None = None,
     max_quote_age: timedelta | None = None,
+    tax_profiles: TaxProfiles | None = None,
 ) -> OpportunitySelection:
     """Select at most N independent opportunities; never pad to a target count.
 
-    Candidates first pass a strictly-positive conservative net-EV gate. They are
-    then ranked by that EV and greedily constrained by fixture and explicit
-    correlation-group exposure. Correlation groups are scoped to a fixture.
+    Candidates first pass a strictly-positive conservative net-EV gate (net EV
+    of the probability *lower bound*, so the gate scales with estimation
+    uncertainty instead of using a fixed haircut). They are then ranked by that
+    EV and greedily constrained by fixture and explicit correlation-group
+    exposure. Correlation groups are scoped to a fixture.
+
+    One pick per match is the default (``max_per_fixture=1``): the candidate
+    ranked first for a fixture is kept and the rest are rejected as
+    ``fixture_limit``. The ranking is total and deterministic: highest
+    conservative net EV, then highest probability lower bound, then the freshest
+    observation, then the smallest ``(fixture_id, market_key, selection)``.
+
+    When ``tax_profiles`` is given, every candidate's ``tax_multiplier`` is taken
+    from its bookmaker's profile (overriding the value on the candidate) and a
+    candidate whose bookmaker is not registered is rejected as
+    ``unknown_bookmaker_tax`` (fail closed). Without it the multiplier already
+    on each candidate is used.
     """
     if max_recommendations < 0:
         raise ValueError("max_recommendations must be non-negative")
@@ -195,6 +237,9 @@ def select_opportunities(
             raise ValueError("candidate observed_at cannot be after decision_time")
 
     unique, rejected = _latest_snapshot_candidates(materialized)
+    if tax_profiles is not None:
+        unique, unpriced = _apply_tax_profiles(unique, tax_profiles)
+        rejected.extend(unpriced)
     within_odds_limit: list[OpportunityCandidate] = []
     for candidate in unique:
         if candidate.decimal_odds > max_decimal_odds:
