@@ -13,6 +13,13 @@ które u konkretnego legalnego polskiego bukmachera mają dodatnią wartość
 oczekiwaną po podatku. Wybiera kupony z najwyższą dolną granicą EV, a nie z
 najwyższą szansą trafienia. Może nie wskazać niczego.
 
+Horyzont (ustalony 29.09.2026): skaner szuka value betów na **dzisiejsze**
+mecze, które jeszcze się nie zaczęły. Jeśli dziś w obsługiwanych
+rozgrywkach nie ma żadnego meczu, przechodzi na najbliższy dzień z meczami
+(do 7 dni naprzód) i wyraźnie to zaznacza. Dziś `paper_scan` patrzy sztywno
+na dziś i jutro (`day_offsets=(0, 1)`, maks. 20 meczów, 16 lig), więc ta
+reguła wchodzi przy budowie skanera produkcyjnego.
+
 Progi, które wyznaczają cały projekt (τ = 0,88, czyli podatek 12% od stawki):
 singiel wychodzi na zero przy kursie o 13,6% wyższym od uczciwego, AKO z 3 nóg
 przy 4,4% przewagi na nogę, z 5 nóg przy 2,6%. Literatura dokumentuje przewagi
