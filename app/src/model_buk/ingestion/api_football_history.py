@@ -329,6 +329,55 @@ class HistoryStore:
             )
             conn.commit()
 
+    def add_finished_ids(
+        self,
+        league_id: int,
+        season: int,
+        code: str,
+        fixture_ids: Sequence[int],
+        raw_payload: Mapping[str, Any] | None,
+    ) -> int:
+        """Register newly finished fixtures of an in-progress season.
+
+        Unlike :meth:`save_ids` this is incremental: existing rows (done or
+        missing) are left alone and only unseen ids become ``pending``.
+        Returns how many ids were new.
+        """
+
+        if raw_payload is not None:
+            season_dir = self._season_dir(league_id, season)
+            season_dir.mkdir(parents=True, exist_ok=True)
+            (season_dir / "ids_finished.json.gz").write_bytes(
+                gzip.compress(json.dumps(raw_payload, ensure_ascii=False).encode("utf-8"))
+            )
+        with closing(self._connect()) as conn:
+            before = conn.total_changes
+            conn.executemany(
+                "INSERT OR IGNORE INTO fixture_status (fixture_id, league_id, season, status) VALUES (?, ?, ?, 'pending')",
+                [(fid, league_id, season) for fid in fixture_ids],
+            )
+            added = conn.total_changes - before
+            total = conn.execute(
+                "SELECT COUNT(*) FROM fixture_status WHERE league_id=? AND season=?",
+                (league_id, season),
+            ).fetchone()[0]
+            conn.execute(
+                """INSERT INTO league_season_status (league_id, season, code, fixtures_total, ids_fetched_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(league_id, season) DO UPDATE SET
+                     fixtures_total=excluded.fixtures_total, ids_fetched_at=excluded.ids_fetched_at""",
+                (league_id, season, code, total, _utc_now_iso()),
+            )
+            conn.commit()
+        return added
+
+    def next_free_batch_sequence(self, league_id: int, season: int) -> int:
+        """One past the highest existing batch file number (safe for incremental runs)."""
+
+        batches = self._season_dir(league_id, season) / "batches"
+        numbers = [int(p.name.split(".")[0]) for p in batches.glob("*.json.gz")] if batches.is_dir() else []
+        return max(numbers, default=0) + 1
+
     def next_batch_sequence(self, league_id: int, season: int) -> int:
         with closing(self._connect()) as conn:
             row = conn.execute(
@@ -446,6 +495,140 @@ class HistoryDownloader:
         )
 
 
+FINISHED_STATUSES = "FT-AET-PEN"
+CURRENT_SEASON = 2026
+# Provider statistics are often filled in a few hours after the final whistle;
+# fetching a match too early would archive it with empty stats for good.
+DEFAULT_MIN_AGE_HOURS = 6.0
+
+
+def current_season_scope(season: int = CURRENT_SEASON) -> tuple[LeagueSeason, ...]:
+    """The planned leagues, each for one (in-progress) ``season``."""
+
+    seen: dict[int, LeagueSeason] = {}
+    for ls in all_planned_league_seasons():
+        seen.setdefault(ls.league_id, LeagueSeason(ls.league_id, ls.code, ls.name, ls.country, season))
+    return tuple(seen.values())
+
+
+class CurrentSeasonRefresher(HistoryDownloader):
+    """Incrementally archive finished matches of a season that is still running.
+
+    One list call per league (finished statuses only) plus one detail call per
+    20 not-yet-archived matches, so a daily run costs roughly one request per
+    league plus a handful of batches. Matches that finished less than
+    ``min_age_hours`` ago are skipped and picked up by a later run.
+    """
+
+    def __init__(self, *args: Any, min_age_hours: float = DEFAULT_MIN_AGE_HOURS, now: Any = None, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.min_age_hours = min_age_hours
+        self._now = now or (lambda: datetime.now(timezone.utc))
+
+    def _old_enough(self, row: Mapping[str, Any]) -> bool:
+        stamp = (row.get("fixture") or {}).get("timestamp")
+        if stamp is None:
+            return True
+        age_hours = (self._now().timestamp() - float(stamp)) / 3600.0
+        return age_hours >= self.min_age_hours
+
+    def run(self, league_seasons: Iterable[LeagueSeason]) -> DownloadReport:
+        completed: list[str] = []
+        stopped_reason = "completed"
+        for ls in league_seasons:
+            if not self.budget.allow():
+                stopped_reason = "budget_exhausted"
+                break
+            payload = self._request(
+                "/fixtures", {"league": ls.league_id, "season": ls.season, "status": FINISHED_STATUSES}
+            )
+            fixture_ids = [
+                row["fixture"]["id"]
+                for row in payload.get("response", [])
+                if (row.get("fixture") or {}).get("id") is not None and self._old_enough(row)
+            ]
+            self.store.add_finished_ids(ls.league_id, ls.season, ls.code, fixture_ids, payload)
+
+            if self._download_pending(ls):
+                completed.append(f"{ls.code}:{ls.season}")
+            else:
+                stopped_reason = "budget_exhausted"
+                break
+
+        return DownloadReport(
+            requests_spent=self.budget.spent,
+            league_seasons_completed=completed,
+            stopped_reason=stopped_reason,
+        )
+
+    def run_dates(self, dates: Iterable[Any], scope: Iterable[LeagueSeason]) -> DownloadReport:
+        """Cheap variant for frequent runs: one list call per calendar day.
+
+        ``/fixtures?date=`` returns finished matches of every league at once,
+        so a run costs a couple of requests plus the detail batches, instead
+        of one list request per league.
+        """
+
+        by_league = {ls.league_id: ls for ls in scope}
+        completed: list[str] = []
+        stopped_reason = "completed"
+        touched: dict[int, LeagueSeason] = {}
+        for day in dates:
+            if not self.budget.allow():
+                stopped_reason = "budget_exhausted"
+                break
+            payload = self._request("/fixtures", {"date": day.isoformat(), "status": FINISHED_STATUSES})
+            ids_by_league: dict[int, list[int]] = {}
+            for row in payload.get("response", []):
+                league = row.get("league") or {}
+                ls = by_league.get(league.get("id"))
+                fixture_id = (row.get("fixture") or {}).get("id")
+                if ls is None or fixture_id is None:
+                    continue
+                if league.get("season") != ls.season or not self._old_enough(row):
+                    continue
+                ids_by_league.setdefault(ls.league_id, []).append(fixture_id)
+            for league_id, ids in ids_by_league.items():
+                ls = by_league[league_id]
+                self.store.add_finished_ids(ls.league_id, ls.season, ls.code, ids, None)
+                touched[league_id] = ls
+        if stopped_reason == "completed":
+            # Also drain anything left pending by an earlier interrupted run.
+            for ls in by_league.values():
+                if self.store.pending_fixture_ids(ls.league_id, ls.season, 1):
+                    touched[ls.league_id] = ls
+        for ls in touched.values():
+            if self._download_pending(ls):
+                completed.append(f"{ls.code}:{ls.season}")
+            else:
+                stopped_reason = "budget_exhausted"
+                break
+        return DownloadReport(
+            requests_spent=self.budget.spent,
+            league_seasons_completed=completed,
+            stopped_reason=stopped_reason,
+        )
+
+    def _download_pending(self, ls: LeagueSeason) -> bool:
+        """Fetch detail for every pending match of ``ls``; False if the budget ran out."""
+
+        while True:
+            pending = self.store.pending_fixture_ids(ls.league_id, ls.season, self.batch_size)
+            if not pending:
+                return True
+            if not self.budget.allow():
+                return False
+            response = self._request("/fixtures", {"ids": "-".join(str(fid) for fid in pending)})
+            returned_ids = [
+                row["fixture"]["id"]
+                for row in response.get("response", [])
+                if (row.get("fixture") or {}).get("id") is not None
+            ]
+            sequence = self.store.next_free_batch_sequence(ls.league_id, ls.season)
+            batch_file = self.store.write_batch(ls.league_id, ls.season, response, sequence)
+            self.store.mark_batch_done(ls.league_id, ls.season, pending, returned_ids, batch_file)
+
+
 __all__ = [
     "BASE_URL",
     "DEFAULT_BATCH_SIZE",
@@ -460,4 +643,9 @@ __all__ = [
     "HistoryStore",
     "DownloadReport",
     "HistoryDownloader",
+    "CurrentSeasonRefresher",
+    "current_season_scope",
+    "CURRENT_SEASON",
+    "FINISHED_STATUSES",
+    "DEFAULT_MIN_AGE_HOURS",
 ]

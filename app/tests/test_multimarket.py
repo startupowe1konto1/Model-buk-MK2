@@ -30,7 +30,8 @@ def test_current_observations_change_expected_counts_reproducibly(multileague_hi
     assert len(adjusted["markets"]) == len(analysis["markets"])
 
 
-def test_api_football_offline_mode_is_explicit():
+def test_api_football_offline_mode_is_explicit(monkeypatch):
+    monkeypatch.delenv("API_FOOTBALL_KEY", raising=False)
     client = ApiFootballClient(api_key="")
     assert client.connected is False
     assert client.status()["connected"] is False

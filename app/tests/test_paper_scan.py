@@ -117,7 +117,8 @@ def test_history_bytes_change_engine_identity(tmp_path):
     assert first.engine_manifest["engine_id"] != second.engine_manifest["engine_id"]
 
 
-def test_live_mode_requires_provider_and_unknown_league_fails_closed(tmp_path):
+def test_live_mode_requires_provider_and_unknown_league_fails_closed(tmp_path, monkeypatch):
+    monkeypatch.delenv("API_FOOTBALL_KEY", raising=False)
     history = tmp_path / "history.csv"
     history.write_text("history", encoding="utf-8")
     config = make_config(tmp_path, history)

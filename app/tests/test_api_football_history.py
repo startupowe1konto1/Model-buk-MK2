@@ -239,3 +239,72 @@ def test_all_planned_scope_skips_already_archived_league_seasons_for_free(tmp_pa
     assert set(report.league_seasons_completed) == {"TESTLG:2020", "OTHERLG:2021"}
     assert len(client2.calls) == 2  # 1 ids call + 1 batch call, both for OTHERLG only
     assert all(params.get("league") != 999 for _, params in client2.calls)
+
+
+class CurrentSeasonClient:
+    """Lists finished matches per league; the finished set can grow between runs."""
+
+    def __init__(self, finished: list[tuple[int, float | None]]):
+        self.finished = finished
+        self.calls: list[tuple[str, dict]] = []
+
+    def get(self, endpoint, params):
+        self.calls.append((endpoint, dict(params)))
+        headers = {"x-ratelimit-requests-remaining": "5000"}
+        if "league" in params:
+            assert params.get("status") == "FT-AET-PEN"
+            rows = [
+                {"fixture": {"id": fid, **({"timestamp": ts} if ts is not None else {})}}
+                for fid, ts in self.finished
+            ]
+            return {"response": rows}, headers
+        return {"response": [{"fixture": {"id": int(x)}} for x in params["ids"].split("-")]}, headers
+
+
+def test_current_season_refresh_is_incremental_and_never_overwrites_batches(tmp_path):
+    from datetime import datetime, timezone
+
+    from model_buk.ingestion.api_football_history import CurrentSeasonRefresher
+
+    now = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc)
+    old = now.timestamp() - 48 * 3600
+    client = CurrentSeasonClient([(i, old) for i in range(1, 26)])  # 25 matches -> 2 batches
+    store = HistoryStore(tmp_path / "archive")
+    make = lambda: CurrentSeasonRefresher(client, store, RequestBudget(max_requests=100), now=lambda: now)
+
+    make().run([LS])
+    detail_calls = [c for c in client.calls if "ids" in c[1]]
+    assert len(detail_calls) == 2
+
+    client.calls.clear()
+    make().run([LS])  # nothing new: only the list call
+    assert [c[0] for c in client.calls] == ["/fixtures"] and "league" in client.calls[0][1]
+
+    client.finished += [(100 + i, old) for i in range(3)]
+    client.calls.clear()
+    make().run([LS])
+    assert len([c for c in client.calls if "ids" in c[1]]) == 1
+    batches = sorted((tmp_path / "archive/raw/999/2020/batches").glob("*.json.gz"))
+    assert [b.name for b in batches] == ["00001.json.gz", "00002.json.gz", "00003.json.gz"]
+    row = store.progress()[0]
+    assert (row["done"], row["pending"], row["fixtures_total"]) == (28, 0, 28)
+
+
+def test_current_season_refresh_skips_matches_finished_too_recently(tmp_path):
+    from datetime import datetime, timezone
+
+    from model_buk.ingestion.api_football_history import CurrentSeasonRefresher
+
+    now = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc)
+    client = CurrentSeasonClient([(1, now.timestamp() - 1 * 3600), (2, now.timestamp() - 30 * 3600)])
+    store = HistoryStore(tmp_path / "archive")
+    CurrentSeasonRefresher(client, store, RequestBudget(max_requests=100), now=lambda: now).run([LS])
+    assert store.progress()[0]["done"] == 1  # only match 2; match 1 waits for a later run
+
+
+def test_current_season_scope_has_one_entry_per_league():
+    from model_buk.ingestion.api_football_history import current_season_scope
+
+    scope = current_season_scope(2026)
+    assert len({ls.league_id for ls in scope}) == len(scope) > 40
+    assert {ls.season for ls in scope} == {2026}
