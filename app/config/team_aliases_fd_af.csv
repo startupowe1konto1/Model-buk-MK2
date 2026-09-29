@@ -1,0 +1,258 @@
+﻿# Team-name aliases: football-data.co.uk name -> API-Football team id, per league.
+# source=manual: decided by a human, never touched by the tooling and wins over everything.
+# source=block: never map this football-data name automatically (af_team_id stays empty).
+# source=auto: seeded from co-occurrence (same league, date and score, one side already known);
+#   regenerated on every run. To fix one, change its source to manual and correct af_team_id.
+# Names that already match exactly after normalisation are not listed here.
+league_id,fd_div,fd_team,af_team_id,af_team,source,support,note
+39,E0,Hull,64,Hull City,auto,32,32 of 32 co-occurrences agree
+39,E0,Man City,50,Manchester City,auto,374,374 of 374 co-occurrences agree
+39,E0,Man United,33,Manchester United,auto,374,374 of 374 co-occurrences agree
+39,E0,Nott'm Forest,65,Nottingham Forest,auto,134,134 of 134 co-occurrences agree
+39,E0,Sheffield United,62,Sheffield Utd,auto,100,100 of 100 co-occurrences agree
+39,E0,Stoke,75,Stoke City,auto,100,100 of 100 co-occurrences agree
+40,E1,Burton,748,Burton Albion,auto,80,80 of 80 co-occurrences agree
+40,E1,Hull,64,Hull City,auto,356,356 of 356 co-occurrences agree
+40,E1,Nott'm Forest,65,Nottingham Forest,auto,280,280 of 280 co-occurrences agree
+40,E1,Oxford,1338,Oxford United,auto,76,76 of 76 co-occurrences agree
+40,E1,Peterboro,1350,Peterborough,auto,38,38 of 38 co-occurrences agree
+40,E1,Sheffield United,62,Sheffield Utd,auto,232,232 of 232 co-occurrences agree
+40,E1,Sheffield Weds,74,Sheffield Wednesday,auto,360,360 of 360 co-occurrences agree
+40,E1,Stoke,75,Stoke City,auto,318,318 of 318 co-occurrences agree
+41,E2,Accrington,1360,Accrington ST,auto,169,169 of 169 co-occurrences agree
+41,E2,Bristol Rvs,1334,Bristol Rovers,auto,285,285 of 285 co-occurrences agree
+41,E2,Burton,748,Burton Albion,auto,318,318 of 318 co-occurrences agree
+41,E2,Cambridge,1370,Cambridge United,auto,140,140 of 140 co-occurrences agree
+41,E2,Exeter,1364,Exeter City,auto,140,140 of 140 co-occurrences agree
+41,E2,Hull,64,Hull City,auto,34,34 of 34 co-occurrences agree
+41,E2,Mansfield,1374,Mansfield Town,auto,72,72 of 72 co-occurrences agree
+41,E2,Oxford,1338,Oxford United,auto,286,286 of 286 co-occurrences agree
+41,E2,Peterboro,1350,Peterborough,auto,360,360 of 360 co-occurrences agree
+41,E2,Sheffield United,62,Sheffield Utd,auto,78,78 of 78 co-occurrences agree
+41,E2,Sheffield Weds,74,Sheffield Wednesday,auto,70,70 of 70 co-occurrences agree
+41,E2,Stockport,4686,Stockport County,auto,72,72 of 72 co-occurrences agree
+41,E2,Swindon,1353,Swindon Town,auto,112,112 of 112 co-occurrences agree
+42,E3,Accrington,1360,Accrington ST,auto,146,146 of 146 co-occurrences agree
+42,E3,Bristol Rvs,1334,Bristol Rovers,auto,70,70 of 70 co-occurrences agree
+42,E3,Cambridge,1370,Cambridge United,auto,177,177 of 177 co-occurrences agree
+42,E3,Exeter,1364,Exeter City,auto,177,177 of 177 co-occurrences agree
+42,E3,Harrogate,1842,Harrogate Town,auto,218,218 of 218 co-occurrences agree
+42,E3,Mansfield,1374,Mansfield Town,auto,247,247 of 247 co-occurrences agree
+42,E3,Salford,1844,Salford City,auto,250,250 of 250 co-occurrences agree
+42,E3,Stockport,4686,Stockport County,auto,70,70 of 70 co-occurrences agree
+42,E3,Sutton,1835,Sutton Utd,auto,104,104 of 104 co-occurrences agree
+42,E3,Swindon,1353,Swindon Town,auto,284,284 of 284 co-occurrences agree
+42,E3,Yeovil,1377,Yeovil Town,auto,74,74 of 74 co-occurrences agree
+61,F1,Ajaccio GFCO,100,Gazelec FC Ajaccio,auto,32,32 of 32 co-occurrences agree
+61,F1,Brest,106,Stade Brestois 29,auto,213,213 of 213 co-occurrences agree
+61,F1,Clermont,99,Clermont Foot,auto,92,92 of 92 co-occurrences agree
+61,F1,Paris SG,85,Paris Saint Germain,auto,351,351 of 351 co-occurrences agree
+61,F1,St Etienne,1063,Saint Etienne,auto,257,257 of 257 co-occurrences agree
+61,F1,Troyes,110,Estac Troyes,auto,128,128 of 128 co-occurrences agree
+62,F2,Ajaccio GFCO,100,Gazelec FC Ajaccio,auto,88,88 of 88 co-occurrences agree
+62,F2,Bourg Peronnas,430,Bourg-en-bresse 01,auto,88,88 of 88 co-occurrences agree
+62,F2,Brest,106,Stade Brestois 29,auto,118,118 of 118 co-occurrences agree
+62,F2,Chambly,1291,Chambly Thelle FC,auto,60,60 of 60 co-occurrences agree
+62,F2,Clermont,99,Clermont Foot,auto,235,235 of 235 co-occurrences agree
+62,F2,Evian Thonon Gaillard,3006,Evian TG,auto,30,30 of 30 co-occurrences agree
+62,F2,Quevilly Rouen,431,Quevilly,auto,138,138 of 138 co-occurrences agree
+62,F2,Red Star,104,RED Star FC 93,auto,145,145 of 145 co-occurrences agree
+62,F2,St Etienne,1063,Saint Etienne,auto,98,98 of 98 co-occurrences agree
+62,F2,Troyes,110,Estac Troyes,auto,208,208 of 208 co-occurrences agree
+78,D1,Bielefeld,188,Arminia Bielefeld,auto,32,32 of 32 co-occurrences agree
+78,D1,Bochum,176,VfL Bochum,auto,69,69 of 69 co-occurrences agree
+78,D1,Darmstadt,181,SV Darmstadt 98,auto,44,44 of 44 co-occurrences agree
+78,D1,Dortmund,165,Borussia Dortmund,auto,186,186 of 186 co-occurrences agree
+78,D1,Ein Frankfurt,169,Eintracht Frankfurt,auto,186,186 of 186 co-occurrences agree
+78,D1,Greuther Furth,178,SpVgg Greuther Furth,auto,14,14 of 14 co-occurrences agree
+78,D1,Hamburg,175,Hamburger SV,auto,62,62 of 62 co-occurrences agree
+78,D1,Hannover,166,Hannover 96,auto,46,46 of 46 co-occurrences agree
+78,D1,Hertha,159,Hertha Berlin,auto,128,128 of 128 co-occurrences agree
+78,D1,Hoffenheim,167,1899 Hoffenheim,auto,186,186 of 186 co-occurrences agree
+78,D1,Ingolstadt,184,FC Ingolstadt 04,auto,26,26 of 26 co-occurrences agree
+78,D1,Leverkusen,168,Bayer Leverkusen,auto,186,186 of 186 co-occurrences agree
+78,D1,M'gladbach,163,Borussia Mönchengladbach,auto,186,186 of 186 co-occurrences agree
+78,D1,Mainz,164,FSV Mainz 05,auto,186,186 of 186 co-occurrences agree
+78,D1,Paderborn,185,SC Paderborn 07,auto,18,18 of 18 co-occurrences agree
+78,D1,Wolfsburg,161,VfL Wolfsburg,auto,186,186 of 186 co-occurrences agree
+79,D2,Bielefeld,188,Arminia Bielefeld,auto,122,122 of 122 co-occurrences agree
+79,D2,Bochum,176,VfL Bochum,auto,120,120 of 120 co-occurrences agree
+79,D2,Braunschweig,744,Eintracht Braunschweig,auto,142,142 of 142 co-occurrences agree
+79,D2,Darmstadt,181,SV Darmstadt 98,auto,136,136 of 136 co-occurrences agree
+79,D2,Dresden,183,Dynamo Dresden,auto,106,106 of 106 co-occurrences agree
+79,D2,Duisburg,187,MSV Duisburg,auto,52,52 of 52 co-occurrences agree
+79,D2,Frankfurt FSV,1332,FSV Frankfurt,auto,18,18 of 18 co-occurrences agree
+79,D2,Greuther Furth,178,SpVgg Greuther Fürth,auto,174,174 of 174 co-occurrences agree
+79,D2,Hamburg,175,Hamburger SV,auto,122,122 of 122 co-occurrences agree
+79,D2,Hannover,166,Hannover 96,auto,142,142 of 142 co-occurrences agree
+79,D2,Hertha,159,Hertha BSC,auto,52,52 of 52 co-occurrences agree
+79,D2,Ingolstadt,184,FC Ingolstadt 04,auto,54,54 of 54 co-occurrences agree
+79,D2,Karlsruhe,785,Karlsruher SC,auto,160,160 of 160 co-occurrences agree
+79,D2,Munich 1860,786,TSV 1860 Munich,auto,38,38 of 38 co-occurrences agree
+79,D2,Osnabruck,1324,VfL Osnabrück,auto,52,52 of 52 co-occurrences agree
+79,D2,Paderborn,185,SC Paderborn 07,auto,140,140 of 140 co-occurrences agree
+79,D2,Regensburg,177,SSV Jahn Regensburg,auto,120,120 of 120 co-occurrences agree
+79,D2,Ulm,1652,SSV Ulm 1846,auto,16,16 of 16 co-occurrences agree
+88,N1,Den Haag,198,ADO Den Haag,auto,172,172 of 172 co-occurrences agree
+88,N1,For Sittard,205,Fortuna Sittard,auto,233,233 of 233 co-occurrences agree
+88,N1,Graafschap,199,De Graafschap,auto,56,56 of 56 co-occurrences agree
+88,N1,Nijmegen,413,NEC Nijmegen,auto,210,210 of 210 co-occurrences agree
+88,N1,Zwolle,193,PEC Zwolle,auto,291,291 of 291 co-occurrences agree
+94,P1,Guimaraes,224,Vitória SC,auto,318,318 of 318 co-occurrences agree
+94,P1,Setubal,219,Vitoria Setubal,auto,138,138 of 138 co-occurrences agree
+94,P1,Sp Braga,217,SC Braga,auto,318,318 of 318 co-occurrences agree
+94,P1,Sp Lisbon,228,Sporting CP,auto,318,318 of 318 co-occurrences agree
+94,P1,Uniao Madeira,763,U. Madeira,auto,26,26 of 26 co-occurrences agree
+103,NOR,HamKam,2159,Ham-Kam,auto,79,79 of 79 co-occurrences agree
+103,NOR,Odd,330,ODD Ballklubb,auto,249,249 of 249 co-occurrences agree
+103,NOR,Sarpsborg 08,333,Sarpsborg 08 FF,auto,294,294 of 294 co-occurrences agree
+106,POL,Cracovia,350,Cracovia Krakow,auto,198,198 of 198 co-occurrences agree
+106,POL,Gornik Z.,340,Gornik Zabrze,auto,106,106 of 106 co-occurrences agree
+106,POL,Leczna,6941,Górnik Łęczna,auto,20,20 of 20 co-occurrences agree
+106,POL,Legia,339,Legia Warszawa,auto,198,198 of 198 co-occurrences agree
+106,POL,Legnica,335,Miedz Legnica,auto,50,50 of 50 co-occurrences agree
+106,POL,Puszcza,3490,Puszcza Niepołomice,auto,52,52 of 52 co-occurrences agree
+106,POL,Rakow,3491,Raków Częstochowa,auto,170,170 of 170 co-occurrences agree
+106,POL,Termalica B-B.,3487,Nieciecza,auto,46,46 of 46 co-occurrences agree
+106,POL,Wisla,338,Wisla Krakow,auto,95,95 of 95 co-occurrences agree
+106,POL,Zaglebie,345,Zaglebie Lubin,auto,196,196 of 196 co-occurrences agree
+113,SWE,AFC Eskilstuna,765,Vasby United,auto,28,28 of 28 co-occurrences agree
+113,SWE,AIK,377,AIK Stockholm,auto,153,153 of 153 co-occurrences agree
+113,SWE,Dalkurd,368,Dalkurd FF,auto,14,14 of 14 co-occurrences agree
+113,SWE,Djurgarden,364,Djurgardens IF,auto,155,155 of 155 co-occurrences agree
+113,SWE,Falkenbergs,812,Falkenbergs FF,auto,42,42 of 42 co-occurrences agree
+113,SWE,Goteborg,366,IFK Goteborg,auto,155,155 of 155 co-occurrences agree
+113,SWE,Hammarby,363,Hammarby FF,auto,155,155 of 155 co-occurrences agree
+113,SWE,Jonkopings,764,Jonkopings Sodra,auto,28,28 of 28 co-occurrences agree
+113,SWE,Kalmar,374,Kalmar FF,auto,140,140 of 140 co-occurrences agree
+113,SWE,Landskrona,2176,Landskrona BoIS,auto,2,2 of 2 co-occurrences agree
+113,SWE,Mjallby,2240,Mjallby AIF,auto,99,99 of 99 co-occurrences agree
+113,SWE,Norrkoping,378,IFK Norrkoping,auto,144,144 of 144 co-occurrences agree
+113,SWE,Orgryte,2166,Orgryte IS,auto,11,11 of 11 co-occurrences agree
+113,SWE,Oster,2174,Osters IF,auto,16,16 of 16 co-occurrences agree
+113,SWE,Sundsvall,373,GIF Sundsvall,auto,68,68 of 68 co-occurrences agree
+113,SWE,Trelleborgs,369,Trelleborg,auto,14,14 of 14 co-occurrences agree
+113,SWE,Varberg,2171,Varbergs BoIS FC,auto,56,56 of 56 co-occurrences agree
+113,SWE,Varnamo,2163,IFK Varnamo,auto,58,58 of 58 co-occurrences agree
+119,DNK,Vendsyssel,399,Vendsyssel FF,auto,32,32 of 32 co-occurrences agree
+135,I1,Verona,504,Hellas Verona,auto,341,341 of 341 co-occurrences agree
+136,I2,Verona,504,Hellas Verona,auto,76,76 of 76 co-occurrences agree
+136,I2,Vicenza,1584,Vicenza Virtus,auto,116,116 of 116 co-occurrences agree
+140,SP1,Ath Bilbao,531,Athletic Club,auto,288,288 of 288 co-occurrences agree
+140,SP1,Ath Madrid,530,Atletico Madrid,auto,288,288 of 288 co-occurrences agree
+140,SP1,Betis,543,Real Betis,auto,288,288 of 288 co-occurrences agree
+140,SP1,Celta,538,Celta Vigo,auto,288,288 of 288 co-occurrences agree
+140,SP1,Espanol,540,Espanyol,auto,230,230 of 230 co-occurrences agree
+140,SP1,La Coruna,544,Deportivo La Coruna,auto,72,72 of 72 co-occurrences agree
+140,SP1,Sociedad,548,Real Sociedad,auto,288,288 of 288 co-occurrences agree
+140,SP1,Sp Gijon,731,Sporting Gijon,auto,46,46 of 46 co-occurrences agree
+140,SP1,Vallecano,728,Rayo Vallecano,auto,180,180 of 180 co-occurrences agree
+141,SP2,Ceuta,10139,AD Ceuta FC,auto,34,34 of 34 co-occurrences agree
+141,SP2,Espanol,540,Espanyol,auto,72,72 of 72 co-occurrences agree
+141,SP2,Ferrol,9409,Racing Ferrol,auto,70,70 of 70 co-occurrences agree
+141,SP2,La Coruna,544,Deportivo La Coruna,auto,144,144 of 144 co-occurrences agree
+141,SP2,Leonesa,725,Cultural Leonesa,auto,34,34 of 34 co-occurrences agree
+141,SP2,Reus Deportiu,729,Reus,auto,110,110 of 110 co-occurrences agree
+141,SP2,Santander,4665,Racing Santander,auto,178,178 of 178 co-occurrences agree
+141,SP2,Sevilla B,730,Sevilla Atletico,auto,72,72 of 72 co-occurrences agree
+141,SP2,Sociedad B,9585,Real Sociedad II,auto,74,74 of 74 co-occurrences agree
+141,SP2,Sp Gijon,731,Sporting Gijon,auto,328,328 of 328 co-occurrences agree
+141,SP2,Vallecano,728,Rayo Vallecano,auto,146,146 of 146 co-occurrences agree
+141,SP2,Villarreal B,9595,Villarreal II,auto,72,72 of 72 co-occurrences agree
+144,B1,Club Brugge,569,Club Brugge KV,auto,237,237 of 237 co-occurrences agree
+144,B1,Mechelen,266,KV Mechelen,auto,207,207 of 207 co-occurrences agree
+144,B1,Mouscron,743,Royal Excel Mouscron,auto,101,101 of 101 co-occurrences agree
+144,B1,Mouscron-Peruwelz,743,Royal Excel Mouscron,auto,16,16 of 16 co-occurrences agree
+144,B1,Oud-Heverlee Leuven,260,OH Leuven,auto,150,150 of 150 co-occurrences agree
+144,B1,RWD Molenbeek,6224,RWDM,auto,24,24 of 24 co-occurrences agree
+144,B1,Seraing,10244,Seraing United,auto,42,42 of 42 co-occurrences agree
+144,B1,St. Gilloise,1393,Union St. Gilloise,auto,120,120 of 120 co-occurrences agree
+144,B1,Standard,733,Standard Liege,auto,230,230 of 230 co-occurrences agree
+144,B1,Waasland-Beveren,738,SK Beveren,auto,117,117 of 117 co-occurrences agree
+144,B1,Waregem,600,Zulte Waregem,auto,184,184 of 184 co-occurrences agree
+144,B1,Westerlo,261,KVC Westerlo,auto,124,124 of 124 co-occurrences agree
+179,SC0,Dundee United,1386,Dundee Utd,auto,200,200 of 200 co-occurrences agree
+179,SC0,Hamilton,248,Hamilton Academical,auto,189,189 of 189 co-occurrences agree
+179,SC0,Hearts,254,Heart Of Midlothian,auto,335,335 of 335 co-occurrences agree
+179,SC0,Inverness C,903,Inverness CT,auto,58,58 of 58 co-occurrences agree
+197,G1,AEK,575,AEK Athens FC,auto,213,213 of 213 co-occurrences agree
+197,G1,Apollon,951,Apollon Smirnis,auto,81,81 of 81 co-occurrences agree
+197,G1,Aris,1123,Aris Thessalonikis,auto,170,170 of 170 co-occurrences agree
+197,G1,Athens Kallithea,2095,Kallithea,auto,23,23 of 23 co-occurrences agree
+197,G1,Giannina,950,PAS Giannina,auto,146,146 of 146 co-occurrences agree
+197,G1,Kerkyra,2111,AOK Kerkyra,auto,42,42 of 42 co-occurrences agree
+197,G1,Levadeiakos,957,Levadiakos,auto,124,124 of 124 co-occurrences agree
+197,G1,OFI Crete,1124,OFI,auto,170,170 of 170 co-occurrences agree
+197,G1,Olympiakos,553,Olympiakos Piraeus,auto,212,212 of 212 co-occurrences agree
+203,T1,Ad. Demirspor,3563,Adana Demirspor,auto,127,127 of 127 co-occurrences agree
+203,T1,Akhisar Belediyespor,995,Akhisarspor,auto,109,109 of 109 co-occurrences agree
+203,T1,Bodrumspor,3583,Bodrum FK,auto,30,30 of 30 co-occurrences agree
+203,T1,Buyuksehyr,564,Başakşehir,auto,328,328 of 328 co-occurrences agree
+203,T1,Erzurum BB,1009,Erzurumspor FK,auto,60,60 of 60 co-occurrences agree
+203,T1,Genclerbirligi,997,Gençlerbirliği S.K.,auto,171,171 of 171 co-occurrences agree
+203,T1,Goztep,994,Göztepe,auto,206,206 of 206 co-occurrences agree
+203,T1,Karabukspor,1000,Kardemir Karabukspor,auto,54,54 of 54 co-occurrences agree
+203,T1,Karagumruk,3589,Fatih Karagümrük,auto,158,158 of 158 co-occurrences agree
+203,T1,Mersin Idman Yurdu,13382,Mersin Talimyurdu SK,auto,28,28 of 28 co-occurrences agree
+207,SWZ,Basel,551,FC Basel 1893,auto,313,313 of 313 co-occurrences agree
+207,SWZ,Lausanne Ouchy,4269,Stade Lausanne-Ouchy,auto,29,29 of 29 co-occurrences agree
+207,SWZ,Xamax,1015,Neuchatel Xamax FC,auto,56,56 of 56 co-occurrences agree
+207,SWZ,Young Boys,565,BSC Young Boys,auto,315,315 of 315 co-occurrences agree
+207,SWZ,Yverdon,6653,Yverdon Sport,auto,59,59 of 59 co-occurrences agree
+218,AUT,A. Klagenfurt,1405,Austria Klagenfurt,auto,48,48 of 48 co-occurrences agree
+218,AUT,A. Lustenau,1399,Austria Lustenau,auto,33,33 of 33 co-occurrences agree
+218,AUT,Admira,1023,Admira Wacker,auto,108,108 of 108 co-occurrences agree
+218,AUT,Altach,618,SCR Altach,auto,168,168 of 168 co-occurrences agree
+218,AUT,Hartberg,1072,TSV Hartberg,auto,106,106 of 106 co-occurrences agree
+218,AUT,LASK,1026,Lask Linz,auto,120,120 of 120 co-occurrences agree
+218,AUT,Salzburg,571,Red Bull Salzburg,auto,172,172 of 172 co-occurrences agree
+218,AUT,SK Rapid,781,Rapid Vienna,auto,174,174 of 174 co-occurrences agree
+218,AUT,St. Polten,1027,SKN ST. Polten,auto,76,76 of 76 co-occurrences agree
+218,AUT,Tirol,1398,WSG Wattens,auto,94,94 of 94 co-occurrences agree
+235,RUS,Akron Togliatti,6786,Akron,auto,47,47 of 47 co-occurrences agree
+235,RUS,Dynamo Makhachkala,6813,Dinamo Makhachkala,auto,46,46 of 46 co-occurrences agree
+235,RUS,Dynamo Moscow,1088,Dynamo,auto,228,228 of 228 co-occurrences agree
+235,RUS,FK Anzi Makhackala,1082,Anzhi,auto,76,76 of 76 co-occurrences agree
+235,RUS,Pari NN,2011,Nizhny Novgorod,auto,124,124 of 124 co-occurrences agree
+235,RUS,R. Volgograd,2010,Rotor Volgograd,auto,26,26 of 26 co-occurrences agree
+235,RUS,Rodina Moscow,6822,Rodina Moskva,auto,2,2 of 2 co-occurrences agree
+235,RUS,Rubin Kazan,1083,Rubin,auto,227,227 of 227 co-occurrences agree
+235,RUS,Tomsk,1081,TOM Tomsk,auto,26,26 of 26 co-occurrences agree
+235,RUS,Torpedo Moscow,3985,Torpedo Moskva,auto,26,26 of 26 co-occurrences agree
+235,RUS,Yenisey,1089,Enisey,auto,26,26 of 26 co-occurrences agree
+244,FIN,Ekenas,2078,EIF,auto,25,25 of 25 co-occurrences agree
+244,FIN,HIFK,1172,HIFK Helsinki,auto,152,152 of 152 co-occurrences agree
+244,FIN,HJK,649,HJK Helsinki,auto,272,272 of 272 co-occurrences agree
+244,FIN,Jaro,2075,FF Jaro,auto,63,63 of 63 co-occurrences agree
+244,FIN,JJK Jyvaskyla,1171,JJK,auto,21,21 of 21 co-occurrences agree
+244,FIN,KTP,2076,Kooteepee,auto,91,91 of 91 co-occurrences agree
+244,FIN,PS Kemi,1170,PS Kemi Kings,auto,68,68 of 68 co-occurrences agree
+244,FIN,Rovaniemi,1167,Rops,auto,130,130 of 130 co-occurrences agree
+244,FIN,TPS,1168,Turku PS,auto,58,58 of 58 co-occurrences agree
+283,ROU,Academica Clinceni,2603,FC Clinceni,auto,63,63 of 63 co-occurrences agree
+283,ROU,Astra,636,FC Astra Giurgiu,auto,91,91 of 91 co-occurrences agree
+283,ROU,Calarasi,2582,Dunarea Calarasi,auto,26,26 of 26 co-occurrences agree
+283,ROU,CFR Cluj,2246,CFR 1907 Cluj,auto,189,189 of 189 co-occurrences agree
+283,ROU,Corvinul,20034,Corvinul Hunedoara,auto,4,4 of 4 co-occurrences agree
+283,ROU,Csikszereda M. Ciuc,6230,Csikszereda,auto,24,24 of 24 co-occurrences agree
+283,ROU,Daco-Getica Bucuresti,2587,Juventus Bucuresti,auto,20,20 of 20 co-occurrences agree
+283,ROU,Din. Bucuresti,635,Dinamo Bucuresti,auto,173,173 of 173 co-occurrences agree
+283,ROU,FC Arges,2592,Arges Pitesti,auto,86,86 of 86 co-occurrences agree
+283,ROU,FC Rapid Bucuresti,6231,Rapid,auto,96,96 of 96 co-occurrences agree
+283,ROU,Gloria Buzau,6232,SCM Gloria Buzău,auto,22,22 of 22 co-occurrences agree
+283,ROU,Metaloglobus Bucharest,2604,Metaloglobus,auto,21,21 of 21 co-occurrences agree
+283,ROU,Mioveni,2594,CS Mioveni,auto,49,49 of 49 co-occurrences agree
+283,ROU,Pandurii,2591,Pandurii TG JIU,auto,20,20 of 20 co-occurrences agree
+283,ROU,Petrolul,2598,Petrolul Ploiesti,auto,88,88 of 88 co-occurrences agree
+283,ROU,Poli Iasi,2583,Politehnica Iasi,auto,145,145 of 145 co-occurrences agree
+283,ROU,Poli Timisoara,2588,ACS Poli Timisoara,auto,40,40 of 40 co-occurrences agree
+283,ROU,Sepsi Sf. Gheorghe,2585,Sepsi OSK Sfantu Gheorghe,auto,164,164 of 164 co-occurrences agree
+283,ROU,Targu Mures,2590,ASA Targu Mures,auto,20,20 of 20 co-occurrences agree
+283,ROU,U Craiova,632,Universitatea Craiova,auto,80,80 of 80 co-occurrences agree
+283,ROU,U. Cluj,2599,Universitatea Cluj,auto,81,81 of 81 co-occurrences agree
+283,ROU,Univ. Craiova,632,Universitatea Craiova,auto,109,109 of 109 co-occurrences agree
+357,IRL,Bray,3847,Bray Wanderers,manual,,"checked: fixture 1315706 has the same date (2024-11-16) and score 1:3; only one match, too few for auto"
+357,IRL,Drogheda,3850,Drogheda United,auto,107,107 of 107 co-occurrences agree
+357,IRL,Galway,3851,Galway United,auto,78,78 of 78 co-occurrences agree
+357,IRL,St. Patricks,3843,St Patrick's Athl.,auto,106,106 of 106 co-occurrences agree
+357,IRL,UC Dublin,3844,UCD,auto,28,28 of 28 co-occurrences agree
