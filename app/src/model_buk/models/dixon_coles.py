@@ -98,6 +98,225 @@ def time_decay_weights(
     return np.exp(-rate * np.maximum(age_days, 0.0))
 
 
+@dataclass(frozen=True)
+class DixonColesArrayFit:
+    """Result of :func:`fit_dixon_coles_arrays` on integer team indices ``0 .. n_teams - 1``.
+
+    ``attack`` and ``defence`` are zero-sum vectors on the log goal-rate scale.
+    ``converged`` is False when the optimiser stopped with a projected gradient
+    that is not close to zero; the values are then not to be trusted.
+    """
+
+    intercept: float
+    home_advantage: float
+    rho: float
+    attack: np.ndarray
+    defence: np.ndarray
+    converged: bool
+    n_iterations: int
+    n_evaluations: int
+    message: str
+
+    def parameters(self) -> tuple[float, float, float, np.ndarray, np.ndarray]:
+        """The fitted values in the shape :func:`fit_dixon_coles_arrays` accepts as ``start``."""
+        return self.intercept, self.home_advantage, self.rho, self.attack, self.defence
+
+
+_RHO_BOUND = 0.3
+# Convergence of the array fits.  The objective is the weighted mean negative
+# log-likelihood (weights sum to one), so these are scale free: a projected
+# gradient below 1e-8 fixes every team strength to about 1e-6 on the log-rate
+# scale, far below anything that moves a forecast.
+_ARRAY_FTOL = 1e-13
+_ARRAY_GTOL = 1e-8
+_ACCEPTED_GRADIENT = 1e-6
+
+
+def _pack_start(
+    start: tuple[float, float, float, np.ndarray, np.ndarray] | None,
+    n_teams: int,
+    initial_mean: float,
+) -> np.ndarray:
+    """Parameter vector ``[intercept, home advantage, rho, free attacks, free defences]``."""
+    theta = np.zeros(3 + 2 * (n_teams - 1), dtype=float)
+    if start is None:
+        theta[0] = math.log(initial_mean)
+        return theta
+    intercept, home_advantage, rho, attack, defence = start
+    attack = np.asarray(attack, dtype=float)
+    defence = np.asarray(defence, dtype=float)
+    if attack.shape != (n_teams,) or defence.shape != (n_teams,):
+        raise ValueError("start attack/defence must have one value per team")
+    # Starting values only: centre them so the last (implied) team is consistent.
+    theta[0] = intercept + attack.mean() + defence.mean()
+    theta[1] = home_advantage
+    theta[2] = float(np.clip(rho, -_RHO_BOUND, _RHO_BOUND))
+    theta[3 : 2 + n_teams] = (attack - attack.mean())[:-1]
+    theta[2 + n_teams :] = (defence - defence.mean())[:-1]
+    return theta
+
+
+def fit_dixon_coles_arrays(
+    home_index: np.ndarray,
+    away_index: np.ndarray,
+    home_goals: np.ndarray,
+    away_goals: np.ndarray,
+    weights: np.ndarray,
+    n_teams: int,
+    *,
+    l2_strength: float = 0.0,
+    start: tuple[float, float, float, np.ndarray, np.ndarray] | None = None,
+    max_iterations: int = 1_000,
+    ftol: float = _ARRAY_FTOL,
+    gtol: float = _ARRAY_GTOL,
+) -> DixonColesArrayFit:
+    """Weighted Dixon-Coles maximum likelihood on integer team indices, with analytic gradients.
+
+    Same model and same optimum as :func:`fit_dixon_coles` (intercept, home
+    advantage, ``rho`` in [-0.3, 0.3], zero-sum attack and defence), but the
+    likelihood and its gradient are computed in a handful of vectorised numpy
+    calls, so a league refit takes milliseconds instead of a second.
+    ``start`` is an optional ``(intercept, home_advantage, rho, attack, defence)``
+    tuple (a previous solution, e.g. of the previous matchday): it only chooses
+    where the optimiser begins and does not change the optimum.  The ridge
+    penalty ``l2_strength * (attack.attack + defence.defence)`` is in units of
+    one full-weight match.
+    """
+    from scipy.optimize import minimize
+
+    n = int(n_teams)
+    if n < 2:
+        raise ValueError("at least two teams are required")
+    hi = np.asarray(home_index, dtype=np.intp)
+    ai = np.asarray(away_index, dtype=np.intp)
+    x = np.asarray(home_goals, dtype=float)
+    y = np.asarray(away_goals, dtype=float)
+    w = np.asarray(weights, dtype=float)
+    total = float(w.sum())
+    if not (len(hi) == len(ai) == len(x) == len(y) == len(w)) or len(hi) == 0:
+        raise ValueError("index, goal and weight arrays must be non-empty and of equal length")
+    if not math.isfinite(total) or total <= 0.0:
+        raise ValueError("weights must have a positive finite sum")
+    wn = w / total
+    l2n = float(l2_strength) / total
+    i00 = np.flatnonzero((x == 0.0) & (y == 0.0))
+    i01 = np.flatnonzero((x == 0.0) & (y == 1.0))
+    i10 = np.flatnonzero((x == 1.0) & (y == 0.0))
+    i11 = np.flatnonzero((x == 1.0) & (y == 1.0))
+    w00, w01, w10 = wn[i00], wn[i01], wn[i10]
+    sum_w11 = float(wn[i11].sum())
+    n_free = n - 1
+
+    def objective(theta: np.ndarray) -> tuple[float, np.ndarray]:
+        intercept, home_advantage, rho = theta[0], theta[1], theta[2]
+        attack = np.empty(n)
+        attack[:n_free] = theta[3 : 3 + n_free]
+        attack[n_free] = -attack[:n_free].sum()
+        defence = np.empty(n)
+        defence[:n_free] = theta[3 + n_free :]
+        defence[n_free] = -defence[:n_free].sum()
+        log_home = np.clip(intercept + home_advantage + attack[hi] + defence[ai], -8.0, 8.0)
+        log_away = np.clip(intercept + attack[ai] + defence[hi], -8.0, 8.0)
+        rate_home = np.exp(log_home)
+        rate_away = np.exp(log_away)
+        lam00 = rate_home[i00]
+        mu00 = rate_away[i00]
+        tau00 = 1.0 - lam00 * mu00 * rho
+        lam01 = rate_home[i01]
+        tau01 = 1.0 + lam01 * rho
+        mu10 = rate_away[i10]
+        tau10 = 1.0 + mu10 * rho
+        tau11 = 1.0 - rho
+        if (
+            (tau00.size and tau00.min() <= 0.0)
+            or (tau01.size and tau01.min() <= 0.0)
+            or (tau10.size and tau10.min() <= 0.0)
+            or (sum_w11 > 0.0 and tau11 <= 0.0)
+        ):
+            return 1e100, np.zeros_like(theta)
+        # Terms free of the parameters (log x!) are dropped: the optimum is unchanged.
+        log_likelihood = (
+            float(wn @ (x * log_home + y * log_away - rate_home - rate_away))
+            + float(w00 @ np.log(tau00))
+            + float(w01 @ np.log(tau01))
+            + float(w10 @ np.log(tau10))
+            + (sum_w11 * math.log(tau11) if sum_w11 > 0.0 else 0.0)
+        )
+        # d loglik / d log(rate) per match, before weighting.
+        d_home = x - rate_home
+        d_away = y - rate_away
+        ratio00 = lam00 * mu00 * rho / tau00
+        d_home[i00] -= ratio00
+        d_away[i00] -= ratio00
+        d_home[i01] += lam01 * rho / tau01
+        d_away[i10] += mu10 * rho / tau10
+        d_rho = (
+            float(w00 @ (-lam00 * mu00 / tau00))
+            + float(w01 @ (lam01 / tau01))
+            + float(w10 @ (mu10 / tau10))
+            - (sum_w11 / tau11 if sum_w11 > 0.0 else 0.0)
+        )
+        wh = wn * d_home
+        wa = wn * d_away
+        grad_attack = np.bincount(hi, wh, n) + np.bincount(ai, wa, n)
+        grad_defence = np.bincount(ai, wh, n) + np.bincount(hi, wa, n)
+        value = -log_likelihood
+        gradient = np.empty_like(theta)
+        gradient[0] = -(wh.sum() + wa.sum())
+        gradient[1] = -wh.sum()
+        gradient[2] = -d_rho
+        if l2n > 0.0:
+            value += l2n * (float(attack @ attack) + float(defence @ defence))
+            grad_attack = grad_attack - 2.0 * l2n * attack
+            grad_defence = grad_defence - 2.0 * l2n * defence
+        gradient[3 : 3 + n_free] = -(grad_attack[:n_free] - grad_attack[n_free])
+        gradient[3 + n_free :] = -(grad_defence[:n_free] - grad_defence[n_free])
+        return value, gradient
+
+    initial_mean = max(float(np.average(np.concatenate([x, y]), weights=np.concatenate([w, w]))), 0.1)
+    bounds = [(None, None), (None, None), (-_RHO_BOUND, _RHO_BOUND)] + [(None, None)] * (2 * n_free)
+    options = {
+        "maxiter": max_iterations,
+        "maxfun": max(15_000, max_iterations * 20),
+        "ftol": ftol,
+        "gtol": gtol,
+    }
+    result = minimize(
+        objective, _pack_start(start, n, initial_mean), jac=True, method="L-BFGS-B", bounds=bounds, options=options
+    )
+    if not result.success and start is not None:
+        # A warm start that ends badly (say, an outdated starting point) gets one cold retry.
+        cold = minimize(
+            objective, _pack_start(None, n, initial_mean), jac=True, method="L-BFGS-B", bounds=bounds, options=options
+        )
+        if cold.success or cold.fun < result.fun:
+            result = cold
+    theta = result.x
+    attack = np.empty(n)
+    attack[:n_free] = theta[3 : 3 + n_free]
+    attack[n_free] = -attack[:n_free].sum()
+    defence = np.empty(n)
+    defence[:n_free] = theta[3 + n_free :]
+    defence[n_free] = -defence[:n_free].sum()
+    # The projected gradient at the solution: a line-search stop at machine
+    # precision is fine when the gradient is already ~0.
+    free = np.ones_like(theta, dtype=bool)
+    free[2] = -_RHO_BOUND < theta[2] < _RHO_BOUND
+    gradient_scale = float(np.max(np.abs(result.jac[free]))) if free.any() else 0.0
+    converged = bool(result.success) or gradient_scale <= _ACCEPTED_GRADIENT
+    return DixonColesArrayFit(
+        intercept=float(theta[0]),
+        home_advantage=float(theta[1]),
+        rho=float(theta[2]),
+        attack=attack,
+        defence=defence,
+        converged=converged and bool(np.isfinite(theta).all()),
+        n_iterations=int(result.nit),
+        n_evaluations=int(result.nfev),
+        message=str(result.message),
+    )
+
+
 def fit_dixon_coles(
     matches: pd.DataFrame,
     *,
@@ -175,6 +394,36 @@ def fit_dixon_coles(
     decay_rate = _decay_rate(half_life_days=half_life_days, xi=xi)
     reference = pd.Timestamp(reference_date) if reference_date is not None else dates.max()
     team_count = len(teams)
+    if xg_weight == 0.0:
+        # The plain goals likelihood has an analytic gradient (much faster and
+        # more accurate than finite differences).  The xG quasi-likelihood below
+        # keeps the original numerical-gradient path.
+        fitted_arrays = fit_dixon_coles_arrays(
+            home_index,
+            away_index,
+            home_goals,
+            away_goals,
+            weights,
+            team_count,
+            l2_strength=l2_strength,
+            max_iterations=max_iterations,
+            ftol=1e-10,
+            gtol=1e-6,
+        )
+        if not fitted_arrays.converged:
+            raise RuntimeError(f"Dixon-Coles fit failed: {fitted_arrays.message}")
+        return DixonColesModel(
+            teams=teams,
+            attack=dict(zip(teams, fitted_arrays.attack, strict=True)),
+            defence=dict(zip(teams, fitted_arrays.defence, strict=True)),
+            intercept=fitted_arrays.intercept,
+            home_advantage=fitted_arrays.home_advantage,
+            rho=fitted_arrays.rho,
+            reference_date=pd.Timestamp(reference),
+            xi=decay_rate,
+            l2_strength=float(l2_strength),
+            xg_weight=0.0,
+        )
     initial_mean = max(float(np.mean(np.concatenate([home_goals, away_goals]))), 0.1)
     # intercept, home advantage, rho, n-1 attacks, n-1 defences
     initial = np.zeros(3 + 2 * (team_count - 1), dtype=float)
