@@ -7,7 +7,11 @@ upcoming match that has odds in the archive (no fixture cap, all markets, all bo
    FixtureDirectoryCollector`): today on every run, the other days of the window only when their listing is
    stale, one request per day for every league at once.  Skipped without a client, with the API switched off or
    when the quota is at the reserve; the run goes on with what the directory already holds.
-2. **Quotes.**  The latest price of every bookmaker for every leg of every fixture that has not started
+2. **Bet types.**  The measurement of the bet types that deviate systematically from Pinnacle
+   (:mod:`model_buk.scanner.bet_types`) is taken from the register when it is younger than
+   :attr:`ScanConfig.bet_type_refresh_hours` (a day), otherwise measured on the archive (about 20 to 90 seconds)
+   and appended; its excluded ``(bookmaker, bet_id)`` pairs are dropped when the quotes are loaded.
+   **Quotes.**  The latest price of every bookmaker for every leg of every fixture that has not started
    (:func:`model_buk.scanner.markets.load_current_quotes`, only prices seen at or before ``as_of``).
 3. **Fair prices.**  Pinnacle de-vigged, derived legs and consensus (:func:`model_buk.scanner.fair.fair_prices`).
 4. **Models.**  The pooled goal models and the corner / card count models for the fixtures of the modelled
@@ -16,11 +20,13 @@ upcoming match that has odds in the archive (no fixture cap, all markets, all bo
    secondary signal and the scan is complete without them.  The forecasts of every fit are appended to
    ``model_forecasts.sqlite`` (goal markets for every forecast fixture, count lines only where a bookmaker
    quotes them) so the live models can be evaluated later even after their cache is pruned.
-5. **Value.**  Legs, value list and coupons (:mod:`model_buk.scanner.engine`, :mod:`model_buk.scanner.coupons`).
+5. **Value.**  Legs (with the market tier of every fixture, :mod:`model_buk.scanner.tiers`), value list and
+   coupons per tier and tax group (:mod:`model_buk.scanner.engine`, :mod:`model_buk.scanner.coupons`).
 6. **Register.**  The scan is appended to the paper register under one ``scan_id``
    (:class:`~model_buk.scanner.register.ScannerRegister`); the scan row's ``diagnostics_json`` also carries the
    pipeline's own counts (fair prices by source, model coverage, calendar refresh).
-7. **Settlement and CLV.**  Paper legs of earlier scans whose match is over are settled: scores come from the
+7. **Settlement and CLV.**  Legs of matches that were postponed, cancelled or abandoned are voided
+   (:func:`model_buk.scanner.settlement.void_decision`).  Paper legs of earlier scans whose match is over are settled: scores come from the
    fixture directory (the history archive fills gaps); for corner and card legs the match statistics are fetched
    (``/fixtures?ids``, 20 matches per request; first-half splits one request per match, value and coupon legs
    first), each step capped and stopped at the quota reserve.  A leg whose statistic is still missing stays
@@ -69,7 +75,7 @@ from model_buk.scanner.engine import (
 )
 from model_buk.scanner.settlement import RESULT_FIELDS, format_line, tau_label
 
-PIPELINE_VERSION = "scanner-pipeline-v1"
+PIPELINE_VERSION = "scanner-pipeline-v1.0.1"
 """Written to the run log and the scan diagnostics; bump when the meaning of a pipeline output changes."""
 
 FINISHED_STATUSES: frozenset[str] = frozenset({"FT", "AET", "PEN"})
@@ -104,6 +110,7 @@ class PipelineResult:
     directory: dict[str, Any] = field(default_factory=dict)
     model_info: dict[str, Any] = field(default_factory=dict)
     settlement: dict[str, Any] = field(default_factory=dict)
+    bet_types: dict[str, Any] = field(default_factory=dict)
     counts: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     outputs: dict[str, str] = field(default_factory=dict)
@@ -135,6 +142,7 @@ class PipelineResult:
                 "directory": self.directory,
                 "model": self.model_info,
                 "settlement": self.settlement,
+                "bet_types": self.bet_types,
                 "warnings": self.warnings,
                 "outputs": self.outputs,
                 "settings": self.settings.to_dict(),
@@ -158,12 +166,19 @@ class PipelineResult:
             f"evaluated={c.get('fixtures_evaluated', 0)}",
             f"quotes={c.get('quotes', 0)}",
             f"fair={c.get('fair_legs', 0)}({fair_text})",
+            f"liquid={c.get('fixtures_liquid', 0)}",
+            f"thin={c.get('fixtures_thin', 0)}",
             f"legs={c.get('legs', 0)}",
             f"above_fair={c.get('above_fair', 0)}",
             f"suspect={c.get('suspect', 0)}",
+            f"unsynced={c.get('unsynced', 0)}",
+            f"excluded_bets={len(self.bet_types.get('excluded', []))}",
             value_text,
+            "value_liquid=" + "/".join(str(c.get("value_by_tier", {}).get("liquid", {}).get(label, 0)) for label in self.config.labels()),
             f"picks={c.get('picks', 0)}",
             f"coupons={c.get('coupons_top', 0)}/{c.get('coupons_passing', 0)}",
+            f"coupons_liquid={c.get('coupons_liquid', 0)}",
+            f"coupons_lower_tax={c.get('coupons_lower_tax', 0)}",
             f"model={model}",
             f"settled={self.settlement.get('settled', 0)}",
             f"clv={self.settlement.get('clv_rows', 0)}",
@@ -270,6 +285,61 @@ def refresh_directory(
         "errors": [str(e)[:200] for e in report.errors],
         "quota_remaining": directory.load_quota(moment) if budget.remaining_quota is None else budget.remaining_quota,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Step 2a: bet types that deviate from the sharp price
+# --------------------------------------------------------------------------- #
+
+
+def bet_type_exclusions(
+    register: Any, settings: RunSettings, config: ScanConfig, as_of: pd.Timestamp
+) -> tuple[pd.DataFrame, frozenset[tuple[str, int]], dict[str, Any]]:
+    """The bet-type table of the run, its excluded pairs and what was done: ``(table, excluded, info)``.
+
+    Reuses the register's newest measurement taken at or before ``as_of`` when it is younger than
+    ``config.bet_type_refresh_hours`` (re-judged with the current thresholds), otherwise measures the archive up to
+    ``as_of`` and appends the result.  Never raises for a measurement problem: ``info["status"]`` is then
+    ``error`` and nothing is excluded.
+    """
+    from model_buk.scanner import bet_types as bt
+
+    empty = pd.DataFrame(columns=[*bt.CHECK_COLUMNS, "excluded", "reason"])
+    if not config.bet_type_checks:
+        return empty, frozenset(), {"status": "disabled", "excluded": []}
+    info: dict[str, Any] = {}
+    try:
+        latest = register.latest_bet_type_checks(as_of)
+        fresh = False
+        if len(latest):
+            data_as_of = to_utc(latest["data_as_of"]).iloc[0]
+            fresh = (as_of - data_as_of) < pd.Timedelta(hours=float(config.bet_type_refresh_hours))
+            # a measurement stored before the checks knew the market period cannot be judged per market: redo it
+            fresh = fresh and "period" in latest.columns and bool(latest["period"].notna().all())
+        if fresh:
+            table = bt.flag_bet_types(latest[list(bt.CHECK_COLUMNS)], **config.bet_type_rule())
+            info.update(status="reused", data_as_of=_iso(latest["data_as_of"].iloc[0]))
+        else:
+            stats, measured = bt.measure_bet_types(
+                settings.odds_db,
+                as_of,
+                lookback_days=config.bet_type_lookback_days,
+                step_hours=config.bet_type_step_hours,
+                max_board_age_hours=config.max_quote_age_far_hours,
+                method=config.fair_method,
+            )
+            table = bt.flag_bet_types(stats, **config.bet_type_rule())
+            written = register.record_bet_type_checks(
+                table, data_as_of=as_of, settings={**config.bet_type_rule(), "config_id": config.config_id}
+            )
+            info.update(status="measured", data_as_of=_iso(as_of), rows_written=int(written), **measured)
+    except Exception as exc:  # noqa: BLE001 - the scan goes on without exclusions
+        return empty, frozenset(), {"status": "error", "error": f"{type(exc).__name__}: {exc}"[:300], "excluded": []}
+    excluded = bt.excluded_pairs(table)
+    info["pairs"] = int(len(table))
+    info["judged"] = int((table["reason"] != "too_few_legs").sum()) if len(table) else 0
+    info["excluded"] = bt.pair_labels(excluded, table)
+    return table, excluded, info
 
 
 # --------------------------------------------------------------------------- #
@@ -674,8 +744,8 @@ def value_legs_table(picks: pd.DataFrame, fixtures: pd.DataFrame | None, config:
     labels = config.labels()
     ev_columns = [c for label in labels for c in (f"ev_net_{label}", f"ev_net_lower_{label}", f"value_{label}")]
     columns = [
-        "rank", "kickoff_pl", "league", "match", "bet_pl", "bookmaker", "odd", "fair_odd", "p_fair", "p_se", "p_lower",
-        "fair_source", "n_books", "edge_raw", "refund_share", "book_shift", *ev_columns, "p_model", "model_name",
+        "rank", "tier", "tier_reason", "kickoff_pl", "league", "match", "bet_pl", "bookmaker", "odd", "fair_odd", "p_fair",
+        "p_se", "p_lower", "fair_source", "n_books", "edge_raw", "refund_share", "book_shift", *ev_columns, "p_model", "model_name",
         "model_agrees", "quote_age_min", "fetched_at", "kickoff_utc", "fixture_id", "market", "period", "line",
         "selection", "bet_id", "leg_key", "scan_id", "config_id",
     ]  # fmt: skip
@@ -709,7 +779,7 @@ def coupons_table(coupon_set: Any, fixtures: pd.DataFrame | None, config: ScanCo
     labels = config.labels()
     ev_columns = [c for label in labels for c in (f"ev_net_{label}", f"ev_net_lower_{label}")]
     columns = [
-        "coupon_rank", "coupon_id", "bookmaker", "n_legs", "odds_total", "p_hit", "p_hit_lower", *ev_columns,
+        "coupon_rank", "tier", "regime", "coupon_id", "bookmaker", "n_legs", "odds_total", "p_hit", "p_hit_lower", *ev_columns,
         "leg_no", "kickoff_pl", "league", "match", "bet_pl", "odd", "p_fair", "p_lower", "refund_share",
         "fair_source", "kickoff_utc", "fixture_id", "market", "period", "line", "selection", "leg_key", "scan_id",
         "config_id",
@@ -717,12 +787,20 @@ def coupons_table(coupon_set: Any, fixtures: pd.DataFrame | None, config: ScanCo
     if coupon_set is None or len(coupon_set.coupons) == 0:
         return pd.DataFrame(columns=columns)
     keep = tau_label(config.coupon_keep_tau)
-    top = coupon_set.top.sort_values([f"ev_net_lower_{keep}", "p_hit"], ascending=[False, False], kind="mergesort").reset_index(drop=True)
+    top = coupon_set.top.copy()
     if top.empty:
         return pd.DataFrame(columns=columns)
+    for column, default in (("tier", "liquid"), ("regime", keep)):
+        if column not in top.columns:
+            top[column] = default
+    # liquid before thin, the full-tax proposals before the lower-tax group, then the best lower-bound EV
+    top["_tier"] = (top["tier"] != "liquid").astype(int)
+    top["_group"] = (top["regime"] != keep).astype(int)
+    top = top.sort_values(["_tier", "_group", f"ev_net_lower_{keep}", "p_hit"], ascending=[True, True, False, False], kind="mergesort")
+    top = top.reset_index(drop=True)
     top["coupon_rank"] = np.arange(1, len(top) + 1)
-    head = top[["coupon_rank", "coupon_id", "bookmaker", "n_legs", "odds_total", "p_hit", "p_hit_lower", *ev_columns]]
-    legs = coupon_set.legs.drop(columns=["bookmaker"], errors="ignore")
+    head = top[["coupon_rank", "tier", "regime", "coupon_id", "bookmaker", "n_legs", "odds_total", "p_hit", "p_hit_lower", *ev_columns]]
+    legs = coupon_set.legs.drop(columns=["bookmaker", "tier"], errors="ignore")
     out = head.merge(legs, on="coupon_id", how="inner").sort_values(["coupon_rank", "leg_no"], kind="mergesort")
     names = _names(fixtures)
     default = ("", "", "")
@@ -802,6 +880,8 @@ def scan_counts(quotes: pd.DataFrame, fair: pd.DataFrame, scan: ScanResult, conf
     market = ~legs["is_model_only"].astype(bool) if len(legs) else pd.Series(dtype=bool)
     suspect = legs["suspect"].astype(bool) if len(legs) else pd.Series(dtype=bool)
     vetoed = legs["vetoed"].astype(bool) if len(legs) else pd.Series(dtype=bool)
+    if len(legs) and "unsynced" in legs.columns:
+        vetoed = vetoed | legs["unsynced"].astype(bool)  # an unsynced leg is never value either
     value_by_tau: dict[str, int] = {}
     for label in config.labels():
         if len(legs):
@@ -811,6 +891,23 @@ def scan_counts(quotes: pd.DataFrame, fair: pd.DataFrame, scan: ScanResult, conf
     fair_by_source = (
         {str(k): int(v) for k, v in fair["fair_source"].value_counts().items()} if fair is not None and len(fair) else {}
     )
+    value_by_tier: dict[str, dict[str, int]] = {}
+    legs_by_tier: dict[str, dict[str, int]] = {}
+    for tier in ("liquid", "thin"):
+        in_tier = (legs["tier"] == tier) if len(legs) and "tier" in legs.columns else pd.Series(False, index=legs.index)
+        value_by_tier[tier] = {
+            label: int((legs[f"value_{label}"].astype(bool) & market & ~suspect & ~vetoed & in_tier & legs["is_value"].astype(bool)).sum())
+            if len(legs)
+            else 0
+            for label in config.labels()
+        }
+        legs_by_tier[tier] = {
+            "legs": int(in_tier.sum()) if len(legs) else 0,
+            "above_fair": int(((legs["edge_raw"] > 0) & market & in_tier).sum()) if len(legs) else 0,
+            "suspect": int((suspect & in_tier).sum()) if len(legs) else 0,
+            "picks": int((scan.picks["tier"] == tier).sum()) if len(scan.picks) and "tier" in scan.picks.columns else 0,
+        }
+    unsynced = int(legs["unsynced"].astype(bool).sum()) if len(legs) and "unsynced" in legs.columns else 0
     coupons = scan.coupons
     mapped = quotes["market"] != "other" if len(quotes) and "market" in quotes.columns else pd.Series(dtype=bool)
     return {
@@ -834,7 +931,17 @@ def scan_counts(quotes: pd.DataFrame, fair: pd.DataFrame, scan: ScanResult, conf
         "model_only_value": int(len(scan.model_only)),
         "coupons_evaluated": int(coupons.n_evaluated),
         "coupons_passing": int(coupons.n_passing),
+        "coupons_passing_lower_tax": int(getattr(coupons, "n_passing_lower", 0)),
         "coupons_top": int(len(coupons.top)) if len(coupons.coupons) else 0,
+        "coupons_liquid": int(len(coupons.proposed("liquid"))) if len(coupons.coupons) else 0,
+        "coupons_lower_tax": int(len(coupons.proposed("liquid", lower_tax=True))) if len(coupons.coupons) else 0,
+        "coupons_thin": int(len(coupons.proposed("thin")) + len(coupons.proposed("thin", lower_tax=True))) if len(coupons.coupons) else 0,
+        "coupons_by_tier": getattr(coupons, "by_tier", {}),
+        "fixtures_liquid": int(scan.diagnostics.n_fixtures_liquid),
+        "fixtures_thin": int(scan.diagnostics.n_fixtures_thin),
+        "value_by_tier": value_by_tier,
+        "legs_by_tier": legs_by_tier,
+        "unsynced": unsynced,
         "diagnostics": scan.diagnostics.to_dict(),
     }
 
@@ -862,7 +969,7 @@ def run_pipeline(
     """
     from model_buk.scanner import fair as fair_module
     from model_buk.scanner import markets, report_html
-    from model_buk.scanner.coupons import build_coupons
+    from model_buk.scanner.coupons import build_coupons_by_tier
     from model_buk.scanner.register import ScannerRegister
     from model_buk.scanner.settlement import load_results
 
@@ -898,6 +1005,14 @@ def run_pipeline(
                 result.warnings.append(f"calendar refresh failed ({type(exc).__name__})")
         say(f"directory: {result.directory}")
 
+    # 2a. bet types that deviate from the sharp price --------------------------------------------------------------
+    register = ScannerRegister(settings.register_path)
+    with _timed(result, "bet_types"):
+        bet_table, excluded_bets, result.bet_types = bet_type_exclusions(register, settings, config, decision_time)
+    if result.bet_types.get("status") == "error":
+        result.warnings.append(f"bet-type check failed, nothing excluded ({result.bet_types.get('error', '')[:120]})")
+    say(f"bet types: {result.bet_types}")
+
     # 2. quotes --------------------------------------------------------------------------------------------------
     with _timed(result, "quotes"):
         quotes = markets.load_current_quotes(
@@ -905,7 +1020,9 @@ def run_pipeline(
             decision_time,
             horizon_days=config.max_days_ahead,
             include_suspect_ladders=config.include_suspect_ladders,
+            exclude_bet_types=excluded_bets,
         )
+    result.bet_types["quote_rows_dropped"] = int(quotes.attrs.get("excluded_bet_type_rows", 0))
     result.quotes = quotes
     say(f"quotes: {len(quotes)} rows, {quotes['fixture_id'].nunique() if len(quotes) else 0} fixtures")
 
@@ -951,16 +1068,15 @@ def run_pipeline(
 
     # 5. value legs and coupons ----------------------------------------------------------------------------------
     with _timed(result, "evaluate"):
-        legs, diag = evaluate_legs_with_diagnostics(quotes, fair, model, config, as_of=decision_time)
+        legs, diag = evaluate_legs_with_diagnostics(quotes, fair, model, config, as_of=decision_time, fixtures=fixtures)
         picks = select_value_picks(legs, config)
-        coupon_set = build_coupons(picks, config)
+        coupon_set = build_coupons_by_tier(picks, config)
         model_only = select_model_only(legs, config)
     scan = ScanResult(scan_id, decision_time, config, legs, picks, coupon_set, model_only, diag)
     result.scan = scan
     result.counts = {**scan_counts(quotes, fair, scan, config), **result.counts}
 
     # 6. register ------------------------------------------------------------------------------------------------
-    register = ScannerRegister(settings.register_path)
     with _timed(result, "record"):
         diagnostics = {
             **diag.to_dict(),
@@ -971,6 +1087,12 @@ def run_pipeline(
                     "fair_by_source": result.counts["fair_by_source"],
                     "fair_legs": result.counts["fair_legs"],
                     "value_by_tau": result.counts["value_by_tau"],
+                    "value_by_tier": result.counts["value_by_tier"],
+                    "fixtures_liquid": result.counts["fixtures_liquid"],
+                    "fixtures_thin": result.counts["fixtures_thin"],
+                    "coupons_by_tier": result.counts["coupons_by_tier"],
+                    "coupons_passing_lower_tax": result.counts["coupons_passing_lower_tax"],
+                    "bet_types": result.bet_types,
                     "model": result.model_info,
                     "directory": {k: v for k, v in result.directory.items() if k != "errors"},
                     "api_requests_directory": result.api["requests_directory"],
@@ -995,7 +1117,10 @@ def run_pipeline(
     if settings.settle:
         with _timed(result, "settle"):
             try:
-                _settle(result, register, settings, decision_time, client if api_reachable else None, clock, load_results)
+                _settle(
+                    result, register, settings, decision_time, client if api_reachable else None, clock, load_results,
+                    void_grace_hours=config.void_grace_hours,
+                )
                 scan.settled = int(result.settlement.get("settled", 0))
             except Exception as exc:  # noqa: BLE001 - the scan is recorded; settlement is retried next run
                 result.warnings.append(f"settlement failed ({type(exc).__name__}: {str(exc)[:120]})")
@@ -1009,6 +1134,7 @@ def run_pipeline(
                         settings.odds_db,
                         need["fixture_id"].unique().tolist(),
                         include_suspect_ladders=config.include_suspect_ladders,
+                        exclude_bet_types=excluded_bets,
                     )
                     if len(closing_quotes):
                         closing_fair = fair_module.fair_prices(closing_quotes, **config.closing_fair_kwargs())
@@ -1035,7 +1161,11 @@ def run_pipeline(
     with _timed(result, "outputs"):
         try:
             summary = register.paper_summary(now=decision_time, taus=config.taus, config_id=config.config_id)
-            scan.html = report_html.render_page(scan, fixtures, summary)
+            results_table = register.paper_results(now=decision_time, taus=config.taus, config_id=config.config_id)
+            recent = register.recent_bets(now=decision_time, config_id=config.config_id, taus=config.taus)
+            scan.html = report_html.render_page(
+                scan, fixtures, summary, status=page_status(result), results=results_table, recent=recent
+            )
             if settings.write_page:
                 scan.html_paths = report_html.write_page(scan.html, settings.out_dir, decision_time)
                 result.outputs["page"] = str(scan.html_paths[0])
@@ -1060,6 +1190,20 @@ def run_pipeline(
     return result
 
 
+def page_status(result: PipelineResult) -> dict[str, Any]:
+    """What the status box of the page shows about the run (:func:`model_buk.scanner.report_html.render_page`)."""
+    return {
+        "counts": result.counts,
+        "model": result.model_info,
+        "api_requests": result.api_requests,
+        "api": result.api,
+        "directory": {k: v for k, v in result.directory.items() if k != "errors"},
+        "bet_types": result.bet_types,
+        "settlement": result.settlement,
+        "warnings": list(result.warnings),
+    }
+
+
 def _settle(
     result: PipelineResult,
     register: Any,
@@ -1068,14 +1212,26 @@ def _settle(
     client: Any,
     clock: Callable[[], datetime] | None,
     load_results: Callable[..., pd.DataFrame],
+    *,
+    void_grace_hours: float = 48.0,
 ) -> None:
-    """Step 7a: fetch missing match statistics (budget-aware) and settle every unsettled leg whose match is over."""
-    info: dict[str, Any] = {"pending_legs": 0, "started_fixtures": 0, "settled": 0}
+    """Step 7a: void the legs of matches that were not played, fetch missing match statistics (budget-aware) and
+    settle every unsettled leg whose match is over."""
+    from model_buk.scanner.settlement import load_fixture_statuses
+
+    info: dict[str, Any] = {"pending_legs": 0, "started_fixtures": 0, "settled": 0, "voided": 0}
     result.settlement = info
     pending = register.unsettled_legs()
     info["pending_legs"] = int(len(pending))
     if pending.empty:
         return
+    statuses = load_fixture_statuses(pd.to_numeric(pending["fixture_id"]).astype(int).unique().tolist(), settings.directory_db)
+    if len(statuses):
+        info["voided"] = int(register.settle_voids(statuses, now=now, grace_hours=void_grace_hours))
+        if info["voided"]:
+            pending = register.unsettled_legs()
+            if pending.empty:
+                return
     kickoff = to_utc(pending["kickoff_utc"])
     started = pending[(kickoff <= now).to_numpy()]
     info["started_fixtures"] = int(started["fixture_id"].nunique())
@@ -1110,10 +1266,13 @@ def _settle(
                 results = load_results(ids, settings.directory_db, settings.history_db)
     info["fixtures_with_result"] = int(len(results))
     info["settled"] = int(register.settle_pending(results, now=now)) if len(results) else 0
+    info["settled"] += int(info.get("voided", 0))
 
 
 __all__ = [
     "PIPELINE_VERSION",
+    "bet_type_exclusions",
+    "page_status",
     "ForecastLog",
     "PipelineResult",
     "append_run_log",

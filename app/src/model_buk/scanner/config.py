@@ -29,9 +29,25 @@ Model (secondary signal)
     fixture from the cached nightly fit; ``model_max_fit_age_hours = 24`` a fit older than one day is not used
     (the scan runs without models and says so); ``model_include_counts = True`` also corners and cards.
 Plausibility guards
-    ``max_edge = 0.20`` raw edge above which a leg is ``suspect``; ``max_p_se = 0.05`` fair-probability standard
-    error above which it is ``suspect``; ``max_book_shift = 0.06`` largest allowed distance between the
-    bookmaker's own de-vigged probability and the fair one.  Suspect legs are logged, never proposed.
+    ``max_edge = 0.10`` raw edge above which a leg is ``suspect`` (so no single leg can pay the 12% stake tax on
+    its own: that needs 13.6%); ``max_p_se = 0.05`` fair-probability standard error above which it is
+    ``suspect``; ``max_book_shift = 0.06`` largest allowed distance between the bookmaker's own de-vigged
+    probability and the fair one.  Suspect legs are logged, never proposed.  ``sync_window_minutes = 60`` a quote
+    and its fair price must come from boards at most this far apart (else the leg is ``unsynced``: logged, never
+    proposed; :mod:`model_buk.scanner.engine`).
+Market tier (:mod:`model_buk.scanner.tiers`)
+    ``tier_max_pinnacle_overround = 1.08``, ``tier_min_bookmakers = 6``, ``tier_name_rules = True``: a fixture is
+    ``thin`` by name (women, youth, friendlies, reserve and amateur football) or by data (no Pinnacle 1X2, Pinnacle's
+    1X2 overround above 1.08, fewer than six bookmakers); otherwise ``liquid``.
+Bet types that deviate from the sharp price (:mod:`model_buk.scanner.bet_types`)
+    ``bet_type_checks = True`` measure and exclude them; ``bet_type_max_abs_median = 0.02``,
+    ``bet_type_max_dispersion_ratio = 1.4`` (times the typical dispersion of the same market),
+    ``bet_type_max_tail_share = 0.15`` and ``bet_type_min_legs = 100`` the exclusion rule; ``bet_type_lookback_days = 7`` and ``bet_type_step_hours = 12`` the snapshots measured;
+    ``bet_type_refresh_hours = 24`` a measurement is reused for a day (stored in the register).
+Settlement
+    ``void_grace_hours = 48`` a postponed, suspended or interrupted match voids its legs this long after the
+    kickoff they were taken for (cancelled, abandoned and awarded matches at once;
+    :func:`model_buk.scanner.settlement.void_decision`).
 Inputs and staleness
     ``reference_bookmakers = ("Pinnacle", "Betfair")`` price sources only, never proposed;
     ``max_quote_age_hours = 3`` a bookmaker board not seen for longer is skipped; ``min_minutes_to_kickoff = 10``;
@@ -102,6 +118,15 @@ class ScanConfig(ScannerConfig):
     use_models: bool = True
     model_max_fit_age_hours: float = 24.0
     model_include_counts: bool = True
+    bet_type_checks: bool = True
+    bet_type_max_abs_median: float = 0.02
+    bet_type_max_dispersion_ratio: float = 1.4
+    bet_type_max_tail_share: float = 0.15
+    bet_type_min_legs: int = 100
+    bet_type_lookback_days: float = 7.0
+    bet_type_step_hours: float = 12.0
+    bet_type_refresh_hours: float = 24.0
+    void_grace_hours: float = 48.0
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -128,6 +153,28 @@ class ScanConfig(ScannerConfig):
             raise ValueError("fair_se_model must be a SeModel")
         if not (math.isfinite(self.model_max_fit_age_hours) and self.model_max_fit_age_hours > 0):
             raise ValueError("model_max_fit_age_hours must be a positive number of hours")
+        for name in ("bet_type_max_abs_median", "bet_type_max_dispersion_ratio", "bet_type_max_tail_share"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value > 0):
+                raise ValueError(f"{name} must be positive")
+        for name in ("bet_type_lookback_days", "bet_type_step_hours", "bet_type_refresh_hours", "void_grace_hours"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value >= 0):
+                raise ValueError(f"{name} must be a non-negative number")
+        if not self.bet_type_step_hours > 0:
+            raise ValueError("bet_type_step_hours must be positive")
+        if int(self.bet_type_min_legs) < 1:
+            raise ValueError("bet_type_min_legs must be at least 1")
+        object.__setattr__(self, "bet_type_min_legs", int(self.bet_type_min_legs))
+
+    def bet_type_rule(self) -> dict[str, Any]:
+        """Keyword arguments of :func:`model_buk.scanner.bet_types.flag_bet_types`."""
+        return {
+            "max_abs_median": self.bet_type_max_abs_median,
+            "max_dispersion_ratio": self.bet_type_max_dispersion_ratio,
+            "max_tail_share": self.bet_type_max_tail_share,
+            "min_legs": self.bet_type_min_legs,
+        }
 
     def fair_kwargs(self) -> dict[str, Any]:
         """Keyword arguments of :func:`model_buk.scanner.fair.fair_prices` for a *current* board."""

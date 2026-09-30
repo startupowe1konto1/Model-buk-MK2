@@ -76,6 +76,16 @@ Uncertainty ``p_se``
   neighbouring lines: residuals of 0.05 to 0.08 against a typical 0.01); those keep their price but get a wide
   ``p_se`` so that they cannot pass a lower-bound value test.
 
+Board time of a fair price
+--------------------------
+``fair_board_at`` is when the board the price was taken from was produced: the provider's own update time of the
+board (``api_update``) where the quotes frame carries it, else the time the board was last seen (``fetched_at``).
+A Pinnacle price and every price derived from Pinnacle (double chance, draw no bet, the score matrix) carry the
+time of Pinnacle's board of the fixture, a Betfair price that of Betfair's board and a consensus price the
+*oldest* board among the bookmakers it was taken from.  The engine compares a soft quote only with a fair price
+from the same provider snapshot (``sync_window_minutes``, see :mod:`model_buk.scanner.engine`).  NaT where the
+quotes frame has no times.
+
 Calibration check (archive 2026-09-30, legs both a source and Pinnacle price): ``(p_source - p_pinnacle) / p_se``
 has an RMS of 0.65 for the consensus (0.80 with 3 books, 0.55 with 4 to 6) and 0.74 for Betfair, so the standard
 error is conservative by design (it also carries the drift of the reference itself); in the tails (Pinnacle below
@@ -120,6 +130,7 @@ FAIR_COLUMNS: Final[tuple[str, ...]] = (
     "devig_method",
     "n_books",
     "book_margin",
+    "fair_board_at",
 )
 
 DEFAULT_METHOD: Final = "power"
@@ -536,6 +547,7 @@ def _prepare(
         raise ValueError(f"quotes frame is missing columns: {', '.join(missing)}")
     columns = needed + [c for c in ("kickoff_utc", "age_minutes", "three_way") if c in quotes.columns]
     q = quotes[columns].copy()
+    q["board_at"] = board_times(quotes)
     odd = pd.to_numeric(q["odd"], errors="coerce").to_numpy(dtype=float)
     keep = np.isfinite(odd) & (odd > 1.0) & q["market"].isin([*_SETS, "cs"]).to_numpy()
     if "three_way" in q.columns:
@@ -560,6 +572,29 @@ def _prepare(
     q = q.sort_values("odd", kind="mergesort")
     q = q[~q.duplicated(key, keep="last")]
     return q.reset_index(drop=True)
+
+
+def board_times(quotes: pd.DataFrame) -> pd.Series:
+    """Board time of every quote row: the provider's ``api_update``, else ``fetched_at``, else NaT (UTC)."""
+    out = pd.Series(pd.NaT, index=quotes.index, dtype="datetime64[ns, UTC]")
+    for column in ("fetched_at", "api_update"):  # the later one wins where it is known
+        if column not in quotes.columns:
+            continue
+        values = quotes[column]
+        if not pd.api.types.is_datetime64_any_dtype(values):
+            values = pd.to_datetime(values, utc=True, errors="coerce", format="ISO8601")
+        elif getattr(values.dt, "tz", None) is None:
+            values = values.dt.tz_localize("UTC")
+        values = values.dt.tz_convert("UTC").astype("datetime64[ns, UTC]")
+        out = values.where(values.notna(), out)
+    return out
+
+
+def _board_table(prepared: pd.DataFrame) -> pd.Series:
+    """Oldest board time per ``(fixture_id, bk)`` of a prepared frame (one board per bookmaker and fixture)."""
+    if prepared.empty or "board_at" not in prepared.columns:
+        return pd.Series(dtype="datetime64[ns, UTC]")
+    return prepared.groupby(["fixture_id", "bk"])["board_at"].min()
 
 
 def _devig_all(prepared: pd.DataFrame, method: str, commission: float) -> pd.DataFrame:
@@ -617,7 +652,10 @@ def _consensus(devigged: pd.DataFrame, min_books: int) -> pd.DataFrame:
         return devigged.assign(n_books=pd.Series(dtype="int64"))
     key = ["fixture_id", "market", "period", "line_key"]
     grouped = devigged.groupby([*key, "selection"], sort=False)
-    med = grouped.agg(p=("p", "median"), margin=("margin", "median"), n_books=("bk", "nunique")).reset_index()
+    aggregations = {"p": ("p", "median"), "margin": ("margin", "median"), "n_books": ("bk", "nunique")}
+    if "board_at" in devigged.columns:
+        aggregations["board_at"] = ("board_at", "min")
+    med = grouped.agg(**aggregations).reset_index()
     set_n = med.groupby(key)["n_books"].transform("min")
     med = med[set_n >= min_books].copy()
     if med.empty:
@@ -810,21 +848,44 @@ def fair_candidates(
     """Every source's probability for every leg it can price, before the choice of the preferred one.
 
     Columns: ``fixture_id, market, period, line_key, selection, p, kind, n_books, book_margin, abs_err,
-    second_half``; ``kind`` is a key of :data:`PRIORITY` (``derived_exact`` and ``derived_matrix`` both have
+    second_half, board_at``; ``kind`` is a key of :data:`PRIORITY` (``derived_exact`` and ``derived_matrix`` both have
     ``fair_source == "pinnacle_derived"`` in the public frame).  ``line_key`` is the line with NaN replaced by
     -9999.  :func:`fair_prices` documents the parameters.
     """
     if method not in DEVIG_METHODS:
         raise ValueError(f"unknown de-vig method {method!r}; expected one of: {', '.join(sorted(DEVIG_METHODS))}")
     prepared = _prepare(quotes, max_age_minutes, max_age_far_minutes, far_lead_hours)
-    columns = ["fixture_id", "market", "period", "line_key", "selection", "p", "kind", "n_books", "book_margin", "abs_err", "second_half"]
+    columns = [
+        "fixture_id", "market", "period", "line_key", "selection", "p", "kind", "n_books", "book_margin", "abs_err",
+        "second_half", "board_at",
+    ]  # fmt: skip
     if prepared.empty:
         return pd.DataFrame({c: pd.Series(dtype="object") for c in columns})
     devigged = _devig_all(prepared, method, betfair_commission)
+    boards = _board_table(prepared)
+
+    def board_of(fixture_ids: object, bk: object) -> np.ndarray:
+        ids = np.asarray(fixture_ids)
+        books = np.asarray(bk, dtype=object) if not isinstance(bk, str) else np.full(len(ids), bk, dtype=object)
+        if not len(boards) or not len(ids):
+            return np.full(len(ids), np.datetime64("NaT"), dtype="datetime64[ns]")
+        index = pd.MultiIndex.from_arrays([ids, books])
+        return pd.to_datetime(boards.reindex(index), utc=True).dt.tz_localize(None).to_numpy(dtype="datetime64[ns]")
+
+    if len(devigged):
+        devigged["board_at"] = pd.to_datetime(board_of(devigged["fixture_id"], devigged["bk"])).tz_localize("UTC")
     key = ["fixture_id", "market", "period", "line_key", "selection"]
     candidates: list[pd.DataFrame] = []
 
-    def add(frame: pd.DataFrame, kind: str, n_books: object, margin: object, abs_err: object = 0.0, second_half: object = False) -> None:
+    def add(
+        frame: pd.DataFrame,
+        kind: str,
+        n_books: object,
+        margin: object,
+        abs_err: object = 0.0,
+        second_half: object = False,
+        board_at: object = None,
+    ) -> None:
         if frame.empty:
             return
         piece = frame[key + ["p"]].copy()
@@ -833,24 +894,42 @@ def fair_candidates(
         piece["book_margin"] = margin
         piece["abs_err"] = abs_err
         piece["second_half"] = second_half
+        piece["board_at"] = pd.NaT if board_at is None else pd.to_datetime(np.asarray(board_at), utc=True)
         candidates.append(piece)
 
     pinnacle = devigged[devigged["bk"] == PINNACLE]
     matrices = fit_fixture_matrices(pinnacle, model=score_model) if (derive or coherence) and not pinnacle.empty else {}
-    add(pinnacle, "pinnacle", 1, pinnacle["margin"].to_numpy(), _coherence_excess(pinnacle, matrices).to_numpy() if coherence else 0.0)
+    add(
+        pinnacle,
+        "pinnacle",
+        1,
+        pinnacle["margin"].to_numpy(),
+        _coherence_excess(pinnacle, matrices).to_numpy() if coherence else 0.0,
+        board_at=pinnacle["board_at"] if "board_at" in pinnacle.columns else None,
+    )
     betfair = devigged[devigged["bk"] == BETFAIR]
-    add(betfair, "betfair", 1, betfair["margin"].to_numpy())
+    add(betfair, "betfair", 1, betfair["margin"].to_numpy(), board_at=betfair["board_at"] if "board_at" in betfair.columns else None)
     consensus = _consensus(devigged[devigged["bk"] != PINNACLE], min_consensus_books)
-    add(consensus, "consensus", consensus["n_books"].to_numpy(), consensus["margin"].to_numpy())
+    add(
+        consensus,
+        "consensus",
+        consensus["n_books"].to_numpy(),
+        consensus["margin"].to_numpy(),
+        board_at=consensus["board_at"] if "board_at" in consensus.columns else None,
+    )
     if derive and not pinnacle.empty:
         wanted = prepared[prepared["market"].isin(_MATRIX_MARKETS)][key].drop_duplicates()
         derived = _derived_rows(wanted, pinnacle, matrices)
         for kind, part in (derived.groupby("kind") if not derived.empty else []):
-            add(part, kind, 1, np.nan, part["abs_err"].to_numpy(), part["second_half"].to_numpy())
+            add(
+                part, kind, 1, np.nan, part["abs_err"].to_numpy(), part["second_half"].to_numpy(),
+                board_at=pd.to_datetime(board_of(part["fixture_id"], PINNACLE)).tz_localize("UTC"),
+            )
     if not candidates:
         return pd.DataFrame({c: pd.Series(dtype="object") for c in columns})
     stacked = pd.concat(candidates, ignore_index=True)
     stacked["n_books"] = stacked["n_books"].astype("int64")
+    stacked["board_at"] = pd.to_datetime(stacked["board_at"], utc=True, errors="coerce")
     return stacked[columns]
 
 
@@ -880,7 +959,7 @@ def fair_prices(
     far_lead_hours: float = DEFAULT_FAR_LEAD_HOURS,
 ) -> pd.DataFrame:
     """Fair frame of a quotes frame: ``fixture_id, market, period, line, selection, p_fair, p_se, fair_source,
-    devig_method, n_books, book_margin`` (see the module docstring for the sources and their order).
+    devig_method, n_books, book_margin, fair_board_at`` (see the module docstring for the sources and their order).
 
     Parameters
     ----------
@@ -952,5 +1031,5 @@ def fair_prices(
     stacked["fair_source"] = stacked["kind"].map(_FAIR_SOURCE)
     stacked["line"] = np.where(stacked["line_key"] == _NO_LINE_KEY, np.nan, stacked["line_key"])
     stacked["devig_method"] = method
-    stacked = stacked.rename(columns={"p": "p_fair"})
+    stacked = stacked.rename(columns={"p": "p_fair", "board_at": "fair_board_at"})
     return stacked[list(FAIR_COLUMNS)].sort_values(["fixture_id", "market", "period", "line", "selection"]).reset_index(drop=True)

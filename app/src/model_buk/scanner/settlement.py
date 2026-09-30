@@ -5,6 +5,8 @@ A leg is identified by ``(fixture_id, market, period, line, selection)`` (see :m
 
 ``win`` | ``loss`` | ``push`` | ``half_win`` | ``half_loss``
 
+and a match that was not played voids its legs: ``void`` (:func:`void_decision`).
+
 Quarter lines (``x.25`` / ``x.75``) are two half-stakes on the neighbouring lines, so they can end as
 ``half_win`` or ``half_loss``.  Integer lines can end as ``push``.
 
@@ -23,6 +25,15 @@ Rules that matter
   ``tau * f - 1`` per unit stake.  A bet that is entirely void (a single push, or a coupon of pushes) is treated as
   refunded in full, profit zero.  A coupon multiplies the return factors of its legs (a pushed leg drops out with
   factor one); the tax is charged once on the whole coupon.
+* **Void.**  A leg of a match that was postponed, cancelled, abandoned, awarded, a walkover, suspended or
+  interrupted (provider statuses ``PST``, ``CANC``, ``ABD``, ``AWD``, ``WO``, ``SUSP``, ``INT``) is ``void``: the
+  stake comes back (return factor one, profit zero, like a push, and it is left out of hit rates).  ``CANC``,
+  ``ABD``, ``AWD`` and ``WO`` are final and void at once; ``PST``, ``SUSP`` and ``INT`` only once the match is still
+  in that state ``grace_hours`` (48) after the kickoff the leg was taken for, which is how bookmakers treat a
+  match that is not completed within the next two days.  A postponed match the provider has already moved to a
+  new date (status ``NS`` / ``TBD``) is void too once that date is more than ``grace_hours`` after the original
+  kickoff and the grace time has passed.  A void leg drops out of a coupon like a push; a coupon whose every leg
+  is void is ``void`` itself (stake returned).
 """
 
 from __future__ import annotations
@@ -41,7 +52,14 @@ import pandas as pd
 
 from model_buk.markets.pricing import ClosingLineValue, closing_line_value
 
-OUTCOMES: tuple[str, ...] = ("win", "loss", "push", "half_win", "half_loss")
+OUTCOMES: tuple[str, ...] = ("win", "loss", "push", "half_win", "half_loss", "void")
+
+VOID_STATUSES: frozenset[str] = frozenset({"PST", "CANC", "ABD", "AWD", "WO", "SUSP", "INT"})
+"""Provider statuses of a match that was not (or not fully) played: its legs are void (see :func:`void_decision`)."""
+FINAL_VOID_STATUSES: frozenset[str] = frozenset({"CANC", "ABD", "AWD", "WO"})
+"""Void statuses that are final: the legs are void at once (the others wait for the grace time)."""
+RESCHEDULED_STATUSES: frozenset[str] = frozenset({"NS", "TBD"})
+DEFAULT_VOID_GRACE_HOURS: float = 48.0
 
 RESULT_FIELDS: tuple[str, ...] = (
     "home_goals",
@@ -328,13 +346,50 @@ def settle_frame(legs: pd.DataFrame, results: pd.DataFrame) -> pd.Series:
 # --------------------------------------------------------------------------- #
 
 
+def void_decision(
+    status: object,
+    scheduled_kickoff: object,
+    current_kickoff: object,
+    now: object,
+    grace_hours: float = DEFAULT_VOID_GRACE_HOURS,
+) -> str | None:
+    """Why a leg is void now (``"void:<STATUS>"``, ``"void:rescheduled"``), or ``None`` when it is not (yet).
+
+    ``scheduled_kickoff`` is the kickoff the leg was taken for, ``current_kickoff`` the one the provider lists now
+    (it moves when a postponed match gets a new date).  See the module docstring for the rule.
+    """
+    code = str(status).strip().upper() if isinstance(status, str) else ""
+    scheduled = pd.Timestamp(scheduled_kickoff) if scheduled_kickoff is not None else pd.NaT
+    moment = pd.Timestamp(now)
+    if not pd.isna(scheduled) and scheduled.tzinfo is None:
+        scheduled = scheduled.tz_localize("UTC")
+    if moment.tzinfo is None:
+        moment = moment.tz_localize("UTC")
+    if code in FINAL_VOID_STATUSES:
+        return f"void:{code}"
+    if pd.isna(scheduled):
+        return None
+    grace = pd.Timedelta(hours=float(grace_hours))
+    if moment < scheduled + grace:
+        return None
+    if code in VOID_STATUSES:
+        return f"void:{code}"
+    if code in RESCHEDULED_STATUSES and current_kickoff is not None:
+        current = pd.Timestamp(current_kickoff)
+        if not pd.isna(current):
+            current = current.tz_localize("UTC") if current.tzinfo is None else current
+            if current > scheduled + grace:
+                return "void:rescheduled"
+    return None
+
+
 def return_factor(outcome: str | None, odd: float) -> float | None:
     """Multiple of the (post-tax) stake returned by one leg; ``None`` for an unknown outcome."""
     if outcome == "win":
         return float(odd)
     if outcome == "half_win":
         return (1.0 + float(odd)) / 2.0
-    if outcome == "push":
+    if outcome in ("push", "void"):
         return 1.0
     if outcome == "half_loss":
         return 0.5
@@ -351,7 +406,7 @@ def single_profit(outcome: str | None, odd: float, tau: float) -> float | None:
     factor = return_factor(outcome, odd)
     if factor is None:
         return None
-    if outcome == "push":
+    if outcome in ("push", "void"):
         return 0.0
     return tau * factor - 1.0
 
@@ -360,8 +415,9 @@ def single_profit(outcome: str | None, odd: float, tau: float) -> float | None:
 class CouponSettlement:
     """Result of :func:`settle_coupon`.
 
-    ``outcome`` is ``loss`` (a lost leg, factor 0), ``push`` (every leg void, factor 1), ``win`` (factor above
-    1) or ``half_loss`` (a partial loss, factor between 0 and 1).  ``factor`` multiplies the post-tax stake.
+    ``outcome`` is ``loss`` (a lost leg, factor 0), ``push`` (every leg pushed or void, factor 1), ``void`` (every
+    leg void), ``win`` (factor above 1) or ``half_loss`` (a partial loss, factor between 0 and 1).  ``factor``
+    multiplies the post-tax stake.
     """
 
     outcome: str
@@ -379,14 +435,15 @@ class CouponSettlement:
 def settle_coupon(legs: Sequence[tuple[str | None, float]]) -> CouponSettlement | None:
     """Settle a coupon from ``(outcome, odd)`` per leg.
 
-    A pushed leg drops out (factor one), a half win pays ``(1 + odd) / 2`` and a half loss returns half the stake;
-    the factors multiply.  One lost leg loses the coupon even if other legs are still open.  Otherwise the coupon
-    is ``None`` (unsettled) while any leg has no outcome.
+    A pushed or void leg drops out (factor one), a half win pays ``(1 + odd) / 2`` and a half loss returns half the
+    stake; the factors multiply.  One lost leg loses the coupon even if other legs are still open.  Otherwise the
+    coupon is ``None`` (unsettled) while any leg has no outcome.
     """
     if not legs:
         raise ValueError("a coupon needs at least one leg")
+    refunded = ("push", "void")
     if any(outcome == "loss" for outcome, _ in legs):
-        return CouponSettlement("loss", 0.0, sum(1 for o, _ in legs if o != "push"), False)
+        return CouponSettlement("loss", 0.0, sum(1 for o, _ in legs if o not in refunded), False)
     factors: list[float] = []
     for outcome, odd in legs:
         factor = return_factor(outcome, odd)
@@ -394,9 +451,11 @@ def settle_coupon(legs: Sequence[tuple[str | None, float]]) -> CouponSettlement 
             return None
         factors.append(factor)
     factor = math.prod(factors)
-    all_void = all(outcome == "push" for outcome, _ in legs)
-    n_active = sum(1 for outcome, _ in legs if outcome != "push")
-    if all_void:
+    all_void = all(outcome in refunded for outcome, _ in legs)
+    n_active = sum(1 for outcome, _ in legs if outcome not in refunded)
+    if all(outcome == "void" for outcome, _ in legs):
+        outcome_name = "void"
+    elif all_void:
         outcome_name = "push"
     elif factor > 1.0 + 1e-12:
         outcome_name = "win"
@@ -408,7 +467,7 @@ def settle_coupon(legs: Sequence[tuple[str | None, float]]) -> CouponSettlement 
 
 
 def hit_value(outcome: str | None) -> float | None:
-    """Hit weight of an outcome for hit-rate statistics: win 1, half win 0.75, push excluded, half loss 0.25."""
+    """Hit weight of an outcome for hit-rate statistics: win 1, half win 0.75, push and void excluded, half loss 0.25."""
     return {"win": 1.0, "half_win": 0.75, "half_loss": 0.25, "loss": 0.0}.get(outcome or "", None)
 
 
@@ -569,6 +628,29 @@ def load_directory_results(fixture_ids: Sequence[int], directory_db: str | Path 
         if name not in out.columns:
             out[name] = np.nan
     return out[columns]
+
+
+def load_fixture_statuses(fixture_ids: Sequence[int], directory_db: str | Path = DIRECTORY_DB) -> pd.DataFrame:
+    """``fixture_id, status_short, kickoff_utc`` of the fixture directory (for :func:`void_decision`).
+
+    An unavailable database gives an empty frame.
+    """
+    ids = sorted({int(x) for x in fixture_ids})
+    columns = ["fixture_id", "status_short", "kickoff_utc"]
+    if not ids or not Path(directory_db).exists():
+        return pd.DataFrame(columns=columns)
+    frames = []
+    try:
+        with closing(_read_only(Path(directory_db))) as con:
+            for start in range(0, len(ids), 500):
+                chunk = ids[start : start + 500]
+                marks = ",".join("?" * len(chunk))
+                frames.append(
+                    pd.read_sql_query(f"SELECT fixture_id, status_short, kickoff_utc FROM fixtures WHERE fixture_id IN ({marks})", con, params=chunk)
+                )
+    except (sqlite3.Error, pd.errors.DatabaseError):
+        return pd.DataFrame(columns=columns)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=columns)
 
 
 def load_results(

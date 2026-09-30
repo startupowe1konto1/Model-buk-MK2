@@ -145,7 +145,9 @@ def test_scan_row_carries_config_time_and_counts(reg: ScannerRegister) -> None:
     assert '"z": 1.645' in scans["config_json"]
     assert scans["n_legs"] == 4 and scans["n_value"] == 3 and scans["n_legs_seen"] == 3 and scans["n_legs_logged"] == 3
     assert scans["n_picks"] == 3 and scans["n_fixtures"] == 4
-    assert scans["n_coupons_passing"] == 1 and scans["n_coupons_logged"] == 1
+    # one three-leg coupon passes under the full tax; the three two-leg coupons (1.05 ** 2 * 0.88 < 1) pass only
+    # under a lower tax (1.05 ** 2 * 0.94 > 1) and are logged as the lower-tax group
+    assert scans["n_coupons_passing"] == 1 and scans["n_coupons_logged"] == 4
     assert count(reg, "configs") == 1
 
 
@@ -172,7 +174,7 @@ def test_regime_columns_follow_the_config(reg: ScannerRegister) -> None:
 def test_unchanged_legs_and_coupons_are_not_logged_again(reg: ScannerRegister) -> None:
     scan(reg, T0)
     scan(reg, T0 + pd.Timedelta(hours=1))
-    assert count(reg, "scans") == 2 and count(reg, "legs") == 3 and count(reg, "coupons") == 1
+    assert count(reg, "scans") == 2 and count(reg, "legs") == 3 and count(reg, "coupons") == 4
     second = reg.table("scans").iloc[1]
     assert second["n_legs_seen"] == 3 and second["n_legs_logged"] == 0
     assert second["n_coupons_passing"] == 1 and second["n_coupons_logged"] == 0
@@ -215,9 +217,13 @@ def test_a_leg_that_becomes_value_is_logged_as_a_change(reg: ScannerRegister) ->
 
 def test_coupons_and_their_legs_are_logged(reg: ScannerRegister) -> None:
     scan(reg)
-    coupons = reg.table("coupons")
+    everything = reg.table("coupons")
+    assert len(everything) == 4 and sorted(everything["regime"]) == ["t088", "t094", "t094", "t094"]
+    assert set(everything["tier"]) == {"thin"}  # a bare board without Pinnacle or names: the data rules make it thin
+    coupons = everything[everything["regime"] == "t088"]
     legs = reg.table("coupon_legs")
-    assert len(coupons) == 1 and len(legs) == 3
+    legs = legs[legs["coupon_id"].isin(coupons["coupon_id"])]
+    assert len(coupons) == 1 and len(legs) == 3 and set(legs["tier"]) == {"thin"}
     row = coupons.iloc[0]
     assert row["n_legs"] == 3 and row["is_top"] == 1
     assert row["odds_total"] == pytest.approx(1.5**3) and row["p_hit"] == pytest.approx(0.343)

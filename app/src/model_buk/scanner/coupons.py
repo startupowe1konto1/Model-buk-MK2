@@ -26,13 +26,22 @@ coupon that passes; the frame holds all of them unless ``log_cap_per_bookmaker``
 per bookmaker (the default keeps an hourly register small).  To avoid a combinatorial explosion the legs of a bookmaker are pruned to the best
 ``top_k_legs`` by lower-bound EV plus the best ``top_k_hit_legs`` by win probability (one candidate of each kind
 per fixture) before they are combined.
+
+Tiers and tax regimes (:func:`build_coupons_by_tier`, what a scan uses)
+-----------------------------------------------------------------------
+Coupons never mix market tiers (:mod:`model_buk.scanner.tiers`): the legs of ``liquid`` fixtures and those of
+``thin`` fixtures are combined separately, and every coupon carries its ``tier``.  Per tier there are two groups:
+the coupons that pass at ``coupon_keep_tau`` (the full 12% stake tax; the proposals) and, shown apart, those that
+pass only under a lower tax (at the loosest regime of ``taus``, 1.00, but not at ``coupon_keep_tau``).  Every
+coupon carries ``regime``, the label of the strictest tax regime at which its lower-bound EV is positive
+(``t088``, ``t094`` or ``t100``); each group has its own diversified top list per bookmaker.
 """
 
 from __future__ import annotations
 
 import hashlib
 import itertools
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -57,6 +66,7 @@ COUPON_LEG_COLUMNS: tuple[str, ...] = (
     "p_lower",
     "refund_share",
     "fair_source",
+    "tier",
 )
 
 _REQUIRED = ("fixture_id", "bookmaker", "market", "period", "line", "selection", "odd", "p_fair", "p_lower", "leg_key")
@@ -76,13 +86,33 @@ class CouponSet:
     legs: pd.DataFrame
     n_evaluated: int = 0
     n_passing: int = 0
+    n_passing_lower: int = 0
+    by_tier: dict = field(default_factory=dict)
+    keep_label: str | None = None
 
     @property
     def top(self) -> pd.DataFrame:
-        """The proposed coupons: the best ``top_n_per_bookmaker`` of every bookmaker."""
+        """The listed coupons: the best ``top_n_per_bookmaker`` of every bookmaker (of every group and tier)."""
         if self.coupons.empty:
             return self.coupons
-        return self.coupons[self.coupons["is_top"]]
+        return self.coupons[self.coupons["is_top"].astype(bool)]
+
+    def proposed(self, tier: str | None = None, *, lower_tax: bool = False) -> pd.DataFrame:
+        """Top coupons that pass at the full tax (``lower_tax=False``) or only at a lower tax, optionally of one tier.
+
+        Without a ``regime`` column (a set from :func:`build_coupons`) every top coupon passes at the full tax.
+        """
+        top = self.top
+        if top.empty:
+            return top
+        if "regime" in top.columns and self.keep_label is not None:
+            full = top["regime"] == self.keep_label
+            top = top[~full] if lower_tax else top[full]
+        elif lower_tax:
+            return top.iloc[0:0]
+        if tier is not None and "tier" in top.columns:
+            top = top[top["tier"] == tier]
+        return top
 
     def legs_of(self, coupon_id: str) -> pd.DataFrame:
         if self.legs.empty:
@@ -117,15 +147,24 @@ def _candidates(group: pd.DataFrame, config: ScannerConfig) -> pd.DataFrame:
     return merged.sort_values("leg_key", kind="mergesort").reset_index(drop=True)
 
 
-def build_coupons(value_legs: pd.DataFrame, config: ScannerConfig | None = None) -> CouponSet:
+def build_coupons(
+    value_legs: pd.DataFrame,
+    config: ScannerConfig | None = None,
+    *,
+    keep_tau: float | None = None,
+    fail_tau: float | None = None,
+) -> CouponSet:
     """Build the passing 2- and 3-leg coupons from a value list (see the module docstring).
 
     ``value_legs`` needs ``fixture_id, bookmaker, market, period, line, selection, odd, p_fair, p_lower,
     leg_key`` (the output of :func:`model_buk.scanner.engine.select_value_picks` has them) and may have
-    ``refund_share`` (missing column: no refunds).  Rows that are model only, at a reference bookmaker, that lack
-    a probability or a price, or whose refund share is unknown (NaN) are ignored.
+    ``refund_share`` (missing column: no refunds) and ``tier``.  Rows that are model only, at a reference
+    bookmaker, that lack a probability or a price, or whose refund share is unknown (NaN) are ignored.
+    ``keep_tau`` (default ``config.coupon_keep_tau``) is the regime a coupon must pass at; with ``fail_tau`` a
+    coupon that also passes at that (stricter) regime is left out (the "only at a lower tax" group).
     """
     config = config or ScannerConfig()
+    keep_tau = config.coupon_keep_tau if keep_tau is None else float(keep_tau)
     if value_legs is None or len(value_legs) == 0:
         return _empty_set(config)
     missing = [c for c in _REQUIRED if c not in value_legs.columns]
@@ -152,10 +191,16 @@ def build_coupons(value_legs: pd.DataFrame, config: ScannerConfig | None = None)
         legs["fair_source"] = np.nan
     if "kickoff_utc" not in legs.columns:
         legs["kickoff_utc"] = pd.NaT
+    if "tier" not in legs.columns:
+        legs["tier"] = np.nan
     if legs.empty:
         return _empty_set(config)
 
-    keep_label = tau_label(config.coupon_keep_tau)
+    keep_label = tau_label(keep_tau)
+    fail_label = None if fail_tau is None else tau_label(fail_tau)
+    labels = {tau_label(t) for t in config.taus}
+    if keep_label not in labels or (fail_label is not None and fail_label not in labels):
+        raise ValueError("keep_tau and fail_tau must be among config.taus")
     materialize = max(config.top_n_per_bookmaker, config.log_cap_per_bookmaker) if config.log_cap_per_bookmaker is not None else None
     max_size = max(config.coupon_sizes)
     frames: list[pd.DataFrame] = []
@@ -196,6 +241,8 @@ def build_coupons(value_legs: pd.DataFrame, config: ScannerConfig | None = None)
                 evs[f"ev_net_{label}"] = tau_row * product_point - 1.0
                 evs[f"ev_net_lower_{label}"] = tau_row * product_lower - 1.0
             passing = (evs[f"ev_net_lower_{keep_label}"] > config.min_coupon_ev) & (hit >= config.min_hit)
+            if fail_label is not None:
+                passing &= ~(evs[f"ev_net_lower_{fail_label}"] > config.min_coupon_ev)
             if not passing.any():
                 continue
             padded = np.full((int(passing.sum()), max_size), -1, dtype=np.int32)
@@ -268,11 +315,84 @@ def build_coupons(value_legs: pd.DataFrame, config: ScannerConfig | None = None)
                     "p_lower": float(leg["p_lower"]),
                     "refund_share": float(leg["refund_share"]),
                     "fair_source": leg["fair_source"],
+                    "tier": leg["tier"],
                 }
             )
     leg_frame = pd.DataFrame(rows_out, columns=list(COUPON_LEG_COLUMNS))
     coupons = coupons.drop(columns=["rows_idx"])
-    return CouponSet(coupons, leg_frame, n_evaluated, n_passing)
+    return CouponSet(coupons, leg_frame, n_evaluated, n_passing, keep_label=tau_label(config.coupon_keep_tau))
+
+
+def strictest_regime(frame: pd.DataFrame, taus: tuple[float, ...], min_ev: float) -> list[str | None]:
+    """Label of the strictest (lowest) tax regime at which each coupon's lower-bound EV is above ``min_ev``."""
+    ordered = sorted(taus)
+    out: list[str | None] = []
+    for _, row in frame.iterrows():
+        label = None
+        for tau in ordered:
+            value = row.get(f"ev_net_lower_{tau_label(tau)}")
+            if value is not None and value == value and float(value) > min_ev:
+                label = tau_label(tau)
+                break
+        out.append(label)
+    return out
+
+
+def build_coupons_by_tier(value_legs: pd.DataFrame, config: ScannerConfig | None = None) -> CouponSet:
+    """Coupons of a scan: per market tier, the full-tax group and the lower-tax-only group (module docstring).
+
+    The result's ``coupons`` carry ``tier`` and ``regime``; ``n_passing`` counts the coupons that pass at the full
+    tax (``coupon_keep_tau``), ``n_passing_lower`` those that pass only at a lower one, ``by_tier`` both per tier
+    and ``n_evaluated`` the combinations priced (once per tier).
+    """
+    config = config or ScannerConfig()
+    keep_label = tau_label(config.coupon_keep_tau)
+    empty = _empty_set(config)
+    empty.coupons["tier"] = pd.Series(dtype=object)
+    empty.coupons["regime"] = pd.Series(dtype=object)
+    empty.keep_label = keep_label
+    if value_legs is None or len(value_legs) == 0:
+        return empty
+    legs = value_legs.copy()
+    if "tier" not in legs.columns:
+        legs["tier"] = "liquid"
+    legs["tier"] = legs["tier"].fillna("thin")
+    loosest = max(config.taus)
+    coupon_frames: list[pd.DataFrame] = []
+    leg_frames: list[pd.DataFrame] = []
+    n_evaluated = n_passing = n_lower = 0
+    by_tier: dict[str, dict[str, int]] = {}
+    for tier, group in legs.groupby("tier", sort=True):
+        full = build_coupons(group, config)
+        parts = [full]
+        lower = None
+        if loosest > config.coupon_keep_tau:
+            lower = build_coupons(group, config, keep_tau=loosest, fail_tau=config.coupon_keep_tau)
+            parts.append(lower)
+        n_evaluated += int(full.n_evaluated)
+        n_passing += int(full.n_passing)
+        n_lower += int(lower.n_passing) if lower is not None else 0
+        by_tier[str(tier)] = {
+            "passing": int(full.n_passing),
+            "passing_lower": int(lower.n_passing) if lower is not None else 0,
+            "top": int(full.coupons["is_top"].sum()) if len(full.coupons) else 0,
+            "top_lower": int(lower.coupons["is_top"].sum()) if lower is not None and len(lower.coupons) else 0,
+        }
+        for part in parts:
+            if len(part.coupons) == 0:
+                continue
+            frame = part.coupons.copy()
+            frame["tier"] = str(tier)
+            frame["regime"] = strictest_regime(frame, config.taus, config.min_coupon_ev)
+            coupon_frames.append(frame)
+            leg_frames.append(part.legs)
+    if not coupon_frames:
+        empty.n_evaluated = n_evaluated
+        empty.by_tier = by_tier
+        return empty
+    coupons = pd.concat(coupon_frames, ignore_index=True)
+    leg_frame = pd.concat(leg_frames, ignore_index=True)
+    return CouponSet(coupons, leg_frame, n_evaluated, n_passing, n_lower, by_tier, keep_label)
 
 
 def _diversified_top(rows: list[tuple[int, ...]], top_n: int, max_reuse: int) -> np.ndarray:

@@ -666,17 +666,38 @@ GROUP BY o.fixture_id, o.bookmaker_id
 """
 
 
+def _drop_bet_types(raw: pd.DataFrame, exclude_bet_types: Iterable[tuple[str, int]] | None) -> tuple[pd.DataFrame, int]:
+    """Raw rows without the excluded ``(bookmaker, bet_id)`` pairs (bookmaker names compared normalised)."""
+    pairs = {(normalise_bookmaker_name(b), int(i)) for b, i in (exclude_bet_types or ())}
+    if not pairs or raw.empty:
+        return raw, 0
+    names = raw["bookmaker"].map(normalise_bookmaker_name)
+    bets = pd.to_numeric(raw["bet_id"], errors="coerce")
+    hit = np.fromiter(
+        ((n, int(b)) in pairs if b == b else False for n, b in zip(names, bets, strict=True)), dtype=bool, count=len(raw)
+    )
+    return raw.loc[~hit].reset_index(drop=True), int(hit.sum())
+
+
 def _finish_quotes(
     raw: pd.DataFrame,
     observed: pd.DataFrame,
     reference_time: pd.Series | pd.Timestamp,
     include_other: bool,
     include_suspect_ladders: bool = False,
+    exclude_bet_types: Iterable[tuple[str, int]] | None = None,
 ) -> pd.DataFrame:
-    """Canonicalize, attach the last sighting of every board and order the columns."""
+    """Canonicalize, attach the last sighting of every board and order the columns.
+
+    Rows of the ``exclude_bet_types`` pairs are dropped first (before the legs of one bookmaker are merged across
+    bet types); their number is in ``attrs["excluded_bet_type_rows"]`` of the result.
+    """
+    raw, excluded = _drop_bet_types(raw, exclude_bet_types)
     if raw.empty:
         columns = [*QUOTE_COLUMNS, *EXTRA_QUOTE_COLUMNS]
-        return pd.DataFrame({c: pd.Series(dtype="object") for c in columns})
+        empty = pd.DataFrame({c: pd.Series(dtype="object") for c in columns})
+        empty.attrs["excluded_bet_type_rows"] = excluded
+        return empty
     raw = raw.merge(observed, on=["fixture_id", "bookmaker_id"], how="left")
     raw["kickoff_utc"] = _utc(raw["kickoff_utc"])
     raw["changed_at"] = _utc(raw["changed_at"])
@@ -697,7 +718,9 @@ def _finish_quotes(
     quotes["provider_age_minutes"] = (reference - quotes["api_update"]).dt.total_seconds() / 60.0
     quotes["odd"] = quotes["odd"].astype(float)
     ordered = [*QUOTE_COLUMNS, *EXTRA_QUOTE_COLUMNS]
-    return quotes[ordered].sort_values(["fixture_id", "bookmaker", "market", "period", "line", "selection"]).reset_index(drop=True)
+    out = quotes[ordered].sort_values(["fixture_id", "bookmaker", "market", "period", "line", "selection"]).reset_index(drop=True)
+    out.attrs["excluded_bet_type_rows"] = excluded
+    return out
 
 
 def load_current_quotes(
@@ -707,6 +730,7 @@ def load_current_quotes(
     horizon_days: float | None = None,
     include_other: bool = True,
     include_suspect_ladders: bool = False,
+    exclude_bet_types: Iterable[tuple[str, int]] | None = None,
 ) -> pd.DataFrame:
     """The prices on the boards at ``as_of``: latest quote per (fixture, bookmaker, bet, selection), canonicalized.
 
@@ -716,6 +740,8 @@ def load_current_quotes(
     ``as_of``; ``age_minutes`` is ``as_of - fetched_at`` (bookmaker-level staleness) and ``changed_at`` the time of
     the last change of that price.  ``include_other=False`` drops the rows that are not canonical legs; the rows of
     ladders that :func:`flag_incoherent_ladders` marks suspect are dropped unless ``include_suspect_ladders``.
+    ``exclude_bet_types`` (``(bookmaker, bet_id)`` pairs, see :mod:`model_buk.scanner.bet_types`) are dropped before
+    anything else; ``attrs["excluded_bet_type_rows"]`` of the result counts them.
     """
     as_of_ts = pd.Timestamp(as_of)
     as_of_ts = as_of_ts.tz_localize("UTC") if as_of_ts.tzinfo is None else as_of_ts.tz_convert("UTC")
@@ -726,7 +752,7 @@ def load_current_quotes(
     with closing(_connect(odds_db)) as connection:
         raw = pd.read_sql_query(_CURRENT_SQL, connection, params=params)
         observed = pd.read_sql_query(_OBSERVED_SQL, connection, params=params)
-    return _finish_quotes(raw, observed, as_of_ts, include_other, include_suspect_ladders)
+    return _finish_quotes(raw, observed, as_of_ts, include_other, include_suspect_ladders, exclude_bet_types)
 
 
 def _chunks(values: Sequence[int], size: int = 800) -> Iterable[list[int]]:
@@ -740,6 +766,7 @@ def load_closing_quotes(
     *,
     include_other: bool = True,
     include_suspect_ladders: bool = False,
+    exclude_bet_types: Iterable[tuple[str, int]] | None = None,
 ) -> pd.DataFrame:
     """The last quote strictly before each fixture's kickoff: the closing proxy for closing line value.
 
@@ -765,9 +792,11 @@ def load_closing_quotes(
     raw = pd.concat(raw_parts, ignore_index=True) if raw_parts else pd.DataFrame()
     observed = pd.concat(observed_parts, ignore_index=True) if observed_parts else pd.DataFrame()
     if raw.empty:
-        return _finish_quotes(raw, observed, pd.Timestamp("1970-01-01", tz="UTC"), include_other, include_suspect_ladders)
+        return _finish_quotes(
+            raw, observed, pd.Timestamp("1970-01-01", tz="UTC"), include_other, include_suspect_ladders, exclude_bet_types
+        )
     kickoff = raw.drop_duplicates("fixture_id").set_index("fixture_id")["kickoff_utc"]
-    return _finish_quotes(raw, observed, _utc(kickoff), include_other, include_suspect_ladders)
+    return _finish_quotes(raw, observed, _utc(kickoff), include_other, include_suspect_ladders, exclude_bet_types)
 
 
 def mapped_share(quotes: pd.DataFrame, by: str = "bookmaker") -> pd.DataFrame:

@@ -8,8 +8,15 @@ The register records what the scanner saw and proposed so that it can be evaluat
                  bookmaker, plus every value leg, with all computed columns, the fair source, the model columns,
                  the bookmaker, the odd and the time the price was seen
 ``coupons``, ``coupon_legs``  every coupon that passed (capped only when a cap is configured) and its legs
-``settlements``  leg outcomes (``win | loss | push | half_win | half_loss``), source and time
+``settlements``  leg outcomes (``win | loss | push | half_win | half_loss | void``), source and time
 ``clv``          closing line value of the price taken, per regime
+``bet_type_checks``  the daily measurement of how far every ``(bookmaker, bet_id)`` sits from Pinnacle and which
+                 pairs are excluded (:mod:`model_buk.scanner.bet_types`)
+
+Every leg and coupon carries the market tier of its fixture (``tier``: ``liquid`` | ``thin``, legs also
+``tier_reason``), legs the ``unsynced`` flag and ``board_lag_min``, coupons the ``regime`` (the strictest tax
+regime at which the coupon passes).  Columns added after a register was created are added to it on open
+(``ALTER TABLE ... ADD COLUMN``: additive, nothing is rewritten), so older rows keep NULL there.
 
 Rules
 -----
@@ -22,7 +29,9 @@ Rules
   start from what it saw first.
 * **Paper bets.**  The paper bet of a leg is its *first* value observation at a bookmaker (the price that could
   have been taken), of a coupon its first appearance among the proposed coupons.  Later observations do not count
-  again.  Results and CLV are computed on those.  What counts as value depends on the config, so the paper
+  again.  Per tax regime (:meth:`ScannerRegister.paper_results`) the paper bet is the first observation that is
+  value at that regime (a leg: ``is_value`` and ``value_t###``; a coupon: listed and ``pass_t###``), per tier the
+  bets of fixtures of that tier.  Results and CLV are computed on those.  What counts as value depends on the config, so the paper
   results (:meth:`ScannerRegister.paper_summary`, and the page) are taken per ``config_id``: a changed config
   starts a new experiment, its bets are not mixed with those of an older definition of value.
 * **Timestamps** are UTC ISO strings (``YYYY-MM-DDTHH:MM:SSZ``).
@@ -80,7 +89,11 @@ _LEG_COLUMNS: dict[str, str] = {
     "edge_raw_lower": "REAL",
     "refund_share": "REAL",
     "book_shift": "REAL",
+    "board_lag_min": "REAL",
+    "tier": "TEXT",
+    "tier_reason": "TEXT",
     "suspect": "INTEGER",
+    "unsynced": "INTEGER",
     "vetoed": "INTEGER",
     "is_value": "INTEGER",
     "is_model_only": "INTEGER",
@@ -99,6 +112,8 @@ _COUPON_COLUMNS: dict[str, str] = {
     "rank": "INTEGER",
     "is_top": "INTEGER",
     "is_logged": "INTEGER",
+    "tier": "TEXT",
+    "regime": "TEXT",
 }
 _COUPON_LEG_COLUMNS: dict[str, str] = {
     "leg_no": "INTEGER",
@@ -115,6 +130,7 @@ _COUPON_LEG_COLUMNS: dict[str, str] = {
     "p_lower": "REAL",
     "refund_share": "REAL",
     "fair_source": "TEXT",
+    "tier": "TEXT",
 }
 
 _SCHEMA = """
@@ -198,9 +214,38 @@ CREATE TABLE IF NOT EXISTS clv (
     source TEXT,
     PRIMARY KEY (scan_id, bookmaker, leg_key, computed_at)
 );
+CREATE TABLE IF NOT EXISTS bet_type_checks (
+    data_as_of TEXT NOT NULL,
+    computed_at TEXT NOT NULL,
+    bookmaker TEXT NOT NULL,
+    bet_id INTEGER NOT NULL,
+    bet TEXT,
+    market TEXT,
+    period TEXT,
+    n_legs INTEGER,
+    n_fixtures INTEGER,
+    median_dev REAL,
+    mad_dev REAL,
+    p90_abs_dev REAL,
+    tail_share REAL,
+    mad_ratio REAL,
+    excluded INTEGER,
+    reason TEXT,
+    settings_json TEXT,
+    PRIMARY KEY (data_as_of, bookmaker, bet_id)
+);
 """
 
-_TABLES = ("configs", "scans", "legs", "coupons", "coupon_legs", "settlements", "clv")
+_TABLES = ("configs", "scans", "legs", "coupons", "coupon_legs", "settlements", "clv", "bet_type_checks")
+OUTCOME_PL: dict[str, str] = {
+    "win": "wygrany",
+    "loss": "przegrany",
+    "push": "zwrot",
+    "half_win": "pół-wygrany",
+    "half_loss": "pół-przegrany",
+    "void": "unieważniony",
+}
+"""Polish names of the outcomes (a bet without an outcome is ``oczekuje``)."""
 
 
 def _ddl(columns: dict[str, str]) -> str:
@@ -267,6 +312,17 @@ class ScannerRegister:
                     coupon_leg_columns=_ddl(_COUPON_LEG_COLUMNS),
                 )
             )
+            migrated = {
+                "legs": _LEG_COLUMNS,
+                "coupons": _COUPON_COLUMNS,
+                "coupon_legs": _COUPON_LEG_COLUMNS,
+                "bet_type_checks": {"period": "TEXT", "mad_ratio": "REAL"},
+            }
+            for table, columns in migrated.items():
+                existing = {row[1] for row in con.execute(f"PRAGMA table_info({table})")}
+                for name, kind in columns.items():
+                    if name not in existing:
+                        con.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
             for table in _TABLES:
                 for action in ("UPDATE", "DELETE"):
                     con.execute(
@@ -388,7 +444,7 @@ class ScannerRegister:
         """Near-miss universe (price above fair) plus value legs plus value legs priced only by the model."""
         if legs is None or len(legs) == 0:
             return legs.iloc[0:0] if legs is not None else pd.DataFrame()
-        mask = legs["leg_class"].isin(["value", "near_miss", "suspect"]) | legs["is_model_only_value"].astype(bool)
+        mask = legs["leg_class"].isin(["value", "near_miss", "suspect", "unsynced"]) | legs["is_model_only_value"].astype(bool)
         return legs[mask]
 
     def _ensure_columns(self, con: sqlite3.Connection, table: str, frame: pd.DataFrame) -> None:
@@ -497,7 +553,7 @@ class ScannerRegister:
         if rows.empty:
             return 0
         regime = [c for c in rows.columns if c.startswith(("ev_net_", "pass_"))]
-        self._ensure_columns(con, "coupons", rows[regime])
+        self._ensure_columns(con, "coupons", rows[[*regime, *[c for c in rows.columns if c in _COUPON_COLUMNS]]])
         columns = [c for c in rows.columns if c in _COUPON_COLUMNS or c in regime]
         names = ["scan_id", "as_of", "coupon_id", "config_id", *columns]
         marks = ",".join("?" * len(names))
@@ -522,26 +578,77 @@ class ScannerRegister:
     # Paper bets
     # ------------------------------------------------------------------ #
 
-    def paper_legs(self, config_id: str | None = None) -> pd.DataFrame:
+    def _columns(self, table: str) -> set[str]:
+        with closing(self._connect()) as con:
+            return {row[1] for row in con.execute(f"PRAGMA table_info({table})")}
+
+    def _keep_label(self, config_id: str | None) -> str:
+        """Label of the full-tax regime of a config (``coupon_keep_tau``; the default config's when unknown)."""
+        default = tau_label(ScannerConfig().coupon_keep_tau)
+        if config_id is None:
+            return default
+        rows = self.read("SELECT config_json FROM configs WHERE config_id = ?", [config_id])
+        if rows.empty:
+            return default
+        try:
+            return tau_label(float(json.loads(rows["config_json"].iloc[0]).get("coupon_keep_tau")))
+        except (TypeError, ValueError):
+            return default
+
+    def paper_legs(self, config_id: str | None = None, *, regime: str | None = None, tier: str | None = None) -> pd.DataFrame:
         """First value observation of every ``(bookmaker, leg)``: the price a paper bet would have taken.
 
         With ``config_id`` only the observations made under that config count (the first one *under that config*).
+        ``regime`` (a label such as ``t088``) counts only observations that are value at that tax regime (the
+        first such observation is the bet); ``tier`` only legs of fixtures of that market tier.  A regime the
+        register has no column for gives an empty frame.
         """
-        condition = "is_value = 1" + ("" if config_id is None else " AND config_id = ?")
+        conditions, params = ["is_value = 1"], []
+        if regime is not None:
+            if f"value_{regime}" not in self._columns("legs"):
+                return pd.DataFrame()
+            conditions.append(f"value_{regime} = 1")
+        if config_id is not None:
+            conditions.append("config_id = ?")
+            params.append(config_id)
+        if tier is not None:
+            conditions.append("tier = ?")
+            params.append(tier)
         frame = self.read(
             "SELECT * FROM (SELECT l.*, ROW_NUMBER() OVER (PARTITION BY bookmaker, leg_key ORDER BY as_of, scan_id) AS rn "
-            f"FROM legs l WHERE {condition}) WHERE rn = 1",
-            [] if config_id is None else [config_id],
+            f"FROM legs l WHERE {' AND '.join(conditions)}) WHERE rn = 1",
+            params,
         )
         return self._times(frame.drop(columns=["rn"], errors="ignore"), ("as_of", "kickoff_utc", "fetched_at"))
 
-    def paper_coupons(self, config_id: str | None = None) -> pd.DataFrame:
-        """First appearance of every coupon among the proposed (top) coupons (optionally under one config)."""
-        condition = "is_top = 1" + ("" if config_id is None else " AND config_id = ?")
+    def paper_coupons(
+        self, config_id: str | None = None, *, regime: str | None = None, tier: str | None = None, listed: bool = False
+    ) -> pd.DataFrame:
+        """First appearance of every coupon among the proposed (top) coupons (optionally under one config).
+
+        By default the proposals are the listed coupons that pass at the full tax (``coupon_keep_tau`` of the
+        config; rows written before coupons carried a ``regime`` all did).  ``regime`` instead takes every listed
+        coupon that passes at that regime (``pass_t###``), ``listed=True`` every listed coupon of any group;
+        ``tier`` only coupons of that market tier.
+        """
+        conditions, params = ["is_top = 1"], []
+        if regime is not None:
+            if f"pass_{regime}" not in self._columns("coupons"):
+                return pd.DataFrame()
+            conditions.append(f"pass_{regime} = 1")
+        elif not listed:
+            conditions.append("(regime IS NULL OR regime = ?)")
+            params.append(self._keep_label(config_id))
+        if config_id is not None:
+            conditions.append("config_id = ?")
+            params.append(config_id)
+        if tier is not None:
+            conditions.append("tier = ?")
+            params.append(tier)
         frame = self.read(
             "SELECT * FROM (SELECT c.*, ROW_NUMBER() OVER (PARTITION BY coupon_id ORDER BY as_of, scan_id) AS rn "
-            f"FROM coupons c WHERE {condition}) WHERE rn = 1",
-            [] if config_id is None else [config_id],
+            f"FROM coupons c WHERE {' AND '.join(conditions)}) WHERE rn = 1",
+            params,
         )
         return self._times(frame.drop(columns=["rn"], errors="ignore"), ("as_of", "kickoff_first", "kickoff_last"))
 
@@ -619,6 +726,72 @@ class ScannerRegister:
         settled = legs.assign(outcome=outcomes)
         settled = settled[settled["outcome"].notna()]
         return self.append_settlements(settled, source=source, settled_at=now)
+
+    def settle_voids(self, statuses: pd.DataFrame, *, now: object = None, grace_hours: float = st.DEFAULT_VOID_GRACE_HOURS) -> int:
+        """Settle as ``void`` every unsettled leg whose match was not played (:func:`settlement.void_decision`).
+
+        ``statuses`` has ``fixture_id, status_short, kickoff_utc`` (the provider's current kickoff) per fixture;
+        the leg's own ``kickoff_utc`` is the kickoff it was taken for.  Returns the number of new settlement rows;
+        ``source`` is ``void:<STATUS>`` or ``void:rescheduled``.
+        """
+        if statuses is None or len(statuses) == 0:
+            return 0
+        legs = self.unsettled_legs()
+        if legs.empty:
+            return 0
+        stamp = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+        table = statuses.drop_duplicates("fixture_id", keep="last").copy()
+        table["fixture_id"] = pd.to_numeric(table["fixture_id"], errors="coerce")
+        table = table[table["fixture_id"].notna()].set_index(table["fixture_id"].astype("int64"))
+        legs = legs[pd.to_numeric(legs["fixture_id"], errors="coerce").isin(table.index)].copy()
+        if legs.empty:
+            return 0
+        reasons = []
+        for fixture_id, kickoff in zip(legs["fixture_id"].astype("int64"), legs["kickoff_utc"], strict=True):
+            row = table.loc[int(fixture_id)]
+            reasons.append(st.void_decision(row.get("status_short"), kickoff, row.get("kickoff_utc"), stamp, grace_hours))
+        legs["reason"] = reasons
+        legs = legs[legs["reason"].notna()]
+        written = 0
+        for reason, group in legs.groupby("reason"):
+            written += self.append_settlements(group.assign(outcome="void"), source=str(reason), settled_at=stamp)
+        return written
+
+    def record_bet_type_checks(
+        self, checks: pd.DataFrame, *, data_as_of: object, computed_at: object = None, settings: dict | None = None
+    ) -> int:
+        """Append one measurement of the bet types (:func:`model_buk.scanner.bet_types.flag_bet_types` rows)."""
+        if checks is None or len(checks) == 0:
+            return 0
+        frame = checks.copy()
+        frame["data_as_of"] = _iso(data_as_of)
+        frame["computed_at"] = _iso(computed_at if computed_at is not None else pd.Timestamp.now(tz="UTC"))
+        frame["settings_json"] = json.dumps(settings or {}, sort_keys=True)
+        for column in ("bet", "market", "period", "mad_ratio", "excluded", "reason"):
+            if column not in frame.columns:
+                frame[column] = np.nan
+        columns = [
+            "data_as_of", "computed_at", "bookmaker", "bet_id", "bet", "market", "period", "n_legs", "n_fixtures",
+            "median_dev", "mad_dev", "p90_abs_dev", "tail_share", "mad_ratio", "excluded", "reason", "settings_json",
+        ]  # fmt: skip
+        with closing(self._connect()) as con:
+            con.execute("BEGIN IMMEDIATE")
+            before = con.execute("SELECT COUNT(*) FROM bet_type_checks").fetchone()[0]
+            con.executemany(
+                f"INSERT OR IGNORE INTO bet_type_checks ({','.join(columns)}) VALUES ({','.join('?' * len(columns))})",
+                _rows(frame, columns),
+            )
+            after = con.execute("SELECT COUNT(*) FROM bet_type_checks").fetchone()[0]
+            con.execute("COMMIT")
+        return int(after - before)
+
+    def latest_bet_type_checks(self, as_of: object) -> pd.DataFrame:
+        """The newest measurement whose data ended at or before ``as_of`` (empty when there is none)."""
+        stamp = _iso(as_of)
+        latest = self.read("SELECT MAX(data_as_of) AS d FROM bet_type_checks WHERE data_as_of <= ?", [stamp])
+        if latest.empty or latest["d"].iloc[0] is None:
+            return pd.DataFrame()
+        return self.read("SELECT * FROM bet_type_checks WHERE data_as_of = ? ORDER BY bookmaker, bet_id", [latest["d"].iloc[0]])
 
     def paper_legs_without_clv(self, now: object, max_age_days: float | None = 7.0) -> pd.DataFrame:
         """Paper legs whose match has kicked off and that have no CLV row yet.
@@ -768,8 +941,114 @@ class ScannerRegister:
                 rows.append(_summarise(kind, days, table, stamp, taus))
         return pd.DataFrame(rows)
 
-    def _single_table(self, now: pd.Timestamp, taus: Sequence[float], config_id: str | None = None) -> pd.DataFrame:
-        legs = self.paper_legs(config_id)
+    def paper_results(
+        self,
+        *,
+        now: object = None,
+        windows: Sequence[int] = (7, 30),
+        taus: Sequence[float] = (0.88, 0.94, 1.00),
+        config_id: str | None = None,
+        tiers: Sequence[str] = ("liquid", "thin"),
+    ) -> pd.DataFrame:
+        """Paper results per ``(tier, regime, kind, window)``: the bets of one market tier that were value at one tax
+        regime, with their profit at that regime.
+
+        Columns: ``tier, regime`` (``t088`` ...), ``tau, kind`` (``single | coupon``), ``window_days, n_bets,
+        n_settled, hit_rate, yield, n_clv, median_clv_raw, median_clv_net, share_beaten`` (see
+        :meth:`paper_summary`; ``yield`` and ``median_clv_net`` at the row's own ``tau``).
+        """
+        stamp = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+        stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+        rows = []
+        for tier in tiers:
+            for tau in taus:
+                label = tau_label(tau)
+                singles = self._single_table(stamp, [tau], config_id, regime=label, tier=tier)
+                coupons = self._coupon_table(stamp, [tau], config_id, regime=label, tier=tier)
+                for kind, table in (("single", singles), ("coupon", coupons)):
+                    for days in windows:
+                        row = _summarise(kind, days, table, stamp, [tau])
+                        rows.append(
+                            {
+                                "tier": tier,
+                                "regime": label,
+                                "tau": float(tau),
+                                "kind": kind,
+                                "window_days": int(days),
+                                "n_bets": row["n_bets"],
+                                "n_settled": row["n_settled"],
+                                "hit_rate": row["hit_rate"],
+                                "yield": row[f"yield_{label}"],
+                                "n_clv": row["n_clv"],
+                                "median_clv_raw": row["median_clv_raw"],
+                                "median_clv_net": row[f"median_clv_net_{label}"],
+                                "share_beaten": row["share_beaten"],
+                            }
+                        )
+        return pd.DataFrame(rows)
+
+    def recent_bets(
+        self, *, now: object = None, days: float = 7.0, config_id: str | None = None, taus: Sequence[float] = (0.88, 0.94, 1.00)
+    ) -> dict[str, pd.DataFrame]:
+        """The paper bets proposed in the last ``days`` days (by the time they were first proposed) and their fate.
+
+        Returns ``{"singles": ..., "coupons": ..., "coupon_legs": ...}``.  Singles are the first value observation
+        of every leg (with ``tier``, the ``value_t###`` flags, ``outcome`` and ``profit_t###``); coupons every coupon
+        first listed (of either tax group, with ``tier``, ``regime``, ``outcome`` and ``profit_t###``); coupon legs
+        the legs of those coupons with their own ``outcome``.  ``outcome`` is ``None`` while the bet is open.
+        """
+        stamp = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+        stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+        since = stamp - pd.Timedelta(days=float(days))
+        settled = self.latest_settlements()[["leg_key", "outcome"]].drop_duplicates("leg_key")
+        singles = self.paper_legs(config_id)
+        if not singles.empty:
+            singles = singles[(singles["as_of"] >= since) & (singles["as_of"] <= stamp)]
+            singles = singles.merge(settled, on="leg_key", how="left")
+            for tau in taus:
+                singles[f"profit_{tau_label(tau)}"] = [
+                    st.single_profit(o, odd, tau) if isinstance(o, str) else np.nan
+                    for o, odd in zip(singles["outcome"], singles["odd"], strict=True)
+                ]
+            singles = singles.sort_values(["kickoff_utc", "bookmaker", "leg_key"], ascending=[False, True, True], kind="mergesort")
+        coupons = self.paper_coupons(config_id, listed=True)
+        coupon_legs = pd.DataFrame()
+        if not coupons.empty:
+            coupons = coupons[(coupons["as_of"] >= since) & (coupons["as_of"] <= stamp)].copy()
+        if not coupons.empty:
+            ids = coupons["coupon_id"].tolist()
+            marks = ",".join("?" * len(ids))
+            coupon_legs = self.read(f"SELECT * FROM coupon_legs WHERE coupon_id IN ({marks})", ids)
+            first = coupons[["scan_id", "coupon_id"]]
+            coupon_legs = coupon_legs.merge(first, on=["scan_id", "coupon_id"], how="inner").merge(settled, on="leg_key", how="left")
+            coupon_legs = self._times(coupon_legs, ("kickoff_utc",))
+            outcomes, profits = [], {tau_label(t): [] for t in taus}
+            for record in coupons.itertuples(index=False):
+                group = coupon_legs[coupon_legs["coupon_id"] == record.coupon_id]
+                result = (
+                    st.settle_coupon([(o if isinstance(o, str) else None, float(odd)) for o, odd in zip(group["outcome"], group["odd"], strict=True)])
+                    if len(group)
+                    else None
+                )
+                outcomes.append(None if result is None else result.outcome)
+                for tau in taus:
+                    profits[tau_label(tau)].append(np.nan if result is None else result.profit(tau))
+            coupons["outcome"] = outcomes
+            for label, values in profits.items():
+                coupons[f"profit_{label}"] = values
+            coupons = coupons.sort_values(["kickoff_last", "coupon_id"], ascending=[False, True], kind="mergesort")
+        return {"singles": singles, "coupons": coupons, "coupon_legs": coupon_legs}
+
+    def _single_table(
+        self,
+        now: pd.Timestamp,
+        taus: Sequence[float],
+        config_id: str | None = None,
+        *,
+        regime: str | None = None,
+        tier: str | None = None,
+    ) -> pd.DataFrame:
+        legs = self.paper_legs(config_id, regime=regime, tier=tier)
         if legs.empty:
             return legs
         legs = legs[legs["kickoff_utc"] <= now]
@@ -788,8 +1067,16 @@ class ScannerRegister:
         table["hit"] = [st.hit_value(o) if isinstance(o, str) else np.nan for o in table["outcome"]]
         return table
 
-    def _coupon_table(self, now: pd.Timestamp, taus: Sequence[float], config_id: str | None = None) -> pd.DataFrame:
-        coupons = self.paper_coupons(config_id)
+    def _coupon_table(
+        self,
+        now: pd.Timestamp,
+        taus: Sequence[float],
+        config_id: str | None = None,
+        *,
+        regime: str | None = None,
+        tier: str | None = None,
+    ) -> pd.DataFrame:
+        coupons = self.paper_coupons(config_id, regime=regime, tier=tier)
         if coupons.empty:
             return coupons
         coupons = coupons[coupons["kickoff_first"] <= now]

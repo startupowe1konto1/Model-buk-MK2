@@ -174,7 +174,7 @@ def build_odds_archive(root: Path, close_minutes_before: int = 30) -> Path:
     first_board, closing_board = [], []
     for fixture_id in MATCHES:
         pin = {1: match_winner(1.55, 4.30, 6.00)}
-        soft = {1: match_winner(1.75, 4.20, 5.50)}  # the home price beats the fair one by about 10%
+        soft = {1: match_winner(1.74, 4.20, 5.50)}  # the home price beats the fair one by 9.8% (under the 10% cap)
         if fixture_id == 501:
             pin[45] = corners(1.90, 1.90)
             soft[45] = corners(2.10, 1.75)
@@ -323,7 +323,8 @@ def test_full_cycle_scan_value_coupons_settlement_clv_and_outputs(world) -> None
     assert sorted(home_picks["fixture_id"]) == [501, 502, 503]
     assert first.counts["value_by_tau"]["t100"] >= 3
     # coupons: two legs from different matches at one bookmaker, positive lower-bound EV after the 12% tax
-    top = scan.coupons.top
+    top = scan.coupons.proposed()  # the full-tax proposals (no lower-tax-only coupon on this board)
+    assert len(scan.coupons.top) == len(top)
     assert len(top) >= 1
     for record in top.itertuples(index=False):
         legs = scan.coupons.legs_of(record.coupon_id)
@@ -368,7 +369,7 @@ def test_full_cycle_scan_value_coupons_settlement_clv_and_outputs(world) -> None
     clv = register.latest_clv().set_index("leg_key")
     assert second.settlement["clv_rows"] == len(clv) >= 3
     home_clv = clv.loc["501|1x2|ft|na|home"]
-    assert home_clv["odd_taken"] == pytest.approx(1.75) and home_clv["clv_raw"] > 0
+    assert home_clv["odd_taken"] == pytest.approx(1.74) and home_clv["clv_raw"] > 0
     assert home_clv["closing_p_fair"] > pin_home["p_fair"]
     # the fit is now 30 hours old: the models are skipped with a warning, the scan still runs on market prices
     assert second.model_info["status"] == "fit_stale"
@@ -476,7 +477,7 @@ def test_a_run_with_no_upcoming_match_records_an_empty_scan_and_renders(tmp_path
     settings = settings_for(tmp_path, model_cache, api_enabled=False)
     result = run_pipeline(ScanConfig(), as_of=datetime(2026, 10, 6, tzinfo=UTC), settings=settings)
     assert result.recorded and result.counts["quotes"] == 0 and result.counts["legs"] == 0
-    assert "Brak kuponów" in result.scan.html
+    assert "Dziś nic nie opłaca się po podatku 12%" in result.scan.html
     assert result.model_info["status"] in {"fit_stale", "no_fixtures"}
 
 

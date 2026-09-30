@@ -81,7 +81,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-from model_buk.evaluation.count_markets import (  # noqa: E402
+from model_buk.evaluation.count_markets import (
     _CARD_EVENTS_SQL,
     _STATS_SQL,
     FAMILIES,
@@ -91,21 +91,21 @@ from model_buk.evaluation.count_markets import (  # noqa: E402
     count_config,
     count_market,
 )
-from model_buk.evaluation.framework import (  # noqa: E402
+from model_buk.evaluation.framework import (
     MARKET_1X2,
     Market,
     PreparedMatches,
     _select_combinations,
     prepare_matches,
 )
-from model_buk.evaluation.model_selection import (  # noqa: E402
+from model_buk.evaluation.model_selection import (
     BASELINE_NAME,
     FIXED_MODELS,
     apply_log_linear_pool,
     load_panel,
     run_selection,
 )
-from model_buk.evaluation.protocol import (  # noqa: E402
+from model_buk.evaluation.protocol import (
     COMPARISON_CONFIG,
     DATA_ROOT,
     GOAL_MARKETS,
@@ -115,21 +115,21 @@ from model_buk.evaluation.protocol import (  # noqa: E402
     PROTOCOL_LEAGUE_IDS,
     load_history_matches,
 )
-from model_buk.ingestion.api_football_history import CUP_COMPETITIONS, WAVE3_LEAGUES  # noqa: E402
-from model_buk.models.count_models import (  # noqa: E402
+from model_buk.ingestion.api_football_history import CUP_COMPETITIONS, WAVE3_LEAGUES
+from model_buk.models.count_models import (
     DEFAULT_GRID as COUNT_GRID,
     CountEngine,
     count_spec,
     over_probability,
 )
-from model_buk.models.dynamic_adapters import (  # noqa: E402
+from model_buk.models.dynamic_adapters import (
     EloDavidsonForecaster,
     GasPoissonForecaster,
     elo_davidson_spec,
     goal_market_probabilities,
     poisson_score_matrix,
 )
-from model_buk.models.gbm_model import (  # noqa: E402
+from model_buk.models.gbm_model import (
     DEFAULT_GRID as GBM_GRID,
     GbmSettings,
     LogitBank,
@@ -139,7 +139,7 @@ from model_buk.models.gbm_model import (  # noqa: E402
     params_key,
     pi_gbm_spec,
 )
-from model_buk.models.goal_adapters import (  # noqa: E402
+from model_buk.models.goal_adapters import (
     DixonColesGoalModel,
     FitCache as GoalFitCache,
     NegativeBinomialGoalModel,

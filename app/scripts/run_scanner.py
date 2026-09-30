@@ -9,11 +9,13 @@ Usage (from app/):
     .venv\\Scripts\\python scripts\\run_scanner.py                 # live run: now, API for calendar and statistics
     .venv\\Scripts\\python scripts\\run_scanner.py --no-api        # no API request; uses what the archives hold
     .venv\\Scripts\\python scripts\\run_scanner.py --offline       # research run: no API, separate outputs
-    .venv\\Scripts\\python scripts\\run_scanner.py --as-of 2026-09-30T18:00:00Z   # replay a decision time
+    .venv\\Scripts\\python scripts\\run_scanner.py --as-of 2026-09-30T18:00:00Z   # replay (own register)
     .venv\\Scripts\\python scripts\\run_scanner.py --days-ahead 2  # only matches starting within two days
 
 ``--offline`` never touches the live paper register or page: its register, page, CSV and run log go to
-``Model-Buk-Data\\scanner\\offline\\``.  ``--as-of`` makes no API request (a replay must not fetch today's calendar).
+``Model-Buk-Data\\scanner\\offline\\``.  ``--as-of`` makes no API request (a replay must not fetch today's calendar)
+and never writes into the live register either: a replay's register, page, CSV and run log go to
+``Model-Buk-Data\\scanner\\replay\\`` (``offline\\`` with ``--offline``) unless ``--live-register`` is given.
 ``--days-ahead`` is part of the value definition, so such a run is a separate paper experiment (another config id).
 
 The API key comes from the API_FOOTBALL_KEY environment variable (or the user-level variable of the same name)
@@ -38,6 +40,7 @@ from model_buk.scanner.config import RunSettings, ScanConfig  # noqa: E402
 from model_buk.scanner.engine import DATA_ROOT  # noqa: E402
 
 OFFLINE_SUBDIR = "offline"
+REPLAY_SUBDIR = "replay"
 
 
 def api_key() -> str | None:
@@ -68,6 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--as-of", default=None, help="decision time (UTC ISO); default now. Implies --no-api")
     parser.add_argument("--offline", action="store_true", help="no API, outputs to scanner\\offline (live register untouched)")
+    parser.add_argument(
+        "--live-register",
+        action="store_true",
+        help="with --as-of only: write the replay into the live register and page (default: scanner\\replay)",
+    )
     parser.add_argument("--no-api", action="store_true", help="make no API request (calendar and statistics not refreshed)")
     parser.add_argument("--days-ahead", type=float, default=None, help="only matches starting within this many days (default: all)")
     parser.add_argument("--data-root", default=str(DATA_ROOT), help="root of Model-Buk-Data")
@@ -78,9 +86,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def settings_from(args: argparse.Namespace) -> RunSettings:
+    """Run settings of the arguments: ``--offline`` -> ``scanner/offline``, ``--as-of`` without ``--live-register``
+    -> ``scanner/replay``, otherwise the live ``scanner`` folder (and its register)."""
     root = Path(args.data_root)
     api = not (args.no_api or args.offline or args.as_of)
-    out_dir = root / "scanner" / OFFLINE_SUBDIR if args.offline else None
+    if args.offline:
+        out_dir = root / "scanner" / OFFLINE_SUBDIR
+    elif args.as_of and not getattr(args, "live_register", False):
+        out_dir = root / "scanner" / REPLAY_SUBDIR
+    else:
+        out_dir = None
     return RunSettings(
         data_root=root,
         out_dir=out_dir,
@@ -97,6 +112,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.days_ahead is not None and not args.days_ahead > 0:
         parser.error("--days-ahead must be a positive number of days (leave it out to scan every upcoming match)")
+    if args.live_register and not args.as_of:
+        parser.error("--live-register only applies to a replay (--as-of); a normal run always writes the live register")
+    if args.live_register and args.offline:
+        parser.error("--live-register and --offline exclude each other")
     config = ScanConfig(max_days_ahead=args.days_ahead) if args.days_ahead is not None else ScanConfig()
     settings = settings_from(args)
     log = (lambda text: print(text, file=sys.stderr, flush=True)) if args.verbose else None

@@ -1,6 +1,8 @@
 # Skaner wartości (tryb papierowy)
 
-Wersja z 30.09.2026. Skaner co przebieg przegląda **wszystkie** nadchodzące
+Wersja 1.0.1 z 30.09.2026 (klasy rynków, limit podejrzanych przewag 10%,
+zgodność czasu kursów, wykluczanie odbiegających rodzajów zakładów, unieważnianie
+meczów odwołanych, nowa strona). Skaner co przebieg przegląda **wszystkie** nadchodzące
 mecze, dla których w archiwum są kursy (dziś i kolejne dni, wszystkie ligi,
 wszystkie rynki, wszyscy bukmacherzy, bez limitu liczby meczów), szuka kursów
 wyższych od uczciwej ceny i składa z nich kupony 2–3 nóg. Nic nie jest
@@ -18,24 +20,32 @@ Kod: `app/src/model_buk/scanner/` (przebieg: `pipeline.py`, progi:
    naraz, jedno zapytanie na dzień): dziś przy każdym przebiegu, pozostałe dni
    okna (3 dni wstecz, 7 w przód) tylko gdy ich lista jest nieaktualna. Zwykle
    1–3 zapytania. Z katalogu biorą się nazwy drużyn i lig, a po meczu wyniki.
-2. **Kursy.** Wczytuje ostatni kurs każdego bukmachera dla każdego zakładu
-   każdego meczu, który się jeszcze nie zaczął. Tylko kursy widziane przed
-   chwilą decyzji.
-3. **Uczciwe ceny.** Dla każdego zakładu liczy uczciwą szansę (opis niżej).
-4. **Modele.** Nasze modele statystyczne (gole: pula modeli; rożne i kartki:
+2. **Rodzaje zakładów.** Raz na dobę mierzy na archiwum kursów, które rodzaje
+   zakładów bukmacherów (np. „Bet365, Clean Sheet”) systematycznie odbiegają od
+   Pinnacle, i wyklucza je (opis niżej). Pomiar trwa 20–90 sekund i jest
+   zapisywany w rejestrze; kolejne przebiegi tego dnia go tylko czytają.
+3. **Kursy.** Wczytuje ostatni kurs każdego bukmachera dla każdego zakładu
+   każdego meczu, który się jeszcze nie zaczął (bez wykluczonych rodzajów
+   zakładów). Tylko kursy widziane przed chwilą decyzji.
+4. **Uczciwe ceny.** Dla każdego zakładu liczy uczciwą szansę (opis niżej).
+5. **Klasy rynków.** Każdy mecz dostaje klasę: *płynny* albo *słaby* (opis
+   niżej). Do głównych sekcji strony trafiają tylko rynki płynne.
+6. **Modele.** Nasze modele statystyczne (gole: pula modeli; rożne i kartki:
    model liczebności) liczą swoje szanse dla meczów lig, które modelujemy. Modele
    są trenowane raz na dobę (`fit_live_models.py fit`); jeśli nie ma treningu
    albo jest starszy niż doba, skaner działa bez modeli i zapisuje ostrzeżenie.
-5. **Wartość i kupony.** Porównuje każdy kurs z uczciwą ceną, wybiera nogi z
-   wartością i składa z nich kupony.
-6. **Rejestr.** Zapisuje przebieg do rejestru papierowego (jeden `scan_id`).
-7. **Rozliczenie i CLV.** Rozlicza nogi z wcześniejszych przebiegów, których
+7. **Wartość i kupony.** Porównuje każdy kurs z uczciwą ceną, wybiera nogi z
+   wartością i składa z nich kupony, osobno dla rynków płynnych i słabych.
+8. **Rejestr.** Zapisuje przebieg do rejestru papierowego (jeden `scan_id`).
+9. **Rozliczenie i CLV.** Unieważnia nogi meczów odwołanych i przełożonych,
+   rozlicza nogi z wcześniejszych przebiegów, których
    mecze się skończyły (wynik z katalogu meczów; do zakładów na rożne i kartki
    dociąga statystyki meczu z API, z limitem zapytań), i zapisuje CLV, czyli
    porównanie wziętego kursu z ceną zamknięcia (ostatni kurs przed meczem).
-8. **Wyniki.** Zapisuje stronę HTML, pliki CSV i jedną linię dziennika.
+10. **Wyniki.** Zapisuje stronę HTML, pliki CSV i jedną linię dziennika.
 
-Przebieg trwa około 20 sekund. Jeśli nie ma internetu, klucza API albo limit
+Przebieg trwa około 45 sekund (raz na dobę około minuty dłużej: pomiar rodzajów
+zakładów). Jeśli nie ma internetu, klucza API albo limit
 zapytań jest wyczerpany, skaner i tak działa na tym, co już jest w archiwach,
 i zapisuje ostrzeżenie.
 
@@ -78,11 +88,29 @@ dopiero na kuponie, bo płaci się go raz od całej stawki kuponu. Kolumny dla
 
 Kurs jest **podejrzany** (zapisywany tylko do badań, nigdy proponowany), gdy:
 
-- przewaga nad uczciwą ceną przekracza 20% (prawie zawsze błąd danych albo
-  kurs, którego nie da się zagrać),
+- przewaga nad uczciwą ceną przekracza 10% (`max_edge`; 30.09 wszystkie
+  „przewagi” 15–25% okazały się błędem danych, cienkim rynkiem albo starą
+  tablicą),
 - uczciwa cena jest bardzo niepewna (p_se powyżej 0,05),
 - cała para kursów bukmachera leży daleko od ceny rynkowej (przesunięcie o
   ponad 6 punktów procentowych: stara tablica albo źle opisana linia).
+
+**Ważna konsekwencja limitu 10%.** Pojedynczy zakład opłaca się po podatku
+12% dopiero przy przewadze co najmniej 13,6% (1 / 0,88). Przewagi powyżej 10%
+uznajemy za podejrzane, więc **singiel praktycznie nigdy nie przejdzie przy
+pełnym podatku**. Po podatku mogą się opłacać tylko kupony (podatek płaci się
+raz, a przewagi nóg się mnożą).
+
+Kurs jest **niezsynchronizowany** (zapisywany, liczony w diagnostyce, nigdy
+proponowany), gdy tablica bukmachera i tablica, z której wzięto uczciwą cenę,
+pochodzą z różnych chwil dostawcy: ich czasy aktualizacji (`api_update`, a gdy
+go brak — czas, w którym tablicę widzieliśmy) różnią się o więcej niż 60 minut
+(`sync_window_minutes`). Dostawca nadaje jeden czas aktualizacji całemu meczowi
+naraz, więc na bieżącej tablicy różnica wynosi zero; pojawia się tylko wtedy,
+gdy Pinnacle zdjął mecz, a jego ostatnia cena jest ze starszej chwili. Kolejne
+aktualizacje jednego meczu są oddalone o co najmniej 3,75 godziny (5. percentyl
+w archiwum 28–30.09), więc 60 minut oznacza „ta sama chwila dostawcy”. Gdy
+któregoś czasu nie ma, kurs nie jest oceniany tą regułą.
 
 Na liniach, gdzie stawka może wrócić (handicapy i sumy całkowite oraz
 ćwiartkowe, „remis – zwrot”), EV jest skorygowane o szansę zwrotu.
@@ -97,18 +125,112 @@ niższa od uczciwej o więcej niż 2 punkty procentowe). Kursy, dla których nie
 ma żadnej ceny rynkowej, a jest tylko szansa modelu, tworzą osobną klasę
 „tylko model”: są zapisywane do badań i nigdy nie trafiają do kuponów.
 
+## Co znaczą klasy rynków
+
+Cena Pinnacle jest dobrym oszacowaniem prawdy tylko tam, gdzie Pinnacle
+przyjmuje duże pieniądze: w głównych ligach mężczyzn i dużych turniejach. W
+meczach towarzyskich, kobiecych, młodzieżowych, rezerwach, ligach amatorskich i
+egzotycznych rozgrywkach jego cena to zgadywanie z dużą marżą, a bukmacher,
+który się z nim nie zgadza, równie dobrze może mieć rację. Dlatego każdy mecz
+dostaje klasę:
+
+- **płynny** — cena Pinnacle jest wiarygodna; tylko te mecze trafiają do
+  głównych sekcji strony,
+- **słaby** — wszystko inne; nogi i kupony są zapisywane i pokazywane osobno,
+  jako eksperyment, z osobnymi wynikami papierowymi.
+
+Mecz jest **słaby**, gdy spełnia którąkolwiek z reguł (na stronie widać,
+która):
+
+| Reguła | Kiedy |
+|---|---|
+| kobiety | nazwa ligi (Women, Femenino, Frauen, WSL, Damallsvenskan…) albo drużyny „… W” |
+| młodzież | U17–U23, Youth, Primavera, Juniores, Revelação, Premier League 2, Premier League International Cup, Elite League… |
+| towarzyski | Friendlies, Friendlies Clubs, Club Friendlies |
+| rezerwy / amatorzy | Reserve, Amateur, Regionalliga, Oberliga, Non League, Serie D, Tercera… albo drużyna „… II”, „… B”, „… 2”, „… Res.” |
+| brak Pinnacle | Pinnacle nie ma pełnego 1X2 na świeżej tablicy (nie ma żadnej ostrej ceny) |
+| wysoka marża Pinnacle | marża 1X2 Pinnacle (suma odwrotności kursów) powyżej 1,08 |
+| mało bukmacherów | mniej niż 6 bukmacherów (z Pinnacle i Betfair) wystawia mecz |
+| cena bez Pinnacle | pojedyncza noga meczu płynnego, której uczciwa cena nie pochodzi od Pinnacle (konsensus bukmacherów albo Betfair) |
+
+Nazwy biorą się z katalogu meczów (liga, kraj, drużyny). Mecz spoza katalogu
+jest oceniany tylko regułami danych.
+
+**Jak wybrano progi** (archiwum kursów 28–30.09, tablice co 6 godzin, 674
+mecze): w 89 śledzonych rozgrywkach marża 1X2 Pinnacle ma medianę 1,048–1,062
+(zależnie od czasu do meczu) i 95. percentyl 1,065–1,070 dwa dni i więcej przed
+meczem, do 1,09 w ostatnich dwóch dniach (Kanada, Peru). W pozostałych
+rozgrywkach mediana to 1,068–1,093 (towarzyskie 1,088, angielskie ligi
+amatorskie 1,10, izraelska Liga Alef 1,128, kobiecy puchar Europy 1,14). Powyżej
+1,08 leży 5% obserwacji śledzonych rozgrywek i 46% pozostałych. Gdy Pinnacle
+był na tablicy, każdy mecz śledzonych rozgrywek miał co najmniej 6
+bukmacherów (mediana 8 z 11); 4–5 zdarzały się tylko gdzie indziej. Bez 1X2
+Pinnacle było 13% obserwacji śledzonych rozgrywek (angielska League One i Two
+cztery dni przed meczem, zanim Pinnacle otworzy rynek) i 37% pozostałych (Serie
+C, J3, trzecie i czwarte ligi Szwecji i Hiszpanii); taki mecz staje się płynny,
+gdy Pinnacle otworzy rynek.
+
+Klasa jest liczona od nowa w każdym przebiegu i zapisana przy każdej nodze
+(`tier`, `tier_reason`) i każdym kuponie (`tier`) w rejestrze. Kupony nigdy nie
+mieszają klas. Progi są w konfiguracji (`tier_max_pinnacle_overround`,
+`tier_min_bookmakers`, `tier_name_rules`, `tier_sharp_fair_only`).
+
+## Wykluczone rodzaje zakładów
+
+Niektóre rodzaje zakładów niektórych bukmacherów systematycznie odbiegają od
+Pinnacle (np. inna marża po stronie „tak” w zakładach „czyste konto”, rozchwiana
+drabinka linii). Dają „przewagę” w każdym skanie, a nie jest to okazja. Raz na
+dobę skaner mierzy to na archiwum:
+
+- **próbka**: tablice z chwili decyzji i co 12 godzin wstecz przez 7 dni (mecze,
+  które się jeszcze nie zaczęły, tablice nie starsze niż 8 godzin), więc waży
+  tak jak widzi je skaner: daleko i blisko meczu;
+- **pomiar**: dla każdej pełnej linii jednego rodzaju zakładu jednego
+  bukmachera (obie strony linii, trzy wyniki 1X2) jego szansa po odjęciu marży
+  minus szansa Pinnacle tej samej nogi; rodzaje zakładów nie są przed tym łączone
+  (Bet365 „Goals Over/Under” 5 i „Goal Line” 50 są mierzone osobno);
+- **wykluczenie** (co najmniej 100 zmierzonych nóg): mediana odchylenia powyżej
+  2 p.p., albo rozrzut (odporne odchylenie standardowe) ponad 1,4 raza większy
+  niż typowy rozrzut tego samego rynku u innych bukmacherów, albo ponad 15% nóg
+  odchylonych o więcej niż 5 p.p. Pinnacle nigdy nie jest wykluczany. Rozrzut
+  porównujemy z tym samym rynkiem, bo niektóre rynki (sumy goli drużyn) są
+  rozchwiane u wszystkich bukmacherów.
+
+Progi leżą tuż nad 95. percentylem (archiwum 29–30.09, 9 tablic, 81 par
+bukmacher–rodzaj zakładu): mediana |odchylenia| 0,006, 95. percentyl 0,023;
+stosunek rozrzutu 1,00 i 1,33; udział dużych odchyleń 3,4% i 11,6%. Na tej
+próbce wykluczonych jest 9 par: Bet365 „Clean Sheet” (27, 28) i William Hill
+„Score a Goal” (43, 116) — odchylone o 2,3–3 p.p.; Marathonbet rożne w 1.
+połowie (77); SBO 1X2 (1) i 1X2 1. połowy (13); Bet365 rożne powyżej/poniżej
+(45); BetVictor gole w 1. połowie (6). Bet365 „Goal Line” (50) na tych dwóch
+dniach **nie** odstaje (mediana +0,001, rozrzut taki jak rynek, 5% dużych
+odchyleń): jego „wartościowe” nogi miały przesunięcie pary 5–6 p.p. i łapią je
+inne reguły (przesunięcie pary, limit 10%, klasa rynku).
+
+Kursy wykluczonych rodzajów zakładów są odrzucane przy wczytywaniu, zanim
+kursy jednego bukmachera zostaną połączone, więc inny rodzaj zakładu tego
+samego bukmachera na tę samą nogę dalej się liczy, a wykluczone kursy nie
+wchodzą też do konsensusu. Pomiar (także przy powtórce `--as-of`, tylko z
+danych sprzed chwili decyzji) trafia do tabeli `bet_type_checks` w rejestrze;
+lista wykluczeń jest w polu statusu strony i w dzienniku (`bet_types`).
+
 ## Kupony
 
 Kupon to 2 albo 3 nogi z wartością z **różnych meczów u jednego
-bukmachera**. Nogi traktujemy jako niezależne:
+bukmachera**, zawsze z jednej klasy rynku. Nogi traktujemy jako niezależne:
 
 - szansa trafienia = iloczyn szans nóg,
 - EV kuponu = τ · (iloczyn p · kurs) − 1, a dolna granica z p_dolne.
 
 Kupon jest proponowany, gdy jego dolna granica EV przy τ = 0,88 (pełny
-podatek) jest dodatnia i szansa trafienia wynosi co najmniej 30%. Kupony są
-ułożone po dolnej granicy EV, potem po szansie trafienia; na bukmachera
-najwyżej 20 propozycji, a jedna noga może wystąpić najwyżej w 3 z nich.
+podatek) jest dodatnia i szansa trafienia wynosi co najmniej 30%. Osobno skaner
+zbiera kupony, które spełniają warunki **tylko przy niższym podatku** (τ = 0,94
+albo 1,00, a nie 0,88); są pokazywane w osobnej sekcji i nie są propozycją przy
+zwykłym podatku. Każdy kupon ma w rejestrze `regime`: najostrzejszy podatek,
+przy którym się opłaca (`t088`, `t094`, `t100`). Kupony są ułożone po dolnej
+granicy EV, potem po szansie trafienia; w każdej klasie i grupie na
+bukmachera najwyżej 20 propozycji, a jedna noga może wystąpić najwyżej w 3 z
+nich.
 
 ### Przykład
 
@@ -136,28 +258,36 @@ przewagi się mnożą. Pojedynczy zakład potrzebowałby przewagi około 13,6%.
 ## Co pokazuje strona
 
 `latest.html` (i kopia dnia w `html/RRRR-MM-DD.html`) to jeden plik, który
-działa w telefonie:
+działa w telefonie. Sekcje po kolei:
 
-- **Nagłówek**: czas skanu (czas polski) i liczby: mecze ocenione (te, dla
-  których był świeży kurs i uczciwa cena), bukmacherzy (bez Pinnacle i
-  Betfair), ocenione kursy, nogi z wartością, proponowane kupony, podejrzane
-  kursy. W dzienniku (`logs\scanner.log`) `fixtures=` to wszystkie mecze z
-  kursami w archiwum, a `evaluated=` to mecze ocenione, czyli liczba z
-  nagłówka strony.
-- **Najlepsze kupony** (do 15): bukmacher, kurs łączny, nogi (mecz, godzina,
-  zakład, kurs, szansa), szansa trafienia, EV dla trzech założeń podatkowych z
-  dolną granicą.
-- **Nogi z wartością** (do 200), pogrupowane po dniu meczu, dzisiejsze na
-  górze: godzina, mecz i liga, zakład, bukmacher, kurs, uczciwy kurs, szansa,
-  przewaga, szansa zwrotu stawki, EV dla trzech założeń, źródło uczciwej ceny,
-  zdanie modelu. Kliknięcie nagłówka sortuje tabelę.
-- **Tylko model**: kursy bez ceny rynkowej (tylko do badań).
-- **Wyniki papierowe** za 7 i 30 dni, osobno pojedyncze nogi i kupony:
-  liczba zakładów, rozliczone, trafienia, zysk na złotówkę stawki dla trzech
-  założeń podatkowych, CLV (mediana i odsetek pobitych zamknięć). Liczone od
-  pierwszej chwili, w której noga albo kupon stały się propozycją, po kursie z
-  tej chwili, tylko dla bieżącej konfiguracji.
-- **Jak czytać**: krótkie objaśnienia.
+1. **Status**: czas skanu (czas polski), mecze z kursami, mecze ocenione
+   (płynne / słabe), kursy, ocenione kursy, nogi z wartością dla każdego
+   podatku (płynne / słabe), kupony przy podatku 12%, stan modeli, zapytania do
+   API i rozwijana lista „Co pominięto i dlaczego” (kursy stare, rozpoczęte,
+   bez uczciwej ceny, podejrzane, niezsynchronizowane, wykluczone rodzaje
+   zakładów, mecze bez nazw, ostrzeżenia).
+2. **Single opłacalne same w sobie przy podatku 12%** — rynki płynne. Zwykle
+   puste (patrz „ważna konsekwencja limitu 10%”); strona mówi to wprost.
+3. **Kupony 2–3 nogi przy podatku 12%** — rynki płynne. Gdy pusto, strona pisze
+   wprost: „Dziś nic nie opłaca się po podatku 12%”.
+4. **Tylko przy niższym podatku (np. promocje, Betclic)** — nogi i kupony rynków
+   płynnych, które opłacają się dopiero przy podatku 6% albo bez podatku;
+   wyraźnie oznaczone „nie opłaca się przy podatku 12%”.
+5. **Eksperymentalne: rynki słabe** — nogi i kupony rynków słabych, z powodem
+   klasy przy każdej nodze i ostrzeżeniem, że to niewiarygodne.
+6. **Wyniki papierowe** — osobno dla rynków płynnych i słabych, dla każdego
+   podatku (12%, 6%, bez podatku), pojedyncze i kupony, za 7 i 30 dni: liczba
+   zakładów, rozliczone, trafienia, zysk na złotówkę stawki przy tym podatku,
+   CLV (liczba, mediana, odsetek pobitych zamknięć). Pod spodem **tabela
+   ostatnich 7 dni**: każdy zaproponowany kupon (z nogami i wynikiem każdej nogi)
+   i każda noga z wartością, z wynikiem: *wygrany*, *przegrany*, *zwrot*,
+   *pół-wygrany*, *pół-przegrany*, *unieważniony* albo *oczekuje*, oraz zyskiem
+   przy podatku 12%.
+
+Dalej: **Tylko model** (kursy bez ceny rynkowej, tylko do badań) i **Jak
+czytać**. Wyniki są liczone od pierwszej chwili, w której noga albo kupon stały
+się propozycją przy danym podatku, po kursie z tej chwili, tylko dla bieżącej
+konfiguracji.
 
 ## Gdzie są pliki
 
@@ -166,13 +296,14 @@ Wszystko w `C:\Users\oskar\Documents\Model-Buk-Data\`:
 | Plik | Co zawiera |
 |---|---|
 | `scanner\latest.html`, `scanner\html\RRRR-MM-DD.html` | strona (ostatni skan; kopia dnia nadpisywana kolejnymi skanami tego dnia) |
-| `scanner\latest_value_legs.csv`, `scanner\csv\RRRR-MM-DD_value_legs.csv` | nogi z wartością ostatniego skanu (arkusz: polskie opisy zakładów, czas polski, wszystkie liczby) |
-| `scanner\latest_coupons.csv`, `scanner\csv\RRRR-MM-DD_coupons.csv` | proponowane kupony, jeden wiersz na nogę, najlepszy kupon pierwszy |
-| `scanner\scanner.sqlite` | rejestr papierowy (tylko dopisywanie): konfiguracje, skany, nogi, kupony, rozliczenia, CLV |
+| `scanner\latest_value_legs.csv`, `scanner\csv\RRRR-MM-DD_value_legs.csv` | nogi z wartością ostatniego skanu (arkusz: polskie opisy zakładów, czas polski, wszystkie liczby, klasa rynku `tier` i jej powód) |
+| `scanner\latest_coupons.csv`, `scanner\csv\RRRR-MM-DD_coupons.csv` | kupony z listy, jeden wiersz na nogę: wszystkie klasy i grupy podatkowe (kolumny `tier` i `regime`), najpierw rynki płynne i kupony przy pełnym podatku, w grupie najlepszy pierwszy |
+| `scanner\scanner.sqlite` | rejestr papierowy (tylko dopisywanie): konfiguracje, skany, nogi, kupony, rozliczenia, CLV, pomiary rodzajów zakładów (`bet_type_checks`) |
 | `scanner\model_forecasts.sqlite` | prognozy modeli z każdego treningu (tylko dopisywanie) |
 | `scanner\runs.jsonl` | jedna linia JSON na przebieg: czasy kroków, zapytania API, liczby, ostrzeżenia |
 | `scanner\model_cache\` | nocny trening modeli (czyta go skaner) |
 | `scanner\offline\` | wszystko to samo dla przebiegów `--offline` (rejestr na żywo pozostaje nietknięty) |
+| `scanner\replay\` | wszystko to samo dla powtórek `--as-of` bez `--live-register` |
 | `logs\scanner.log` | jedna linia na przebieg z `run_scanner.ps1` |
 | `logs\scanner_errors.log` | pełny opis błędu, gdy przebieg się nie udał |
 | `fixture-directory\directory.sqlite3` | kalendarz, wyniki i statystyki meczów (odświeżane przez skaner) |
@@ -193,7 +324,12 @@ Opcje:
 - `--offline`: przebieg badawczy, bez API, a wszystkie wyniki idą do
   `scanner\offline\` (rejestr papierowy na żywo pozostaje nietknięty).
 - `--as-of 2026-09-30T18:00:00Z`: powtórka decyzji z podanej chwili (tylko
-  kursy widziane przed nią); bez zapytań do API.
+  kursy widziane przed nią); bez zapytań do API. Powtórka **nigdy** nie pisze do
+  rejestru na żywo: jej rejestr, strona, CSV i dziennik idą do
+  `scanner\replay\` (z `--offline` do `scanner\offline\`).
+- `--live-register` (tylko z `--as-of`): zapisz powtórkę jednak do rejestru na
+  żywo. Świadoma decyzja, np. żeby uzupełnić przebieg, który nie zdążył się
+  wykonać.
 - `--days-ahead 2`: tylko mecze, które zaczynają się w ciągu 2 dni. To zmienia
   definicję puli, więc jest to osobny eksperyment papierowy (inny numer
   konfiguracji).
@@ -251,15 +387,23 @@ i dociąga statystyki do rozliczeń.
   `fair_max_age_far_minutes`).
 - **Cienkie rynki.** W meczach towarzyskich, kobiecych, młodzieżowych i
   niższych ligach Pinnacle bywa mało wiarygodny, a różnice kursów są częściej
-  błędem niż okazją. Stąd limity „podejrzanych” kursów.
+  błędem niż okazją. Dlatego takie mecze są w klasie „słaby” i nie trafiają do
+  głównych sekcji (patrz „Co znaczą klasy rynków”).
 - **CLV to ta sama miara ceny.** Porównanie z zamknięciem używa tej samej
   definicji uczciwej ceny, więc samo w sobie nie dowodzi przewagi. Wnioski
   dopiero po setkach rozliczonych zakładów.
 - **Nogi kuponu traktujemy jako niezależne.** Korelacja meczów tej samej ligi
   i godziny nie jest modelowana.
 - **Kartki** liczymy jako żółte plus czerwone; bukmacherzy liczą je różnie.
-- **Mecze odwołane i przełożone** nie są na razie rozliczane jako zwrot:
-  zostają nierozliczone.
+- **Mecze odwołane i przełożone** są unieważniane (zwrot stawki, zysk zero,
+  poza liczeniem trafień). Statusy dostawcy: odwołany (CANC), przerwany (ABD),
+  przyznany walkowerem (AWD, WO) — od razu; przełożony (PST), zawieszony (SUSP),
+  przerwany chwilowo (INT) — gdy mecz nadal ma taki status 48 godzin
+  (`void_grace_hours`) po godzinie, na którą noga była wzięta. Mecz przełożony,
+  któremu dostawca dał już nową datę (status NS/TBD), jest unieważniany, gdy nowa
+  data wypada ponad 48 godzin po pierwotnej i ten czas minął. Unieważniona noga
+  wypada z kuponu jak zwrot; kupon z samymi unieważnionymi nogami jest
+  unieważniony. Status bierze się z katalogu meczów.
 - **Nowa konfiguracja = nowy eksperyment.** Każda zmiana progu zmienia numer
   konfiguracji (`config_id`); wyniki papierowe są liczone osobno dla każdej
   konfiguracji.
@@ -269,19 +413,24 @@ i dociąga statystyki do rozliczeń.
 Przy każdym przebiegu skaner zapisuje:
 
 - **nogi**: każdy kurs wyższy od uczciwej ceny u każdego bukmachera (także
-  te bez zapasu na niepewność i podejrzane), z uczciwą szansą, jej źródłem i
-  błędem, szansą modelu, EV dla trzech założeń podatkowych, klasą (wartość,
-  prawie, podejrzana, tylko model) i czasem, w którym kurs był widziany; wiersz
+  te bez zapasu na niepewność, podejrzane i niezsynchronizowane), z uczciwą
+  szansą, jej źródłem i błędem, szansą modelu, EV dla trzech założeń
+  podatkowych, klasą nogi (wartość, prawie, podejrzana, niezsynchronizowana,
+  tylko model), klasą rynku (`tier`, `tier_reason`), różnicą czasu tablic
+  (`board_lag_min`) i czasem, w którym kurs był widziany; wiersz
   powstaje, gdy noga jest nowa albo coś się w niej zmieniło (co najmniej raz na
   6 godzin), więc nic nie ginie, a rejestr nie puchnie,
-- **kupony**: wszystkie spełniające warunki (do 500 na bukmachera i skan) z
-  ich nogami, oraz liczbę wszystkich sprawdzonych i spełniających warunki,
+- **kupony**: wszystkie spełniające warunki (do 500 na bukmachera, klasę i
+  grupę podatkową w skanie) z ich nogami, klasą rynku i najostrzejszym
+  podatkiem, przy którym się opłacają, oraz liczbę wszystkich sprawdzonych i
+  spełniających warunki,
+- **pomiar rodzajów zakładów** raz na dobę (`bet_type_checks`),
 - **przebieg**: liczby, konfigurację, źródła uczciwych cen, stan modeli,
   odświeżenie kalendarza, zapytania API, czasy kroków i ostrzeżenia
   (`scans` w rejestrze i `runs.jsonl`),
 - **rozliczenia** nóg zakończonych meczów (wygrana, przegrana, zwrot,
-  połowa wygranej, połowa przegranej) i **CLV** nóg, których mecz już się
-  zaczął,
+  połowa wygranej, połowa przegranej, unieważniony) i **CLV** nóg, których
+  mecz już się zaczął,
 - **prognozy modeli** z każdego treningu (gole dla każdego meczu, rożne i
   kartki dla linii, które ktoś wystawia),
 - **kalendarz** wszystkich meczów wszystkich lig (3 dni wstecz, 7 w przód),
@@ -338,3 +487,24 @@ liczy się od nowa. Przebieg zaraz po szerokim skanie kursów (18:05 UTC):
   nóg z wartością (jedna z 88).
 - Czas 36 s, jedno zapytanie do API (kalendarz), nic do rozliczenia jeszcze nie
   ma (pierwsze mecze kończą się dopiero wieczorem).
+
+## Przebieg po wersji 1.0.1 (30.09.2026, 21:17 czasu polskiego)
+
+Nowa konfiguracja `637ff88f7672` (limit przewagi 10%, klasy rynków, zgodność
+czasu tablic, wykluczone rodzaje zakładów, unieważnianie):
+
+- 478 meczów z kursami, 452 ocenione: **166 płynnych, 286 słabych**; 705 695
+  kursów, 329 891 ocenionych (płynne 173 869, słabe 156 022).
+- Wykluczone rodzaje zakładów (pomiar z 21:15, 67 074 zmierzone nogi w 311
+  meczach, 72 pary ocenione): 1xBet 106, Bet365 27 i 28, BetVictor 6, SBO 1 i 13,
+  William Hill 43 i 116; odrzucono 6 198 kursów.
+- 2 852 podejrzane kursy, 0 niezsynchronizowanych (na bieżącej tablicy wszyscy
+  bukmacherzy meczu mają ten sam czas dostawcy).
+- Nogi z wartością: płynne 0 / 0 / 7 (podatek 12% / 6% / bez podatku), słabe
+  0 / 0 / 49. Kupony przy podatku 12%: **0** (ani płynne, ani słabe). Tylko przy
+  niższym podatku: 1 kupon płynny (bez podatku, dolna granica EV +0,9%) i 638
+  słabych (20 na liście).
+- Wniosek: po podatku 12% dziś nic się nie opłaca; na płynnych rynkach
+  przewagi są małe (2–9%) i wystarczają najwyżej przy zakładach bez podatku.
+- API: 1 zapytanie (kalendarz na dziś), zostało 2 115. Czas 36 s (66 s w
+  przebiegu z pomiarem rodzajów zakładów).

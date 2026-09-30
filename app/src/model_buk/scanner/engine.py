@@ -21,7 +21,8 @@ Frames (column names are the contract)
   fetched_at`` (``fetched_at`` = when the price was last seen; the loader must not hand over the time of the last
   *change* because the archive stores changes only).
 * fair: ``fixture_id, market, period, line, selection, p_fair, p_se, fair_source, devig_method, n_books,
-  book_margin`` with ``fair_source`` in ``pinnacle | pinnacle_derived | betfair | consensus``.
+  book_margin`` with ``fair_source`` in ``pinnacle | pinnacle_derived | betfair | consensus``, optionally
+  ``fair_board_at`` (when the source board was produced, see :mod:`model_buk.scanner.fair`).
 * model: ``fixture_id, market, period, line, selection, p_model, model_name`` (optional, one row per leg).
 
 Rules encoded here
@@ -33,13 +34,30 @@ Rules encoded here
   days only every six hours) or for matches that start within ``min_minutes_to_kickoff`` are skipped.
 * Missing stays missing: a leg without a fair price keeps ``p_fair`` NaN; an unknown standard error gives a NaN
   lower bound and therefore never a value flag.
-* Plausibility guards: a leg whose raw edge exceeds ``max_edge`` (20% by default), whose fair probability has a
-  standard error above ``max_p_se`` or whose bookmaker quotes a whole line far from the sharp price (``book_shift``
-  above ``max_book_shift``, below) is classed ``suspect``: it is written to the register for research (later
-  closing line value tells whether such gaps are real) but is never a value leg and never enters a coupon.
+* Plausibility guards: a leg whose raw edge exceeds ``max_edge`` (10% by default: the "edges" of 15-25% seen on
+  2026-09-30 were all artefacts of thin markets, stale boards or mislabelled lines), whose fair probability has a
+  standard error above ``max_p_se`` or whose bookmaker quotes a whole line far from the sharp price
+  (``book_shift`` above ``max_book_shift``, below) is classed ``suspect``: it is written to the register for
+  research (later closing line value tells whether such gaps are real) but is never a value leg and never enters
+  a coupon.  A consequence of the 10% cap: a single bet needs an edge of 13.6% to pay the 12% stake tax
+  (``1 / 0.88``), so no single leg can be value at ``tau = 0.88``; only coupons can.
+* Timestamp consistency: a quote is compared only with a fair price whose source board comes from the same
+  provider snapshot.  The board time of the quote is its provider update time (``api_update``, else
+  ``fetched_at``), that of the fair price ``fair_board_at``; when they are more than ``sync_window_minutes`` (60)
+  apart the leg is ``unsynced`` (``board_lag_min`` is the difference): logged, counted, never value.  The provider
+  stamps one update time per fixture and scan for every bookmaker, so on a current board the difference is zero;
+  it is non-zero only when the fair source's board is from an earlier snapshot (the reference book dropped the
+  fixture), and consecutive snapshots of a fixture are at least 3.75 hours apart (5th percentile of the non-zero
+  steps on the archive of 2026-09-28..30; under 60 minutes in 0.8% of the sightings).  Where either time is
+  unknown the leg is not judged (missing stays missing).
+* Market tier: every leg carries the tier of its fixture (``tier`` ``liquid`` | ``thin`` and ``tier_reason``,
+  :mod:`model_buk.scanner.tiers`); a leg whose fair price does not come from Pinnacle (a consensus of soft books or
+  Betfair's own board) is ``thin`` as well (``soft_fair_price``): without Pinnacle there is no sharp reference,
+  whatever the competition.  The tier does not change ``is_value``; it decides where the leg is shown and that
+  coupons never mix the tiers.
 * Book shift: when a bookmaker quotes a complete set of one line (both sides of a two-way line, all three of a
   1X2) its own proportionally de-vigged probability of the leg is ``book_p`` and ``book_shift = book_p - p_fair``.
-  A single price that is above the fair price by ``max_edge`` (20%) while the other side of the line is priced
+  A single price that is above the fair price by 20% while the other side of the line is priced
   normally moves the de-vigged probability by at most 0.06 (largest at ``p = 0.5``), so a larger shift means the
   whole pair sits somewhere else: a stale board, or a ladder whose lines are mislabelled (measured on the live
   archive: Bet365 and SBO quote one price pair on several handicap lines).  The median ``|shift|`` of all two-way
@@ -132,6 +150,7 @@ FAIR_COLUMNS: tuple[str, ...] = (
     "devig_method",
     "n_books",
     "book_margin",
+    "fair_board_at",
 )
 MODEL_COLUMNS: tuple[str, ...] = ("fixture_id", "market", "period", "line", "selection", "p_model", "model_name")
 FIXTURE_COLUMNS: tuple[str, ...] = (
@@ -155,6 +174,8 @@ _KEY = ["fixture_id", "market", "period", "line_key", "selection"]
 KEY_COLUMNS: tuple[str, ...] = tuple(_KEY)
 """Join key of a leg (``line_key`` is ``line`` with NaN replaced by a sentinel)."""
 _NO_LINE = -9999.0
+_EDGE_TOLERANCE = 1e-9
+"""An edge equal to ``max_edge`` (up to floating-point noise) does not exceed it."""
 """Join sentinel for markets without a line (NaN keys are avoided on purpose)."""
 
 _FAMILY_OF_MARKET: Mapping[str, str] = {
@@ -237,13 +258,17 @@ class ScannerConfig:
     only every six hours (a slow market: the lead-time drift term of the fair price is the larger one there), so
     they get ``max_quote_age_far_hours`` (8): without it more than half of the upcoming matches would be out of the
     pool for half of every day.  ``max_edge`` and ``max_p_se`` are plausibility guards: a leg
-    whose raw edge is above ``max_edge`` (a soft book 20% above the sharp price is nearly always a data error, a
-    line mismatch or a price that cannot be taken) or whose fair probability is more uncertain than ``max_p_se``
-    (a poorly fitted derived price) is classed ``suspect``; it is logged for research but never value.
-    ``max_book_shift`` is the third guard: the bookmaker's own de-vigged probability of the leg (from its complete
-    set of the line) may differ from the fair probability by at most this much (0.06 is the largest shift a
-    one-sided price gap of ``max_edge`` can cause), otherwise the bookmaker's whole pair is on another line or
-    stale and the leg is ``suspect``.
+    whose raw edge is above ``max_edge`` (0.10: a soft book 10% above the sharp price was, on the archive, a thin
+    market, a stale board or a line mismatch, not a price that can be taken) or whose fair probability is more
+    uncertain than ``max_p_se`` (a poorly fitted derived price) is classed ``suspect``; it is logged for research
+    but never value.  ``max_book_shift`` is the third guard: the bookmaker's own de-vigged probability of the leg
+    (from its complete set of the line) may differ from the fair probability by at most this much (0.06 is the
+    largest shift a one-sided price gap of 20% can cause), otherwise the bookmaker's whole pair is on another line
+    or stale and the leg is ``suspect``.  ``sync_window_minutes`` (60) is the largest distance between the board
+    time of a quote and that of its fair price (``unsynced`` beyond it).  ``tier_max_pinnacle_overround`` (1.08),
+    ``tier_min_bookmakers`` (6) and ``tier_name_rules`` (on) define the market tier of a fixture
+    (:mod:`model_buk.scanner.tiers`); with ``tier_sharp_fair_only`` (on) a leg of a liquid fixture whose fair price
+    is not Pinnacle's (``consensus``, ``betfair``) is ``thin`` too (reason ``soft_fair_price``).
 
     Coupons (see :mod:`model_buk.scanner.coupons`)
     ---------------------------------------------
@@ -266,9 +291,14 @@ class ScannerConfig:
     model_veto: bool = False
     model_only_se: float = 0.03
     include_model_only: bool = True
-    max_edge: float = 0.20
+    max_edge: float = 0.10
     max_p_se: float = 0.05
     max_book_shift: float = 0.06
+    sync_window_minutes: float = 60.0
+    tier_max_pinnacle_overround: float = 1.08
+    tier_min_bookmakers: int = 6
+    tier_name_rules: bool = True
+    tier_sharp_fair_only: bool = True
     reference_bookmakers: tuple[str, ...] = REFERENCE_BOOKMAKERS
     max_quote_age_hours: float = 3.0
     far_lead_hours: float = 48.0
@@ -310,6 +340,7 @@ class ScannerConfig:
             "max_edge",
             "max_p_se",
             "max_book_shift",
+            "sync_window_minutes",
             "max_quote_age_hours",
             "far_lead_hours",
             "max_quote_age_far_hours",
@@ -337,6 +368,11 @@ class ScannerConfig:
             raise ValueError("log_cap_per_bookmaker must be non-negative or None")
         if not self.reference_bookmakers:
             raise ValueError("reference_bookmakers must not be empty")
+        if not (math.isfinite(self.tier_max_pinnacle_overround) and self.tier_max_pinnacle_overround >= 1.0):
+            raise ValueError("tier_max_pinnacle_overround must be a finite overround of at least 1.0")
+        if int(self.tier_min_bookmakers) < 1:
+            raise ValueError("tier_min_bookmakers must be at least 1")
+        object.__setattr__(self, "tier_min_bookmakers", int(self.tier_min_bookmakers))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -436,7 +472,10 @@ class EvaluationDiagnostics:
     n_value: int = 0
     n_vetoed: int = 0
     n_suspect: int = 0
+    n_unsynced: int = 0
     n_fixtures: int = 0
+    n_fixtures_liquid: int = 0
+    n_fixtures_thin: int = 0
     n_bookmakers: int = 0
 
     def to_dict(self) -> dict[str, int]:
@@ -561,20 +600,27 @@ def evaluate_legs_with_diagnostics(
     config: ScannerConfig | None = None,
     *,
     as_of: datetime | pd.Timestamp | str | None = None,
+    fixtures: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, EvaluationDiagnostics]:
     """Join every usable quote to its fair price and model probability and evaluate it.
 
     Returns ``(legs, diagnostics)``; :func:`evaluate_legs` is the frame alone.  ``as_of`` is the decision time
-    (default: now, UTC); it is not part of the config because it changes every run.
+    (default: now, UTC); it is not part of the config because it changes every run.  ``fixtures`` (the fixtures
+    frame: league and team names) feeds the name rules of the market tier; without it only the data rules apply.
     """
+    from model_buk.scanner.fair import board_times
+    from model_buk.scanner.tiers import fixture_tiers
+
     config = config or ScannerConfig()
     _require_columns(quotes, ("fixture_id", "kickoff_utc", "bookmaker", "market", "period", "line", "selection", "odd", "fetched_at"), "quotes")
     _require_columns(fair, ("fixture_id", "market", "period", "line", "selection", "p_fair"), "fair")
     decision_time = pd.Timestamp.now(tz="UTC") if as_of is None else pd.Timestamp(as_of)
     decision_time = decision_time.tz_localize("UTC") if decision_time.tzinfo is None else decision_time.tz_convert("UTC")
     diag = EvaluationDiagnostics(n_quotes=len(quotes))
+    tiers = fixture_tiers(quotes, fixtures, config, decision_time)
 
     q = quotes.copy()
+    q["board_at"] = board_times(q)
     for column in QUOTE_COLUMNS:
         if column not in q.columns:
             q[column] = np.nan
@@ -656,6 +702,28 @@ def evaluate_legs_with_diagnostics(
     out["refund_share"] = refund
     out["book_shift"] = np.where(has_market, merged["book_p"].to_numpy(dtype=float) - p_fair, np.nan)
     out["is_model_only"] = model_only
+    fair_board = (
+        pd.to_datetime(out["fair_board_at"], utc=True, errors="coerce")
+        if "fair_board_at" in out.columns
+        else pd.Series(pd.NaT, index=out.index, dtype="datetime64[ns, UTC]")
+    )
+    quote_board = pd.to_datetime(out["board_at"], utc=True, errors="coerce")
+    lag = (quote_board - fair_board).dt.total_seconds().to_numpy(dtype=float) / 60.0
+    out["board_lag_min"] = np.where(has_market, lag, np.nan)
+    with np.errstate(invalid="ignore"):
+        unsynced = has_market & np.isfinite(lag) & (np.abs(lag) > config.sync_window_minutes)
+    out["unsynced"] = unsynced
+    tier_table = tiers.set_index("fixture_id") if len(tiers) else pd.DataFrame(columns=["tier", "tier_reason"])
+    out["tier"] = out["fixture_id"].map(tier_table["tier"]).fillna("thin").astype(object).to_numpy() if len(tiers) else "thin"
+    out["tier_reason"] = (
+        out["fixture_id"].map(tier_table["tier_reason"]).fillna("unknown").astype(object).to_numpy() if len(tiers) else "unknown"
+    )
+    if config.tier_sharp_fair_only:
+        # a leg whose fair price is not Pinnacle's (a soft-book consensus or Betfair) has no sharp reference either
+        soft_fair = has_market & ~out["fair_source"].isin(["pinnacle", "pinnacle_derived"]).to_numpy()
+        reason = out["tier_reason"].astype(str).to_numpy(dtype=object)
+        out["tier_reason"] = np.where(soft_fair, np.where(reason == "", "soft_fair_price", reason + "+soft_fair_price"), reason)
+        out["tier"] = np.where(soft_fair, "thin", out["tier"].to_numpy(dtype=object))
 
     with np.errstate(invalid="ignore"):
         agrees = np.where(has_market & np.isfinite(p_model), (p_model >= p_fair - config.model_delta).astype(float), np.nan)
@@ -678,19 +746,19 @@ def evaluate_legs_with_diagnostics(
     book_shift = out["book_shift"].to_numpy(dtype=float)
     with np.errstate(invalid="ignore"):
         suspect = edge_positive & (
-            (edge_raw > config.max_edge)
+            (edge_raw > config.max_edge + _EDGE_TOLERANCE)
             | (np.nan_to_num(se_used, nan=0.0) > config.max_p_se)
             | (np.abs(np.nan_to_num(book_shift, nan=0.0)) > config.max_book_shift)
         )
-    vetoed = bool(config.model_veto) & leg_value & has_market & ~suspect & (agrees == 0.0)
-    is_value = leg_value & has_market & ~vetoed & ~suspect
+    vetoed = bool(config.model_veto) & leg_value & has_market & ~suspect & ~unsynced & (agrees == 0.0)
+    is_value = leg_value & has_market & ~vetoed & ~suspect & ~unsynced
     out["suspect"] = suspect
     out["vetoed"] = vetoed
     out["is_value"] = is_value
     out["is_model_only_value"] = leg_value & model_only & ~suspect
     out["leg_class"] = np.select(
-        [is_value, suspect, model_only & edge_positive, has_market & edge_positive],
-        ["value", "suspect", "model_only", "near_miss"],
+        [is_value, unsynced & edge_positive, suspect, model_only & edge_positive, has_market & edge_positive],
+        ["value", "unsynced", "suspect", "model_only", "near_miss"],
         default="none",
     )
     out["as_of"] = decision_time
@@ -728,9 +796,12 @@ def evaluate_legs_with_diagnostics(
         "edge_raw_lower",
         "refund_share",
         "book_shift",
+        "board_lag_min",
+        "tier",
+        "tier_reason",
     ]
     ev_columns = [c for tau in config.taus for c in (f"ev_net_{tau_label(tau)}", f"ev_net_lower_{tau_label(tau)}", f"value_{tau_label(tau)}")]
-    tail = ["suspect", "vetoed", "is_value", "is_model_only", "is_model_only_value", "leg_class"]
+    tail = ["suspect", "unsynced", "vetoed", "is_value", "is_model_only", "is_model_only_value", "leg_class"]
     for column in ("devig_method", "n_books", "book_margin", "model_name", "bet_id", "league_id"):
         if column not in out.columns:
             out[column] = np.nan
@@ -743,7 +814,12 @@ def evaluate_legs_with_diagnostics(
     diag.n_value = int(is_value.sum())
     diag.n_vetoed = int(vetoed.sum())
     diag.n_suspect = int(suspect.sum())
+    diag.n_unsynced = int(unsynced.sum())
     diag.n_fixtures = int(out["fixture_id"].nunique())
+    # the tier of the fixture (a single leg can be thin inside a liquid fixture: soft_fair_price)
+    fixture_tier = tiers[tiers["fixture_id"].isin(out["fixture_id"].unique())]["tier"] if len(tiers) else pd.Series(dtype=object)
+    diag.n_fixtures_liquid = int((fixture_tier == "liquid").sum())
+    diag.n_fixtures_thin = int(out["fixture_id"].nunique()) - diag.n_fixtures_liquid
     diag.n_bookmakers = int(out["bookmaker"].nunique())
     return out, diag
 
@@ -755,6 +831,7 @@ def evaluate_legs(
     config: ScannerConfig | None = None,
     *,
     as_of: datetime | pd.Timestamp | str | None = None,
+    fixtures: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """The legs frame: every usable quote with its fair price, model probability, EV per regime and value flags.
 
@@ -763,12 +840,14 @@ def evaluate_legs(
     devig_method, n_books, book_margin``), the model (``p_model, model_name, model_agrees``), the probability
     actually used (``p_used, p_se_used, p_lower, fair_odd``), ``edge_raw = p_fair * odd - 1``, ``refund_share`` and
     ``book_shift`` (see the module docstring), per regime
-    ``ev_net_t###``, ``ev_net_lower_t###`` and ``value_t###`` (pure arithmetic), and the classification
-    ``suspect, vetoed, is_value, is_model_only, is_model_only_value, leg_class`` with ``leg_class`` in ``value |
-    suspect | near_miss | model_only | none``.  Quotes at reference bookmakers, stale or started quotes and quotes without any probability are
-    absent (see :func:`evaluate_legs_with_diagnostics` for the counts).
+    ``ev_net_t###``, ``ev_net_lower_t###`` and ``value_t###`` (pure arithmetic), ``board_lag_min`` (board time of
+    the quote minus that of the fair price), the market tier ``tier, tier_reason`` and the classification
+    ``suspect, unsynced, vetoed, is_value, is_model_only, is_model_only_value, leg_class`` with ``leg_class`` in
+    ``value | unsynced | suspect | near_miss | model_only | none``.  Quotes at reference bookmakers, stale or
+    started quotes and quotes without any probability are absent (see :func:`evaluate_legs_with_diagnostics` for
+    the counts).
     """
-    return evaluate_legs_with_diagnostics(quotes, fair, model, config, as_of=as_of)[0]
+    return evaluate_legs_with_diagnostics(quotes, fair, model, config, as_of=as_of, fixtures=fixtures)[0]
 
 
 def _prepare_fair(fair: pd.DataFrame) -> pd.DataFrame:
@@ -784,7 +863,7 @@ def _prepare_fair(fair: pd.DataFrame) -> pd.DataFrame:
     f["n_books"] = pd.to_numeric(f["n_books"], errors="coerce")
     f = f.sort_values("n_books", ascending=False, kind="mergesort", na_position="last")
     f = f.drop_duplicates(_KEY, keep="first")
-    return f[[*_KEY, "p_fair", "p_se", "fair_source", "devig_method", "n_books", "book_margin"]]
+    return f[[*_KEY, "p_fair", "p_se", "fair_source", "devig_method", "n_books", "book_margin", "fair_board_at"]]
 
 
 def _prepare_model(model: pd.DataFrame | None) -> pd.DataFrame:
@@ -885,6 +964,8 @@ def run_scan(
     results: pd.DataFrame | None = None,
     closing: pd.DataFrame | None = None,
     closing_quotes: pd.DataFrame | None = None,
+    statuses: pd.DataFrame | None = None,
+    void_grace_hours: float = 48.0,
 ) -> ScanResult:
     """Evaluate, build coupons, log to the register, settle what can be settled and write the HTML page.
 
@@ -892,10 +973,12 @@ def run_scan(
     ``html/YYYY-MM-DD.html``.  ``results`` (one row per finished fixture, ``fixture_id`` plus the columns of
     :data:`model_buk.scanner.settlement.RESULT_FIELDS`) settles earlier paper legs; ``closing`` (a fair frame
     taken at the last snapshot before kickoff) and optionally ``closing_quotes`` (the closing price per bookmaker,
-    quotes-frame columns) give their closing line value.  Both only touch legs recorded by *earlier* scans.
+    quotes-frame columns) give their closing line value.  ``statuses`` (``fixture_id, status_short,
+    kickoff_utc`` of the fixture directory) voids the legs of postponed, cancelled or abandoned matches
+    (:func:`model_buk.scanner.settlement.void_decision`).  All of them only touch legs recorded by *earlier* scans.
     """
     from model_buk.scanner import report_html
-    from model_buk.scanner.coupons import build_coupons
+    from model_buk.scanner.coupons import build_coupons_by_tier
 
     config = config or ScannerConfig()
     decision_time = pd.Timestamp.now(tz="UTC") if as_of is None else pd.Timestamp(as_of)
@@ -903,9 +986,9 @@ def run_scan(
     scan_id = scan_id or default_scan_id(decision_time)
     started_at = pd.Timestamp.now(tz="UTC")
 
-    legs, diag = evaluate_legs_with_diagnostics(quotes, fair, model, config, as_of=decision_time)
+    legs, diag = evaluate_legs_with_diagnostics(quotes, fair, model, config, as_of=decision_time, fixtures=fixtures)
     picks = select_value_picks(legs, config)
-    coupon_set = build_coupons(picks, config)
+    coupon_set = build_coupons_by_tier(picks, config)
     model_only = select_model_only(legs, config)
     result = ScanResult(scan_id, decision_time, config, legs, picks, coupon_set, model_only, diag)
 
@@ -921,13 +1004,17 @@ def run_scan(
         )
         if results is not None and len(results):
             result.settled = register.settle_pending(results, now=decision_time)
+        if statuses is not None and len(statuses):
+            result.settled += register.settle_voids(statuses, now=decision_time, grace_hours=void_grace_hours)
         if closing is not None and len(closing):
             result.clv_rows = register.record_clv(closing, taus=config.taus, closing_quotes=closing_quotes, now=decision_time)
 
-    summary = (
-        register.paper_summary(now=decision_time, taus=config.taus, config_id=config.config_id) if register is not None else None
-    )
-    result.html = report_html.render_page(result, fixtures, summary)
+    summary = results_table = recent = None
+    if register is not None:
+        summary = register.paper_summary(now=decision_time, taus=config.taus, config_id=config.config_id)
+        results_table = register.paper_results(now=decision_time, taus=config.taus, config_id=config.config_id)
+        recent = register.recent_bets(now=decision_time, config_id=config.config_id, taus=config.taus)
+    result.html = report_html.render_page(result, fixtures, summary, results=results_table, recent=recent)
     if out_dir is not None:
         result.html_paths = report_html.write_page(result.html, out_dir, decision_time)
     return result

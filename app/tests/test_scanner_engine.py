@@ -95,11 +95,21 @@ def model_row(fixture: int = 1, market: str = "1x2", selection: str = "home", p:
     }
 
 
+def cfg(**changes) -> ScannerConfig:
+    """A config for the arithmetic tests: their edges go up to 20%, above the 10% suspect cap of the default.
+
+    The cap itself (and every other default) is tested explicitly with ``ScannerConfig()``.
+    """
+    changes.setdefault("max_edge", 0.25)
+    return ScannerConfig(**changes)
+
+
 def frame(rows: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
 def legs_for(quotes: list[dict], fair: list[dict], model: list[dict] | None = None, config: ScannerConfig | None = None, **kw) -> pd.DataFrame:
+    config = config or cfg()
     return evaluate_legs(frame(quotes), frame(fair), None if model is None else frame(model), config, as_of=kw.get("as_of", AS_OF))
 
 
@@ -129,7 +139,7 @@ def test_value_needs_a_strictly_positive_lower_bound() -> None:
     # p_lower * odd == 1 exactly: not an opportunity
     legs = legs_for([quote(odd=2.0)], [fair_row(p=0.5, se=0.0)])
     assert not bool(legs.iloc[0]["value_t100"])
-    legs = legs_for([quote(odd=2.0)], [fair_row(p=0.5, se=0.0)], config=ScannerConfig(min_ev=0.0))
+    legs = legs_for([quote(odd=2.0)], [fair_row(p=0.5, se=0.0)], config=cfg(min_ev=0.0))
     assert legs.iloc[0]["ev_net_lower_t100"] == pytest.approx(0.0)
     legs = legs_for([quote(odd=2.01)], [fair_row(p=0.5, se=0.0)])
     assert bool(legs.iloc[0]["value_t100"])
@@ -176,7 +186,7 @@ def test_leg_key_and_market_family() -> None:
 
 def test_no_leg_is_ever_produced_at_pinnacle_or_betfair() -> None:
     quotes = [quote(book=name, odd=9.0) for name in ("Pinnacle", "Betfair", "pinnacle", "BETFAIR", "Bet365")]
-    legs, diag = evaluate_legs_with_diagnostics(frame(quotes), frame([fair_row()]), None, ScannerConfig(), as_of=AS_OF)
+    legs, diag = evaluate_legs_with_diagnostics(frame(quotes), frame([fair_row()]), None, cfg(), as_of=AS_OF)
     assert list(legs["bookmaker"]) == ["Bet365"]
     assert diag.n_reference_dropped == 4
     assert {normalise_bookmaker_name(b) for b in legs["bookmaker"]}.isdisjoint({"pinnacle", "betfair"})
@@ -184,7 +194,7 @@ def test_no_leg_is_ever_produced_at_pinnacle_or_betfair() -> None:
 
 def test_reference_bookmakers_cannot_be_emptied() -> None:
     with pytest.raises(ValueError):
-        ScannerConfig(reference_bookmakers=())
+        cfg(reference_bookmakers=())
 
 
 def test_stale_future_and_started_quotes_are_skipped() -> None:
@@ -195,7 +205,7 @@ def test_stale_future_and_started_quotes_are_skipped() -> None:
         quote(book="Started", kickoff=AS_OF - pd.Timedelta(minutes=1)),
         quote(book="TooClose", kickoff=AS_OF + pd.Timedelta(minutes=5)),
     ]
-    legs, diag = evaluate_legs_with_diagnostics(frame(quotes), frame([fair_row()]), None, ScannerConfig(), as_of=AS_OF)
+    legs, diag = evaluate_legs_with_diagnostics(frame(quotes), frame([fair_row()]), None, cfg(), as_of=AS_OF)
     assert list(legs["bookmaker"]) == ["Fresh"]
     assert (diag.n_stale, diag.n_untimed_or_future, diag.n_started) == (1, 1, 2)
     assert legs.iloc[0]["quote_age_min"] == pytest.approx(20.0)
@@ -204,7 +214,7 @@ def test_stale_future_and_started_quotes_are_skipped() -> None:
 def test_max_quote_age_is_configurable() -> None:
     old = quote(fetched=AS_OF - pd.Timedelta(hours=4))
     assert legs_for([old], [fair_row()]).empty
-    assert len(legs_for([old], [fair_row()], config=ScannerConfig(max_quote_age_hours=6))) == 1
+    assert len(legs_for([old], [fair_row()], config=cfg(max_quote_age_hours=6))) == 1
 
 
 def test_duplicate_quotes_keep_the_latest_observation() -> None:
@@ -212,25 +222,25 @@ def test_duplicate_quotes_keep_the_latest_observation() -> None:
         quote(odd=2.5, fetched=AS_OF - pd.Timedelta(minutes=50)),
         quote(odd=2.3, fetched=AS_OF - pd.Timedelta(minutes=10)),
     ]
-    legs, diag = evaluate_legs_with_diagnostics(frame(quotes), frame([fair_row()]), None, ScannerConfig(), as_of=AS_OF)
+    legs, diag = evaluate_legs_with_diagnostics(frame(quotes), frame([fair_row()]), None, cfg(), as_of=AS_OF)
     assert list(legs["odd"]) == [2.3]
     assert diag.n_duplicate == 1
 
 
 def test_bad_odds_and_unmapped_markets_are_counted_and_dropped() -> None:
     quotes = [quote(odd=1.0), quote(odd=np.nan, book="B"), quote(market="other", selection="x", book="C"), quote(book="D")]
-    legs, diag = evaluate_legs_with_diagnostics(frame(quotes), frame([fair_row()]), None, ScannerConfig(), as_of=AS_OF)
+    legs, diag = evaluate_legs_with_diagnostics(frame(quotes), frame([fair_row()]), None, cfg(), as_of=AS_OF)
     assert list(legs["bookmaker"]) == ["D"]
     assert diag.n_bad_odds == 2 and diag.n_unmapped == 1
 
 
 def test_empty_inputs_give_an_empty_frame_with_the_full_column_set() -> None:
     quotes = frame([quote()]).iloc[0:0]
-    legs = evaluate_legs(quotes, frame([fair_row()]), None, ScannerConfig(), as_of=AS_OF)
-    full = evaluate_legs(frame([quote()]), frame([fair_row()]), None, ScannerConfig(), as_of=AS_OF)
+    legs = evaluate_legs(quotes, frame([fair_row()]), None, cfg(), as_of=AS_OF)
+    full = evaluate_legs(frame([quote()]), frame([fair_row()]), None, cfg(), as_of=AS_OF)
     assert legs.empty
     assert list(legs.columns) == list(full.columns)
-    assert select_value_picks(legs, ScannerConfig()).empty
+    assert select_value_picks(legs, cfg()).empty
 
 
 # --------------------------------------------------------------------------- #
@@ -244,18 +254,18 @@ def test_an_implausibly_large_edge_is_suspect_not_value() -> None:
     assert bool(by_book.loc["Bet365", "suspect"]) and not bool(by_book.loc["Bet365", "is_value"])
     assert by_book.loc["Bet365", "edge_raw"] == pytest.approx(0.5) and bool(by_book.loc["Bet365", "value_t100"])  # arithmetic untouched
     assert by_book.loc["1xBet", "leg_class"] == "value"
-    picks = select_value_picks(legs, ScannerConfig())
+    picks = select_value_picks(legs, cfg())
     assert list(picks["bookmaker"]) == ["1xBet"]
-    relaxed = legs_for([quote(odd=3.0)], [fair_row(p=0.5, se=0.0)], config=ScannerConfig(max_edge=1.0))
+    relaxed = legs_for([quote(odd=3.0)], [fair_row(p=0.5, se=0.0)], config=cfg(max_edge=1.0))
     assert relaxed.iloc[0]["leg_class"] == "value"
 
 
 def test_a_very_uncertain_fair_price_is_suspect() -> None:
     legs = legs_for([quote(odd=2.0)], [fair_row(p=0.6, se=0.06, source="pinnacle_derived")])
     assert legs.iloc[0]["leg_class"] == "suspect" and not bool(legs.iloc[0]["is_value"])  # se 0.06 > 0.05
-    _, diag = evaluate_legs_with_diagnostics(frame([quote(odd=2.0)]), frame([fair_row(p=0.6, se=0.06)]), None, ScannerConfig(), as_of=AS_OF)
+    _, diag = evaluate_legs_with_diagnostics(frame([quote(odd=2.0)]), frame([fair_row(p=0.6, se=0.06)]), None, cfg(), as_of=AS_OF)
     assert diag.n_suspect == 1 and diag.n_value == 0
-    assert legs_for([quote(odd=2.0)], [fair_row(p=0.6, se=0.06)], config=ScannerConfig(max_p_se=0.1)).iloc[0]["leg_class"] == "value"
+    assert legs_for([quote(odd=2.0)], [fair_row(p=0.6, se=0.06)], config=cfg(max_p_se=0.1)).iloc[0]["leg_class"] == "value"
 
 
 def test_negative_edges_are_never_suspect() -> None:
@@ -264,7 +274,7 @@ def test_negative_edges_are_never_suspect() -> None:
 
 
 def test_an_edge_exactly_at_the_limit_is_not_suspect() -> None:
-    config = ScannerConfig(max_edge=0.25)
+    config = cfg(max_edge=0.25)
     legs = legs_for([quote(odd=2.5)], [fair_row(p=0.5, se=0.0)], config=config)  # 0.5 * 2.5 - 1 == 0.25 exactly
     assert legs.iloc[0]["edge_raw"] == 0.25
     assert legs.iloc[0]["leg_class"] == "value" and not bool(legs.iloc[0]["suspect"])
@@ -303,7 +313,7 @@ def test_a_pair_that_sits_far_from_the_sharp_price_is_suspect_even_with_a_modest
     normal = legs_for(ou_pair(2.2, 1.85), ou_fair(0.5)).set_index("selection")
     assert normal.loc["over", "leg_class"] == "value" and abs(normal.loc["over", "book_shift"]) < 0.06
     # the guard is configurable and a relaxed limit lets the leg through
-    relaxed = legs_for(ou_pair(2.2, 1.6), ou_fair(0.5), config=ScannerConfig(max_book_shift=0.2)).set_index("selection")
+    relaxed = legs_for(ou_pair(2.2, 1.6), ou_fair(0.5), config=cfg(max_book_shift=0.2)).set_index("selection")
     assert relaxed.loc["over", "leg_class"] == "value"
 
 
@@ -318,7 +328,7 @@ def test_a_pair_with_a_negative_margin_is_suspect() -> None:
 def test_a_model_only_leg_on_an_integer_line_has_no_refund_share() -> None:
     quotes = [quote(market="team_ou_home", selection="over", line=2.0, odd=2.0)]
     model = [model_row(market="team_ou_home", selection="over", line=2.0, p=0.55)]
-    row = evaluate_legs(frame(quotes), frame([fair_row()]), frame(model), ScannerConfig(), as_of=AS_OF).iloc[0]
+    row = evaluate_legs(frame(quotes), frame([fair_row()]), frame(model), cfg(), as_of=AS_OF).iloc[0]
     assert bool(row["is_model_only"]) and row["refund_share"] == 0.0  # no ladder to read it from: the model's probability is used as it is
     assert row["ev_net_t100"] == pytest.approx(0.55 * 2.0 - 1)
 
@@ -369,7 +379,7 @@ def test_model_agrees_uses_delta_and_is_nan_without_a_model() -> None:
     assert legs.loc["home", "model_agrees"] == 1.0  # 0.49 >= 0.50 - 0.02
     assert legs.loc["draw", "model_agrees"] == 0.0  # 0.25 <  0.30 - 0.02
     assert math.isnan(legs.loc["away", "model_agrees"])
-    tight = legs_for(quotes, fair, model, ScannerConfig(model_delta=0.0)).set_index("selection")
+    tight = legs_for(quotes, fair, model, cfg(model_delta=0.0)).set_index("selection")
     assert tight.loc["home", "model_agrees"] == 0.0
 
 
@@ -385,36 +395,36 @@ def test_model_never_overrides_the_market_price_by_default() -> None:
 def test_legacy_model_veto_rejects_legs_the_model_contradicts() -> None:
     quotes = [quote(odd=2.4)]
     fair = [fair_row(p=0.5, se=0.01)]
-    legs = legs_for(quotes, fair, [model_row(p=0.30)], ScannerConfig(model_veto=True))
+    legs = legs_for(quotes, fair, [model_row(p=0.30)], cfg(model_veto=True))
     row = legs.iloc[0]
     assert bool(row["vetoed"]) and not bool(row["is_value"])
     assert row["leg_class"] == "near_miss"
     # a model without an opinion does not veto, and an agreeing model does not either
-    assert bool(legs_for(quotes, fair, None, ScannerConfig(model_veto=True)).iloc[0]["is_value"])
-    assert bool(legs_for(quotes, fair, [model_row(p=0.5)], ScannerConfig(model_veto=True)).iloc[0]["is_value"])
+    assert bool(legs_for(quotes, fair, None, cfg(model_veto=True)).iloc[0]["is_value"])
+    assert bool(legs_for(quotes, fair, [model_row(p=0.5)], cfg(model_veto=True)).iloc[0]["is_value"])
 
 
 def test_model_only_legs_are_a_separate_flagged_class() -> None:
     quotes = [quote(market="team_ou_home", selection="over", line=1.5, odd=2.0)]
     model = [model_row(market="team_ou_home", selection="over", line=1.5, p=0.55)]
-    legs = evaluate_legs(frame(quotes), frame([fair_row()]), frame(model), ScannerConfig(), as_of=AS_OF)
+    legs = evaluate_legs(frame(quotes), frame([fair_row()]), frame(model), cfg(), as_of=AS_OF)
     row = legs.iloc[0]
     assert row["fair_source"] == "model" and bool(row["is_model_only"])
     assert math.isnan(row["p_fair"]) and row["p_used"] == pytest.approx(0.55)
     assert row["leg_class"] == "model_only"
     assert not bool(row["is_value"])
     assert bool(row["is_model_only_value"])  # 0.55 - 1.645 * 0.03 = 0.5006; 0.5006 * 2.0 > 1
-    assert select_value_picks(legs, ScannerConfig()).empty
-    assert len(select_model_only(legs, ScannerConfig())) == 1
-    assert build_coupons(legs, ScannerConfig()).coupons.empty
+    assert select_value_picks(legs, cfg()).empty
+    assert len(select_model_only(legs, cfg())) == 1
+    assert build_coupons(legs, cfg()).coupons.empty
 
 
 def test_model_only_can_be_switched_off_and_needs_a_model() -> None:
     quotes = [quote(market="team_ou_home", selection="over", line=1.5, odd=2.0)]
     model = [model_row(market="team_ou_home", selection="over", line=1.5, p=0.55)]
-    off = evaluate_legs(frame(quotes), frame([fair_row()]), frame(model), ScannerConfig(include_model_only=False), as_of=AS_OF)
+    off = evaluate_legs(frame(quotes), frame([fair_row()]), frame(model), cfg(include_model_only=False), as_of=AS_OF)
     assert off.empty
-    none = evaluate_legs(frame(quotes), frame([fair_row()]), None, ScannerConfig(), as_of=AS_OF)
+    none = evaluate_legs(frame(quotes), frame([fair_row()]), None, cfg(), as_of=AS_OF)
     assert none.empty  # neither market fair nor model: unpriced, never guessed
 
 
@@ -438,7 +448,7 @@ def test_one_pick_per_fixture_bookmaker_and_market_family() -> None:
         fair_row(market="corners_ou", selection="over", line=9.5, p=0.5, se=0.0),
     ]
     legs = legs_for(quotes, fair)
-    picks = select_value_picks(legs, ScannerConfig())
+    picks = select_value_picks(legs, cfg())
     per_group = picks.groupby(["fixture_id", "bookmaker", "market_family"]).size()
     assert (per_group == 1).all()
     bet365_goals = picks[(picks["bookmaker"] == "Bet365") & (picks["market_family"] == "goals_ft")].iloc[0]
@@ -454,7 +464,7 @@ def test_higher_win_probability_breaks_ties_between_equal_value() -> None:
     quotes = [quote(fixture=1, odd=1.6), quote(fixture=2, odd=3.2)]
     fair = [fair_row(fixture=1, p=0.7, se=0.0), fair_row(fixture=2, p=0.35, se=0.0)]
     # both have p * odd = 1.12
-    picks = select_value_picks(legs_for(quotes, fair), ScannerConfig())
+    picks = select_value_picks(legs_for(quotes, fair), cfg())
     assert list(picks["fixture_id"]) == [1, 2]
 
 
@@ -548,7 +558,7 @@ def test_draw_no_bet_refunds_the_draw() -> None:
 def test_ev_of_a_line_with_refunds_is_scaled_by_the_share_that_does_not_come_back() -> None:
     # break-even probability 0.60 at odds 1.8 looks like +8% but a quarter of the stake is refunded on a push
     ladder = ladder_fair("ou", "over", {1.5: 0.80, 2.0: 0.60, 2.5: 0.55})  # push probability at 2.0: 0.80 - 0.55 = 0.25
-    legs = legs_for([quote(market="ou", selection="over", line=2.0, odd=1.8)], ladder, config=ScannerConfig(max_book_shift=1.0))
+    legs = legs_for([quote(market="ou", selection="over", line=2.0, odd=1.8)], ladder, config=cfg(max_book_shift=1.0))
     row = legs.iloc[0]
     assert row["refund_share"] == pytest.approx(0.25)
     assert row["edge_raw"] == pytest.approx(0.6 * 1.8 - 1)  # the price against the fair price is unscaled
@@ -558,7 +568,7 @@ def test_ev_of_a_line_with_refunds_is_scaled_by_the_share_that_does_not_come_bac
     assert row["ev_net_lower_t088"] == pytest.approx(0.75 * (0.88 * p_lower * 1.8 - 1))  # the lower bound is scaled too
     assert row["ev_net_lower_t100"] == pytest.approx(0.75 * (p_lower * 1.8 - 1))
     # the same probability on a half line has no refund and the full EV
-    plain = legs_for([quote(market="ou", selection="over", line=2.5, odd=1.8)], ladder, config=ScannerConfig(max_book_shift=1.0))
+    plain = legs_for([quote(market="ou", selection="over", line=2.5, odd=1.8)], ladder, config=cfg(max_book_shift=1.0))
     assert plain.iloc[0]["refund_share"] == 0.0 and plain.iloc[0]["ev_net_t100"] == pytest.approx(0.55 * 1.8 - 1)
 
 
@@ -567,9 +577,9 @@ def test_an_unknown_refund_share_leaves_the_leg_a_single_value_leg_but_not_a_cou
     row = legs.iloc[0]
     assert math.isnan(row["refund_share"]) and bool(row["is_value"])
     assert row["ev_net_t100"] == pytest.approx(0.5 * 2.4 - 1)  # unscaled: only the sign is exact
-    unknown = select_value_picks(legs, ScannerConfig())
+    unknown = select_value_picks(legs, cfg())
     others = picks_from([value_leg(i) for i in (2, 3, 4)])
-    result = build_coupons(pd.concat([unknown, others], ignore_index=True), ScannerConfig())
+    result = build_coupons(pd.concat([unknown, others], ignore_index=True), cfg())
     assert not result.legs.empty  # the other three legs still make coupons
     assert row["leg_key"] not in set(result.legs["leg_key"])  # 1.2 * 1.05 * 0.88 would have passed had it been used
 
@@ -592,7 +602,7 @@ def test_paper_stake_switches_on_the_winnings_pit() -> None:
     for o, t in zip(odd, tau_row):
         assert t == pytest.approx(effective_tax_multiplier(1000.0, float(o), 0.88))
     assert list(effective_tau(0.88, odd, None)) == [0.88, 0.88]
-    legs = legs_for([quote(odd=4.0)], [fair_row(p=0.3, se=0.0)], config=ScannerConfig(stake_pln=1000.0))
+    legs = legs_for([quote(odd=4.0)], [fair_row(p=0.3, se=0.0)], config=cfg(stake_pln=1000.0))
     assert legs.iloc[0]["ev_net_t088"] == pytest.approx(0.88 * 0.9 * 0.3 * 4.0 - 1)
     assert legs.iloc[0]["ev_net_t100"] == pytest.approx(0.9 * 0.3 * 4.0 - 1)
 
@@ -623,14 +633,14 @@ def value_leg(fixture: int, book: str = "Bet365", *, p: float = 0.7, odd: float 
 
 
 def picks_from(pairs: list[tuple[dict, dict]], config: ScannerConfig | None = None) -> pd.DataFrame:
-    config = config or ScannerConfig()
+    config = config or cfg()
     legs = evaluate_legs(frame([q for q, _ in pairs]), frame([f for _, f in pairs]), None, config, as_of=AS_OF)
     return select_value_picks(legs, config)
 
 
 def test_three_legs_with_five_percent_edge_are_positive_after_the_12_percent_tax() -> None:
     picks = picks_from([value_leg(i) for i in (1, 2, 3)])  # 0.7 * 1.5 = 1.05 each
-    result = build_coupons(picks, ScannerConfig())
+    result = build_coupons(picks, cfg())
     assert len(result.coupons) == 1
     coupon = result.coupons.iloc[0]
     assert coupon["n_legs"] == 3
@@ -647,11 +657,11 @@ def test_three_legs_with_five_percent_edge_are_positive_after_the_12_percent_tax
 def test_two_legs_with_five_percent_edge_are_not_enough() -> None:
     picks = picks_from([value_leg(i) for i in (1, 2)])
     assert 1.05**2 * 0.88 - 1 < 0
-    assert build_coupons(picks, ScannerConfig()).coupons.empty
+    assert build_coupons(picks, cfg()).coupons.empty
 
 
 def test_coupon_lower_bound_uses_p_lower_of_every_leg() -> None:
-    config = ScannerConfig(z=1.645)
+    config = cfg(z=1.645)
     picks = picks_from([value_leg(i, p=0.7, odd=1.65, se=0.02) for i in (1, 2, 3)], config)
     result = build_coupons(picks, config)
     p_lower = 0.7 - 1.645 * 0.02
@@ -667,7 +677,7 @@ def test_coupon_legs_come_from_different_fixtures_at_one_bookmaker() -> None:
     extra_q = quote(fixture=1, book="Bet365", market="btts", selection="yes", odd=1.5)
     extra_f = fair_row(fixture=1, market="btts", selection="yes", p=0.7, se=0.0)
     pairs.append((extra_q, extra_f))
-    config = ScannerConfig()
+    config = cfg()
     picks = picks_from(pairs, config)
     assert (picks["fixture_id"] == 1).sum() == 3  # Bet365 in two market families, 1xBet in one
     result = build_coupons(picks, config)
@@ -683,7 +693,7 @@ def test_coupon_legs_come_from_different_fixtures_at_one_bookmaker() -> None:
 
 def test_coupons_are_ranked_capped_per_bookmaker_but_all_passing_are_returned() -> None:
     pairs = [value_leg(f, "Bet365", p=0.75, odd=1.5 + 0.01 * f) for f in range(1, 9)]
-    config = ScannerConfig(top_n_per_bookmaker=5, top_max_leg_reuse=100)
+    config = cfg(top_n_per_bookmaker=5, top_max_leg_reuse=100)
     result = build_coupons(picks_from(pairs, config), config)
     coupons = result.coupons
     assert len(coupons) > 5  # every passing coupon is kept for the log (no cap is hit here)
@@ -696,37 +706,37 @@ def test_coupons_are_ranked_capped_per_bookmaker_but_all_passing_are_returned() 
 
 def test_log_cap_limits_the_logged_coupons_only() -> None:
     pairs = [value_leg(f, "Bet365", p=0.75, odd=1.5 + 0.01 * f) for f in range(1, 9)]
-    config = ScannerConfig(top_n_per_bookmaker=3, log_cap_per_bookmaker=4, top_max_leg_reuse=100)
+    config = cfg(top_n_per_bookmaker=3, log_cap_per_bookmaker=4, top_max_leg_reuse=100)
     result = build_coupons(picks_from(pairs, config), config)
     assert result.n_passing > len(result.coupons) == 4  # the full count survives, only 4 rows are materialised
     assert int(result.coupons["is_logged"].sum()) == 4
     assert set(result.legs["coupon_id"]) == set(result.coupons["coupon_id"])
-    uncapped = build_coupons(picks_from(pairs, config), ScannerConfig(log_cap_per_bookmaker=None, top_max_leg_reuse=100))
+    uncapped = build_coupons(picks_from(pairs, config), cfg(log_cap_per_bookmaker=None, top_max_leg_reuse=100))
     assert uncapped.n_passing == len(uncapped.coupons) == result.n_passing
     assert list(uncapped.coupons["coupon_id"][:4]) == list(result.coupons["coupon_id"])  # the same best coupons
 
 
 def test_proposed_coupons_do_not_reuse_the_same_legs_too_often() -> None:
     pairs = [value_leg(f, "Bet365", p=0.75, odd=1.5 + 0.01 * f) for f in range(1, 10)]
-    config = ScannerConfig(top_n_per_bookmaker=10, top_max_leg_reuse=1)
+    config = cfg(top_n_per_bookmaker=10, top_max_leg_reuse=1)
     result = build_coupons(picks_from(pairs, config), config)
     proposed = result.legs[result.legs["coupon_id"].isin(result.top["coupon_id"])]
     assert proposed["leg_key"].is_unique  # with a reuse limit of one the proposals share no leg
     assert len(result.top) == 3  # nine legs make three disjoint three-leg coupons
-    loose = ScannerConfig(top_n_per_bookmaker=10, top_max_leg_reuse=100)
+    loose = cfg(top_n_per_bookmaker=10, top_max_leg_reuse=100)
     assert len(build_coupons(picks_from(pairs, loose), loose).top) == 10
 
 
 def test_minimum_hit_probability_filters_coupons() -> None:
     picks = picks_from([value_leg(i, p=0.34, odd=3.2) for i in (1, 2, 3)])  # p*odd = 1.088, hit = 0.039
     assert not picks.empty
-    assert build_coupons(picks, ScannerConfig(min_hit=0.30)).coupons.empty
-    assert len(build_coupons(picks, ScannerConfig(min_hit=0.02)).coupons) >= 1
+    assert build_coupons(picks, cfg(min_hit=0.30)).coupons.empty
+    assert len(build_coupons(picks, cfg(min_hit=0.02)).coupons) >= 1
 
 
 def test_pruning_keeps_the_number_of_combinations_bounded() -> None:
     pairs = [value_leg(f, "Bet365", p=0.75, odd=1.5 + 0.001 * f) for f in range(1, 121)]
-    config = ScannerConfig(top_k_legs=10, top_k_hit_legs=5)
+    config = cfg(top_k_legs=10, top_k_hit_legs=5)
     picks = picks_from(pairs, config)
     result = build_coupons(picks, config)
     assert result.n_evaluated <= 15 * 14 // 2 + 15 * 14 * 13 // 6
@@ -737,14 +747,14 @@ def test_coupons_ignore_model_only_and_reference_legs() -> None:
     tainted = picks.copy()
     tainted.loc[tainted.index[0], "bookmaker"] = "Pinnacle"
     tainted.loc[tainted.index[1], "is_model_only"] = True
-    assert build_coupons(tainted, ScannerConfig()).coupons.empty
+    assert build_coupons(tainted, cfg()).coupons.empty
 
 
 def test_reference_bookmaker_legs_never_enter_a_coupon() -> None:
     # 0.7 * 1.7 = 1.19 per leg: two legs are a good coupon wherever they are quoted
     picks = picks_from([value_leg(i, p=0.7, odd=1.7) for i in (1, 2, 3, 4)])
     picks.loc[picks["fixture_id"].isin([3, 4]), "bookmaker"] = "Pinnacle"
-    result = build_coupons(picks, ScannerConfig())
+    result = build_coupons(picks, cfg())
     assert set(result.coupons["bookmaker"]) == {"Bet365"}
     assert set(result.legs["fixture_id"]) == {1, 2}
 
@@ -752,7 +762,7 @@ def test_reference_bookmaker_legs_never_enter_a_coupon() -> None:
 def test_model_only_legs_never_enter_a_coupon() -> None:
     picks = picks_from([value_leg(i, p=0.7, odd=1.7) for i in (1, 2, 3, 4)])
     picks["is_model_only"] = picks["fixture_id"].isin([3, 4])
-    result = build_coupons(picks, ScannerConfig())
+    result = build_coupons(picks, cfg())
     assert len(result.coupons) == 1
     assert set(result.legs["fixture_id"]) == {1, 2}
 
@@ -769,7 +779,7 @@ def test_a_fixture_never_appears_twice_in_a_coupon_even_when_two_of_its_legs_sur
         value_leg(2, p=0.7, odd=1.5),
         value_leg(3, p=0.7, odd=1.5),
     ]
-    config = ScannerConfig()
+    config = cfg()
     picks = picks_from(pairs, config)
     assert (picks["fixture_id"] == 1).sum() == 2
     result = build_coupons(picks, config)
@@ -802,7 +812,7 @@ def coupon_picks(refund: float | None, *, n: int = 2, p: float = 0.7, odd: float
 
 
 def test_coupon_ev_and_hit_probability_allow_for_refunds() -> None:
-    config = ScannerConfig(min_hit=0.2)
+    config = cfg(min_hit=0.2)
     coupon = build_coupons(coupon_picks(0.25), config).coupons.iloc[0]
     factor = 1 + 0.75 * (0.7 * 1.7 - 1)  # mean return factor of a leg: a quarter of the stake comes back on a push
     assert coupon["ev_net_t088"] == pytest.approx(0.88 * factor**2 - 1)
@@ -822,12 +832,12 @@ def test_refunds_can_make_a_coupon_fail_that_the_plain_product_passes() -> None:
     # three legs at +5% would give +1.87% at tau 0.88; with a 20% refund share each the mean factor is 1.04
     picks = coupon_picks(0.2, n=3, p=0.7, odd=1.5)
     assert 0.88 * 1.05**3 - 1 > 0 > 0.88 * 1.04**3 - 1
-    assert build_coupons(picks, ScannerConfig(min_hit=0.0)).coupons.empty
-    assert len(build_coupons(coupon_picks(0.0, n=3, p=0.7, odd=1.5), ScannerConfig(min_hit=0.0)).coupons) == 1
+    assert build_coupons(picks, cfg(min_hit=0.0)).coupons.empty
+    assert len(build_coupons(coupon_picks(0.0, n=3, p=0.7, odd=1.5), cfg(min_hit=0.0)).coupons) == 1
 
 
 def test_empty_value_list_gives_an_empty_coupon_set() -> None:
-    result = build_coupons(pd.DataFrame(), ScannerConfig())
+    result = build_coupons(pd.DataFrame(), cfg())
     assert isinstance(result, CouponSet) and result.coupons.empty and result.legs.empty and result.top.empty
 
 
@@ -864,7 +874,7 @@ def full_scan(**kwargs):
         frame([f for _, f in pairs]),
         None,
         FIXTURES,
-        config=ScannerConfig(),
+        config=cfg(),
         as_of=AS_OF,
         **kwargs,
     )
@@ -873,8 +883,20 @@ def full_scan(**kwargs):
 def test_page_renders_with_full_data(tmp_path) -> None:
     result = full_scan(out_dir=tmp_path)
     page = result.html
-    for text in ("Najlepsze kupony", "Nogi z wartością", "Wyniki papierowe", "Jak czytać", "Skaner wartości"):
-        assert text in page
+    sections = (
+        "Skaner wartości",
+        "Single opłacalne same w sobie przy podatku 12%",
+        "Kupony 2–3 nogi przy podatku 12%",
+        "Tylko przy niższym podatku",
+        "Eksperymentalne: rynki słabe",
+        "Wyniki papierowe",
+        "Jak czytać",
+    )
+    positions = [page.index(text) for text in sections]
+    assert positions == sorted(positions)  # the sections come in this order
+    # only Bet365 quotes and no Pinnacle: every fixture is a thin market, shown in the experimental section
+    assert "Dziś nic nie opłaca się po podatku 12%" in page
+    assert "brak Pinnacle" in page
     assert "Arsenal" in page and "Spurs" in page
     assert "Dziś" in page and "Jutro" in page  # grouped by match day, today first
     assert page.index("Dziś") < page.index("Jutro")
@@ -896,8 +918,9 @@ def test_page_is_self_contained() -> None:
 def test_page_renders_with_empty_data() -> None:
     result = run_scan(frame([quote()]).iloc[0:0], frame([fair_row()]), None, FIXTURES, as_of=AS_OF)
     page = result.html
-    assert "Najlepsze kupony" in page and "Brak kuponów" in page
-    assert "Nogi z wartością" in page and "żaden kurs nie przebił" in page
+    assert "Kupony 2–3 nogi przy podatku 12%" in page and "Dziś nic nie opłaca się po podatku 12%" in page
+    assert "Single opłacalne same w sobie" in page and "Żaden pojedynczy kurs" in page
+    assert "Na słabych rynkach nie ma dziś nóg z wartością" in page
     assert "Wyniki papierowe" in page and "Jeszcze nic do podsumowania" in page
     assert "Jak czytać" in page
 
@@ -937,7 +960,8 @@ def test_run_scan_reports_diagnostics_and_leaves_inputs_untouched() -> None:
     pd.testing.assert_frame_equal(fair, fair_before)
     assert result.diagnostics.n_quotes == 3 and result.diagnostics.n_value == 3
     assert result.scan_id == "20260930T120000Z"
-    assert len(result.coupons.coupons) == 1
+    assert len(result.coupons.proposed()) == 1  # plus the two-leg coupons that pass only under a lower tax
+    assert set(result.coupons.coupons["regime"]) == {"t088", "t094"}
 
 
 # --------------------------------------------------------------------------- #
@@ -965,7 +989,7 @@ def _synthetic_archives(tmp_path):
         seen = "2026-09-30T18:00:00+00:00"
         boards = {
             (4, "Pinnacle"): {"Home": 2.00, "Draw": 3.50, "Away": 4.00},
-            (8, "Bet365"): {"Home": 2.30, "Draw": 3.40, "Away": 3.90},
+            (8, "Bet365"): {"Home": 2.18, "Draw": 3.40, "Away": 3.90},
         }
         for (book_id, book), prices in boards.items():
             con.execute("INSERT INTO observations VALUES ('s1', 1, ?, ?, NULL)", (book_id, seen))
@@ -1028,11 +1052,11 @@ def test_daily_scan_finds_the_value_leg_then_settles_it_and_measures_clv(tmp_pat
     settled = register.latest_settlements().set_index("leg_key")["outcome"]
     assert settled["1|1x2|ft|na|home"] == "win"  # Arsenal won 2:0
     clv = register.latest_clv().iloc[0]
-    assert clv["odd_taken"] == 2.30 and 0.0 < clv["closing_p_fair"] < 1.0
-    assert clv["clv_raw"] == pytest.approx(2.30 * clv["closing_p_fair"] - 1)
+    assert clv["odd_taken"] == 2.18 and 0.0 < clv["closing_p_fair"] < 1.0
+    assert clv["clv_raw"] == pytest.approx(2.18 * clv["closing_p_fair"] - 1)
     summary = register.paper_summary(now="2026-09-30T23:00:00Z").set_index(["kind", "window_days"])
     assert summary.loc[("single", 7), "n_settled"] == 1 and summary.loc[("single", 7), "hit_rate"] == 1.0
-    assert summary.loc[("single", 7), "yield_t088"] == pytest.approx(0.88 * 2.30 - 1)
+    assert summary.loc[("single", 7), "yield_t088"] == pytest.approx(0.88 * 2.18 - 1)
 
 
 def test_daily_scan_without_fixture_names_still_renders(tmp_path) -> None:
@@ -1071,9 +1095,9 @@ def test_the_coupon_card_shows_the_win_share_not_the_break_even_probability() ->
 
 
 def test_a_book_shift_exactly_at_the_limit_is_not_suspect() -> None:
-    config = ScannerConfig(max_edge=1.0, max_book_shift=0.125)
+    config = cfg(max_edge=1.0, max_book_shift=0.125)
     legs = legs_for(ou_pair(2.0, 2.0), ou_fair(0.625), config=config).set_index("selection")
     assert legs.loc["over", "book_shift"] == -0.125  # 0.5 - 0.625, exact in binary
     assert legs.loc["over", "leg_class"] == "value"
-    tighter = legs_for(ou_pair(2.0, 2.0), ou_fair(0.625), config=ScannerConfig(max_edge=1.0, max_book_shift=0.12)).set_index("selection")
+    tighter = legs_for(ou_pair(2.0, 2.0), ou_fair(0.625), config=cfg(max_edge=1.0, max_book_shift=0.12)).set_index("selection")
     assert tighter.loc["over", "leg_class"] == "suspect"
