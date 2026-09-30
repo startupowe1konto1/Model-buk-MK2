@@ -256,6 +256,30 @@ backtest na dłuższej historii polskich cen.
    młodszych niż 10 minut. Powiadomienia tylko dla bukmacherów, u których masz
    konto.
 
+## Skaner v1 i v1.1 (od 30.09.2026)
+
+Wynik testu kontra rynek (`reports/Model kontra rynek - pytanie 2.md`):
+model wie mniej niż Pinnacle, więc skaner opiera uczciwą cenę na ostrym
+rynku, a modele służą jako weto i źródło tylko tam, gdzie ostrej ceny nie
+ma. Zarabia się na odchyleniu ceny bukmachera od uczciwej, nie na „dużej
+szansie”.
+
+- **v1 (w budowie):** każdy przebieg przegląda wszystkie nadchodzące mecze z
+  kursami; uczciwa cena z Pinnacle (albo Betfair lub konsensusu),
+  rynki pochodne z macierzy wyników dopasowanej do Pinnacle; nogi z
+  wartością dla każdego bukmachera i reżimu podatku; kupony 2–3 nóg (różne
+  mecze, jeden bukmacher, dodatnie EV po podatku, szansa trafienia ≥ 30%);
+  rejestr papierowy, rozliczanie, CLV na prawdziwym zamknięciu (kursy co
+  15 minut przed meczem), strona HTML. Opis: `docs/SKANER.md`.
+- **v1.1 (uzgodnione 30.09):** dołożyć rynki wyliczalne z macierzy wyników:
+  parzyste/nieparzyste, handicap europejski, wygrana do zera, czyste konto;
+  oraz z modelu podziału goli na połowy: do przerwy/koniec meczu, wygra obie
+  połowy, gol w obu połowach, pierwsza/ostatnia bramka; kartki w 1. połowie
+  (rozliczane z minut zdarzeń). Poza zakresem: rożne w 1. połowie (API nie
+  podaje ich za połowę), wyścigi do X rożnych, zakłady na zawodników.
+  Wszystkie kursy i tak są archiwizowane, więc te rynki da się wycenić
+  później także wstecz.
+
 ## Na później: sygnały przepływu pieniędzy (pomysł z 29.09.2026)
 
 Idea: wyłapać moment, w którym duże („ostre”) pieniądze przesuwają kurs,
