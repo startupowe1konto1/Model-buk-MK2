@@ -59,6 +59,13 @@ league_id,fd_div,fd_team,af_team_id,af_team,source,support,note
 62,F2,Red Star,104,RED Star FC 93,auto,145,145 of 145 co-occurrences agree
 62,F2,St Etienne,1063,Saint Etienne,auto,98,98 of 98 co-occurrences agree
 62,F2,Troyes,110,Estac Troyes,auto,208,208 of 208 co-occurrences agree
+71,BRA,America MG,125,America Mineiro,auto,148,148 of 148 co-occurrences agree
+71,BRA,Athletico-PR,134,Atletico Paranaense,auto,319,319 of 319 co-occurrences agree
+71,BRA,Atletico GO,144,Atletico Goianiense,auto,144,144 of 144 co-occurrences agree
+71,BRA,Botafogo RJ,120,Botafogo,auto,285,285 of 285 co-occurrences agree
+71,BRA,Flamengo RJ,127,Flamengo,auto,351,351 of 351 co-occurrences agree
+71,BRA,Fortaleza,154,Fortaleza EC,auto,204,204 of 204 co-occurrences agree
+71,BRA,Vasco,133,Vasco DA Gama,auto,261,261 of 261 co-occurrences agree
 78,D1,Bielefeld,188,Arminia Bielefeld,auto,32,32 of 32 co-occurrences agree
 78,D1,Bochum,176,VfL Bochum,auto,69,69 of 69 co-occurrences agree
 78,D1,Darmstadt,181,SV Darmstadt 98,auto,44,44 of 44 co-occurrences agree
@@ -103,6 +110,17 @@ league_id,fd_div,fd_team,af_team_id,af_team,source,support,note
 94,P1,Sp Braga,217,SC Braga,auto,318,318 of 318 co-occurrences agree
 94,P1,Sp Lisbon,228,Sporting CP,auto,318,318 of 318 co-occurrences agree
 94,P1,Uniao Madeira,763,U. Madeira,auto,26,26 of 26 co-occurrences agree
+98,JPN,Hokkaido Consadole Sapporo,279,Consadole Sapporo,auto,222,222 of 222 co-occurrences agree
+98,JPN,Iwata,280,Jubilo Iwata,auto,160,160 of 160 co-occurrences agree
+98,JPN,Kashima Antlers,290,Kashima,auto,307,307 of 307 co-occurrences agree
+98,JPN,Kofu,308,Ventforet Kofu,auto,82,82 of 82 co-occurrences agree
+98,JPN,Kyoto,302,Kyoto Sanga,auto,108,108 of 108 co-occurrences agree
+98,JPN,Machida,303,Machida Zelvia,auto,54,54 of 54 co-occurrences agree
+98,JPN,Okayama,310,Fagiano Okayama,auto,28,28 of 28 co-occurrences agree
+98,JPN,Tokushima,299,Tokushima Vortis,auto,33,33 of 33 co-occurrences agree
+98,JPN,Urawa Reds,287,Urawa,auto,306,306 of 306 co-occurrences agree
+98,JPN,Verdy,306,Tokyo Verdy,auto,54,54 of 54 co-occurrences agree
+98,JPN,Yamaga,304,Matsumoto Yamaga,auto,54,54 of 54 co-occurrences agree
 103,NOR,HamKam,2159,Ham-Kam,auto,79,79 of 79 co-occurrences agree
 103,NOR,Odd,330,ODD Ballklubb,auto,249,249 of 249 co-occurrences agree
 103,NOR,Sarpsborg 08,333,Sarpsborg 08 FF,auto,294,294 of 294 co-occurrences agree
@@ -135,6 +153,17 @@ league_id,fd_div,fd_team,af_team_id,af_team,source,support,note
 113,SWE,Varberg,2171,Varbergs BoIS FC,auto,56,56 of 56 co-occurrences agree
 113,SWE,Varnamo,2163,IFK Varnamo,auto,58,58 of 58 co-occurrences agree
 119,DNK,Vendsyssel,399,Vendsyssel FF,auto,32,32 of 32 co-occurrences agree
+128,ARG,Atl. Rafaela,465,Atletico DE Rafaela,auto,53,53 of 53 co-occurrences agree
+128,ARG,Atl. Tucuman,455,Atletico Tucuman,auto,225,225 of 225 co-occurrences agree
+128,ARG,Belgrano,440,Belgrano Cordoba,auto,195,195 of 195 co-occurrences agree
+128,ARG,Central Cordoba,1065,Central Cordoba de Santiago,auto,151,151 of 151 co-occurrences agree
+128,ARG,Dep. Riestra,476,Deportivo Riestra,auto,67,67 of 67 co-occurrences agree
+128,ARG,Estudiantes Rio Cuarto,2424,Estudiantes de Rio Cuarto,auto,17,17 of 17 co-occurrences agree
+128,ARG,Gimnasia Mendoza,1066,Gimnasia M.,auto,15,15 of 15 co-occurrences agree
+128,ARG,Ind. Rivadavia,473,Independ. Rivadavia,auto,64,64 of 64 co-occurrences agree
+128,ARG,Instituto,478,Instituto Cordoba,auto,85,85 of 85 co-occurrences agree
+128,ARG,San Martin T.,485,San Martin Tucuman,auto,22,22 of 22 co-occurrences agree
+128,ARG,Union de Santa Fe,441,Union Santa Fe,auto,258,258 of 258 co-occurrences agree
 135,I1,Verona,504,Hellas Verona,auto,341,341 of 341 co-occurrences agree
 136,I2,Verona,504,Hellas Verona,auto,76,76 of 76 co-occurrences agree
 136,I2,Vicenza,1584,Vicenza Virtus,auto,116,116 of 116 co-occurrences agree
@@ -171,6 +200,35 @@ league_id,fd_div,fd_team,af_team_id,af_team,source,support,note
 144,B1,Waasland-Beveren,738,SK Beveren,auto,117,117 of 117 co-occurrences agree
 144,B1,Waregem,600,Zulte Waregem,auto,184,184 of 184 co-occurrences agree
 144,B1,Westerlo,261,KVC Westerlo,auto,124,124 of 124 co-occurrences agree
+169,CHN,Cangzhou,849,Shijiazhuang Y. J.,auto,30,30 of 30 co-occurrences agree
+169,CHN,Chengdu Rongcheng,5648,Chengdu Better City,auto,46,46 of 46 co-occurrences agree
+169,CHN,Chongqing Liangjiang Athletic,845,Chongqing Lifan,auto,84,84 of 84 co-occurrences agree
+169,CHN,Chongqing Tonglianglong,21262,Chongqing Tongliang Long,auto,5,5 of 5 co-occurrences agree
+169,CHN,Dalian Pro,831,Dalian Aerbin,auto,35,35 of 35 co-occurrences agree
+169,CHN,Dalian Yifang F.C.,831,Dalian Aerbin,auto,36,36 of 36 co-occurrences agree
+169,CHN,Dalian Yingbo,21263,Dalian Zhixing,auto,18,18 of 18 co-occurrences agree
+169,CHN,Guangzhou City,838,Guangzhou R&F,auto,12,12 of 12 co-occurrences agree
+169,CHN,Guangzhou FC,832,Guangzhou Evergrande FC,auto,12,12 of 12 co-occurrences agree
+169,CHN,Hebei,839,Hebei Zhongji,auto,95,95 of 95 co-occurrences agree
+169,CHN,Henan Songshan Longmen,840,Henan Jianye,auto,130,130 of 130 co-occurrences agree
+169,CHN,Liaoning,846,liaoning hongyun FC,auto,36,36 of 36 co-occurrences agree
+169,CHN,Liaoning Tieren,5684,Shenyang Urban,auto,6,6 of 6 co-occurrences agree
+169,CHN,Meizhou Hakka,1439,Meizhou Kejia,auto,38,38 of 38 co-occurrences agree
+169,CHN,Qingdao FC,1441,Qingdao Huanghai,auto,8,8 of 8 co-occurrences agree
+169,CHN,Qingdao Hainiu,1431,Qingdao Jonoon,auto,37,37 of 37 co-occurrences agree
+169,CHN,Qingdao West Coast,17265,Qingdao Youth Island,auto,24,24 of 24 co-occurrences agree
+169,CHN,Shandong Taishan,844,Shandong Luneng,auto,49,49 of 49 co-occurrences agree
+169,CHN,Shanghai Port,836,SHANGHAI SIPG,auto,51,51 of 51 co-occurrences agree
+169,CHN,Shenzhen,1433,Shenzhen Ruby FC,auto,48,48 of 48 co-occurrences agree
+169,CHN,Shenzhen Xinpengcheng,5686,Sichuan Jiuniu,auto,27,27 of 27 co-occurrences agree
+169,CHN,Shijiazhuang,849,Shijiazhuang Y. J.,auto,22,22 of 22 co-occurrences agree
+169,CHN,Tianjin Jinmen Tiger,837,Tianjin Teda,auto,128,128 of 128 co-occurrences agree
+169,CHN,Tianjin Quanjian,843,Tianjin Songjiang,auto,38,38 of 38 co-occurrences agree
+169,CHN,Tianjin Tianhai,843,Tianjin Songjiang,auto,16,16 of 16 co-occurrences agree
+169,CHN,Wuhan FC,1434,Wuhan Zall,auto,34,34 of 34 co-occurrences agree
+169,CHN,Yanbian,847,Yanbian Tigers FC,auto,36,36 of 36 co-occurrences agree
+169,CHN,Zhejiang Greentown,848,Hangzhou Greentown,auto,2,2 of 2 co-occurrences agree
+169,CHN,Zhejiang Professional,848,Hangzhou Greentown,auto,45,45 of 45 co-occurrences agree
 179,SC0,Dundee United,1386,Dundee Utd,auto,200,200 of 200 co-occurrences agree
 179,SC0,Hamilton,248,Hamilton Academical,auto,189,189 of 189 co-occurrences agree
 179,SC0,Hearts,254,Heart Of Midlothian,auto,335,335 of 335 co-occurrences agree
@@ -229,6 +287,12 @@ league_id,fd_div,fd_team,af_team_id,af_team,source,support,note
 244,FIN,PS Kemi,1170,PS Kemi Kings,auto,68,68 of 68 co-occurrences agree
 244,FIN,Rovaniemi,1167,Rops,auto,130,130 of 130 co-occurrences agree
 244,FIN,TPS,1168,Turku PS,auto,58,58 of 58 co-occurrences agree
+253,USA,Atlanta Utd,1608,Atlanta United FC,auto,335,335 of 335 co-occurrences agree
+262,MEX,Atl. San Luis,2314,Atletico San Luis,auto,210,210 of 210 co-occurrences agree
+262,MEX,Chiapas,2293,Jaguares de Chiapas,auto,28,28 of 28 co-occurrences agree
+262,MEX,Club Leon,2289,Leon,auto,315,315 of 315 co-occurrences agree
+262,MEX,Queretaro,2290,Club Queretaro,auto,289,289 of 289 co-occurrences agree
+262,MEX,UNAM Pumas,2286,U.N.A.M. - Pumas,auto,320,320 of 320 co-occurrences agree
 283,ROU,Academica Clinceni,2603,FC Clinceni,auto,63,63 of 63 co-occurrences agree
 283,ROU,Astra,636,FC Astra Giurgiu,auto,91,91 of 91 co-occurrences agree
 283,ROU,Calarasi,2582,Dunarea Calarasi,auto,26,26 of 26 co-occurrences agree
