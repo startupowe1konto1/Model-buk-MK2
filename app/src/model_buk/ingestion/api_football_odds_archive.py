@@ -105,7 +105,9 @@ CREATE INDEX IF NOT EXISTS idx_fixtures_kickoff ON fixtures (kickoff_utc);
 """
 
 # Columns added after the first release; applied to existing databases.
-_MIGRATIONS = (("fixtures", "last_api_update", "TEXT"),)
+# ``scans.kind`` is NULL for the hourly date scans and ``'near_kickoff'`` for the
+# scans of :mod:`model_buk.ingestion.closing_odds`, which write into the same tables.
+_MIGRATIONS = (("fixtures", "last_api_update", "TEXT"), ("scans", "kind", "TEXT"))
 
 
 def _iso(moment: datetime) -> str:
@@ -152,7 +154,12 @@ class OddsArchive:
             for table, column, sql_type in _MIGRATIONS:
                 existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
                 if column not in existing:
-                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
+                    try:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
+                    except sqlite3.OperationalError:
+                        # Another collector process added it between our check and the ALTER.
+                        if column not in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}:
+                            raise
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -184,6 +191,29 @@ class OddsArchive:
         lines = "\n".join(
             json.dumps({"fetched_at": _iso(fetched_at), "odds": obj}, ensure_ascii=False)
             for obj in objects
+        )
+        path.write_bytes(gzip.compress(lines.encode("utf-8")))
+        return str(path.relative_to(self.root))
+
+    def write_raw_entries(
+        self, scan_id: str, day: datetime, entries: Sequence[tuple[datetime, Mapping[str, Any]]]
+    ) -> str:
+        """Like :meth:`write_raw`, but every provider object carries its own fetch time.
+
+        Used by scans that make many requests one after another (near-kickoff
+        polling): each response is stamped when it arrived, so a raw line can never
+        claim an earlier time than the price was actually seen.  Same layout and line
+        format as :meth:`write_raw`; the file goes under the date of ``day``.
+        """
+
+        day_dir = self.root / "raw" / day.astimezone(timezone.utc).strftime("%Y-%m-%d")
+        day_dir.mkdir(parents=True, exist_ok=True)
+        path = day_dir / f"{scan_id}.jsonl.gz"
+        if path.exists():
+            raise FileExistsError(f"raw snapshot {path} already exists; scans are immutable")
+        lines = "\n".join(
+            json.dumps({"fetched_at": _iso(fetched_at), "odds": obj}, ensure_ascii=False)
+            for fetched_at, obj in entries
         )
         path.write_bytes(gzip.compress(lines.encode("utf-8")))
         return str(path.relative_to(self.root))
@@ -242,11 +272,13 @@ class OddsArchive:
             conn.commit()
         return len(objects), changed
 
-    def start_scan(self, scan_id: str, started_at: datetime, dates: Sequence[str]) -> None:
+    def start_scan(
+        self, scan_id: str, started_at: datetime, dates: Sequence[str], kind: str | None = None
+    ) -> None:
         with closing(self._connect()) as conn:
             conn.execute(
-                "INSERT INTO scans (scan_id, started_at, dates) VALUES (?, ?, ?)",
-                (scan_id, _iso(started_at), ",".join(dates)),
+                "INSERT INTO scans (scan_id, started_at, dates, kind) VALUES (?, ?, ?, ?)",
+                (scan_id, _iso(started_at), ",".join(dates), kind),
             )
             conn.commit()
 
