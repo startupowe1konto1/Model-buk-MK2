@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import log_loss
+from model_buk.evaluation.np_metrics import log_loss
 
 from model_buk.config import CornerV02Config
 from model_buk.distributions import (

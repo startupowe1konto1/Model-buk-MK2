@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import brier_score_loss, log_loss, mean_absolute_error, mean_squared_error
+from model_buk.evaluation.np_metrics import brier_score_loss, log_loss, mean_absolute_error, mean_squared_error
 
 
 def count_metrics(y: np.ndarray, mu: np.ndarray) -> dict[str, float]:

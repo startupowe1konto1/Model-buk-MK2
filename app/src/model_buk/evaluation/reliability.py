@@ -33,7 +33,7 @@ from typing import Literal, Sequence
 
 import numpy as np
 import pandas as pd
-from sklearn.isotonic import isotonic_regression
+from model_buk.evaluation.np_metrics import isotonic_regression
 
 from model_buk.evaluation.scoring import PROBABILITY_FLOOR
 
