@@ -1,0 +1,26 @@
+# Model Buk jobs on Railway (supercronic).  Times are Polish time (Europe/Warsaw, CET/CEST): CRON_TZ below sets
+# the schedule's zone, and the image also sets TZ=Europe/Warsaw so the job logs show Polish time.  The API quota
+# resets at 00:00 UTC = 01:00 (winter) / 02:00 (summer) Polish time.
+#
+# Every line runs one wrapper in jobs/ (run_job.sh: one log line per run in $MODEL_BUK_DATA/logs/<job>.log, no
+# overlap of a job with itself, resource locks, a timeout).  A job that is still running when its next start is
+# due is skipped (supercronic never overlaps a job; the job lock is a second guard).
+#
+# Was on the PC (Task Scheduler folder \ModelBuk\):
+#   OddsCollector hourly :05, PrematchCollector every 20 min, ClosingOdds every 15 min, ValueScanner :15/:45,
+#   RefreshRecentMatches hourly :35, RefreshCurrentSeason at logon (here: daily), NightlyHistoryBuild 02:15
+#   (here: without the football-data join), FitLiveModels 03:00 (here: one worker).
+CRON_TZ=Europe/Warsaw
+
+# minute hour day month weekday  command
+5 * * * *              /opt/model-buk/deploy/railway/jobs/odds_collector.sh
+5,25,45 * * * *        /opt/model-buk/deploy/railway/jobs/prematch_collector.sh
+12,27,42,57 * * * *    /opt/model-buk/deploy/railway/jobs/closing_odds.sh
+15,45 * * * *          /opt/model-buk/deploy/railway/jobs/scanner.sh
+35 * * * *             /opt/model-buk/deploy/railway/jobs/refresh_recent.sh
+45 1 * * *             /opt/model-buk/deploy/railway/jobs/refresh_season.sh
+15 2 * * *             /opt/model-buk/deploy/railway/jobs/history_build.sh
+0 3 * * *              /opt/model-buk/deploy/railway/jobs/fit_live_models.sh
+30 4 * * *             /opt/model-buk/deploy/railway/jobs/compact_odds.sh
+50 4 * * *             /opt/model-buk/deploy/railway/jobs/compact_register.sh
+20 5 * * *             /opt/model-buk/deploy/railway/jobs/archive_upload.sh

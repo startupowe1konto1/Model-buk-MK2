@@ -1,0 +1,202 @@
+diff --git a/app/scripts/build_extras_tables.py b/app/scripts/build_extras_tables.py
+index 987377574c36ae9d55e970418126ae0bca94633f..d56d3825dce37be80b95a6be1b5f57bfc19d2a79 100644
+--- a/app/scripts/build_extras_tables.py
++++ b/app/scripts/build_extras_tables.py
+@@ -32,8 +32,9 @@ from model_buk.ingestion.api_football_extras import (  # noqa: E402
+     RETROSPECTIVE_WARNING,
+     build_extras_tables,
+ )
++from model_buk.paths import data_root  # noqa: E402
+ 
+-DEFAULT_ARCHIVE_ROOT = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football-extras")
++DEFAULT_ARCHIVE_ROOT = data_root() / "api-football-extras"
+ 
+ 
+ def main() -> None:
+diff --git a/app/scripts/build_fd_af_join.py b/app/scripts/build_fd_af_join.py
+index 5ef64ae37a9da39476be5be3466967e750b523ae..8466df903c6200686ef0c03585be5d9b322506d7 100644
+--- a/app/scripts/build_fd_af_join.py
++++ b/app/scripts/build_fd_af_join.py
+@@ -32,14 +32,15 @@ from model_buk.ingestion.fd_af_join import (  # noqa: E402
+     run_join,
+     summarize_by_league_season,
+ )
++from model_buk.paths import data_root  # noqa: E402
+ 
+ APP_ROOT = Path(__file__).resolve().parent.parent
+ DEFAULT_ARCHIVES = tuple(
+     Path(r"C:\Users\oskar\Desktop\Model Buk") / f"football_data-20260916T173459Z-1-00{part}.zip"
+     for part in range(1, 6)
+ )
+-DEFAULT_HISTORY_DB = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football\tables\history.sqlite")
+-DEFAULT_OUT_DIR = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\joined")
++DEFAULT_HISTORY_DB = data_root() / "api-football" / "tables" / "history.sqlite"
++DEFAULT_OUT_DIR = data_root() / "joined"
+ DEFAULT_ALIASES = APP_ROOT / "config" / "team_aliases_fd_af.csv"
+ 
+ 
+diff --git a/app/scripts/collect_closing_odds.py b/app/scripts/collect_closing_odds.py
+index 73cc4a99d460bb5b02eb6d23316edb5fbcf09675..28f8342d08df10f436e7c38626033403ed8f184e 100644
+--- a/app/scripts/collect_closing_odds.py
++++ b/app/scripts/collect_closing_odds.py
+@@ -34,14 +34,15 @@ from model_buk.ingestion.closing_odds import (  # noqa: E402
+     ClosingOddsCollector,
+ )
+ from model_buk.ingestion.fixture_directory import FixtureDirectory  # noqa: E402
++from model_buk.paths import data_root  # noqa: E402
+ 
+-DATA_ROOT = r"C:\Users\oskar\Documents\Model-Buk-Data"
++DATA_ROOT = data_root()
+ 
+ 
+ def main() -> int:
+     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+-    parser.add_argument("--data-dir", default=DATA_ROOT + r"\api-football-odds", help="The odds archive to append to")
+-    parser.add_argument("--directory-dir", default=DATA_ROOT + r"\fixture-directory",
++    parser.add_argument("--data-dir", default=str(DATA_ROOT / "api-football-odds"), help="The odds archive to append to")
++    parser.add_argument("--directory-dir", default=str(DATA_ROOT / "fixture-directory"),
+                         help="Fixture directory (calendar, probe and quota state)")
+     parser.add_argument("--window-minutes", type=float, default=150.0, help="Fetch fixtures kicking off within this many minutes")
+     parser.add_argument("--max-requests", type=int, default=80, help="Hard cap on API calls for this run")
+diff --git a/app/scripts/collect_fixture_directory.py b/app/scripts/collect_fixture_directory.py
+index 8e2dc2453a19a4367053e481390870e19b1ae4e4..d8e353b841a63cc5a3fc21fdcc893ff9aa723e98 100644
+--- a/app/scripts/collect_fixture_directory.py
++++ b/app/scripts/collect_fixture_directory.py
+@@ -37,8 +37,9 @@ from model_buk.ingestion.fixture_directory import (  # noqa: E402
+     FixtureDirectoryCollector,
+     read_pending_ids,
+ )
++from model_buk.paths import data_root  # noqa: E402
+ 
+-DEFAULT_DATA_DIR = r"C:\Users\oskar\Documents\Model-Buk-Data\fixture-directory"
++DEFAULT_DATA_DIR = str(data_root() / "fixture-directory")
+ 
+ 
+ def main() -> int:
+diff --git a/app/scripts/collect_odds.py b/app/scripts/collect_odds.py
+index 321eb03572c605d567c1e758f60c74aebfba1eaa..7bfe96896ed1f656e9c2383253930b2b58e8b9d9 100644
+--- a/app/scripts/collect_odds.py
++++ b/app/scripts/collect_odds.py
+@@ -31,11 +31,12 @@ from model_buk.ingestion.api_football_odds_archive import (  # noqa: E402
+     OddsCollector,
+     scan_dates,
+ )
++from model_buk.paths import data_root  # noqa: E402
+ 
+ 
+ def main() -> int:
+     parser = argparse.ArgumentParser(description=__doc__)
+-    parser.add_argument("--data-dir", default=r"C:\Users\oskar\Documents\Model-Buk-Data\api-football-odds")
++    parser.add_argument("--data-dir", default=str(data_root() / "api-football-odds"))
+     parser.add_argument("--days-ahead", type=int, default=2)
+     parser.add_argument("--wide-days", type=int, default=4)
+     parser.add_argument("--wide-every-hours", type=int, default=6)
+diff --git a/app/scripts/collect_prematch.py b/app/scripts/collect_prematch.py
+index 6de68d8be89d18a057c22cdf1f835c23de9faf97..4f7749994029d1d17c967aa7bc9509af8b15b312 100644
+--- a/app/scripts/collect_prematch.py
++++ b/app/scripts/collect_prematch.py
+@@ -44,11 +44,12 @@ from model_buk.ingestion.api_football_prematch import (  # noqa: E402
+     PrematchArchive,
+     PrematchCollector,
+ )
++from model_buk.paths import data_root  # noqa: E402
+ 
+ 
+ def main() -> int:
+     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+-    parser.add_argument("--data-dir", default=r"C:\Users\oskar\Documents\Model-Buk-Data\api-football-prematch")
++    parser.add_argument("--data-dir", default=str(data_root() / "api-football-prematch"))
+     parser.add_argument("--max-requests", type=int, default=150, help="Hard cap on API calls for this run")
+     parser.add_argument("--reserve", type=int, default=1500, help="Stop when the daily remaining quota drops to this")
+     parser.add_argument("--days-ahead", type=int, default=1, help="Fixture/injury dates: today plus this many days")
+diff --git a/app/scripts/download_extras.py b/app/scripts/download_extras.py
+index 5fc5d11d1ff90f97cc5579d8821ca9ca5bcdb36e..4d04662c41d1954ad6e9841574a6d1b6c872488f 100644
+--- a/app/scripts/download_extras.py
++++ b/app/scripts/download_extras.py
+@@ -64,9 +64,10 @@ from model_buk.ingestion.api_football_extras import (  # noqa: E402
+     team_ids_from_history,
+ )
+ from model_buk.ingestion.api_football_history import CURRENT_SEASON, RequestBudget  # noqa: E402
++from model_buk.paths import data_root  # noqa: E402
+ 
+-DEFAULT_DATA_DIR = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football-extras")
+-DEFAULT_HISTORY_DB = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football\tables\history.sqlite")
++DEFAULT_DATA_DIR = data_root() / "api-football-extras"
++DEFAULT_HISTORY_DB = data_root() / "api-football" / "tables" / "history.sqlite"
+ 
+ 
+ def parse_kinds(text: str) -> list[str]:
+diff --git a/app/scripts/refresh_current_season.py b/app/scripts/refresh_current_season.py
+index 5a818606365992c4caeebc05282f517580c6b03c..6506db06ea67626b2ab35a92b5c5510934a848f2 100644
+--- a/app/scripts/refresh_current_season.py
++++ b/app/scripts/refresh_current_season.py
+@@ -33,11 +33,12 @@ from model_buk.ingestion.api_football_history import (  # noqa: E402
+     RequestBudget,
+     current_season_scope,
+ )
++from model_buk.paths import data_root  # noqa: E402
+ 
+ 
+ def main() -> int:
+     parser = argparse.ArgumentParser(description=__doc__)
+-    parser.add_argument("--data-dir", default=r"C:\Users\oskar\Documents\Model-Buk-Data\api-football")
++    parser.add_argument("--data-dir", default=str(data_root() / "api-football"))
+     parser.add_argument(
+         "--mode",
+         choices=("leagues", "dates"),
+diff --git a/app/scripts/run_eval_baseline.py b/app/scripts/run_eval_baseline.py
+index d081debef9657c249a868838c1e3ac78f73d786c..5ed529e06eaf80a547d146b0948a7549b9152bc1 100644
+--- a/app/scripts/run_eval_baseline.py
++++ b/app/scripts/run_eval_baseline.py
+@@ -49,8 +49,9 @@ from model_buk.evaluation.framework import (  # noqa: E402
+     prepare_matches,
+ )
+ from model_buk.evaluation.reliability import corp_diagram_table, corp_reliability  # noqa: E402
++from model_buk.paths import data_root  # noqa: E402
+ 
+-DEFAULT_DB = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football\tables\history.sqlite")
++DEFAULT_DB = data_root() / "api-football" / "tables" / "history.sqlite"
+ DEFAULT_REPORT = Path(__file__).resolve().parents[2] / "reports" / "Rama ewaluacji - baseline.md"
+ MATCH_COLUMNS = (
+     "fixture_id, league_code, season, round, kickoff_utc, status_short, home_goals, away_goals"
+diff --git a/app/src/model_buk/scanner/engine.py b/app/src/model_buk/scanner/engine.py
+index 45cc8d9e4987a46408ee82ad1e8c98a6852fa24c..26550ff09a0cf7bd8d9275af4e8f6c5d7c5ec8cd 100644
+--- a/app/src/model_buk/scanner/engine.py
++++ b/app/src/model_buk/scanner/engine.py
+@@ -111,13 +111,14 @@ from model_buk.markets.pricing import (
+     require_tax_multiplier,
+ )
+ from model_buk.markets.staking import DEFAULT_PIT_RULE, PitRule
++from model_buk.paths import data_root
+ from model_buk.scanner.settlement import leg_key, tau_label
+ 
+ if TYPE_CHECKING:  # pragma: no cover
+     from model_buk.scanner.coupons import CouponSet
+     from model_buk.scanner.register import ScannerRegister
+ 
+-DATA_ROOT = Path(r"C:\Users\oskar\Documents\Model-Buk-Data")
++DATA_ROOT = data_root()  # $MODEL_BUK_DATA, else C:\Users\oskar\Documents\Model-Buk-Data on Windows
+ SCANNER_DIR = DATA_ROOT / "scanner"
+ 
+ REFERENCE_BOOKMAKERS: tuple[str, ...] = ("Pinnacle", "Betfair")
+diff --git a/app/src/model_buk/scanner/settlement.py b/app/src/model_buk/scanner/settlement.py
+index 4f450a5fbbcc43f021d9f5aa724868f21d62e4c9..41339283bfc3a4b7aa87e1f51c1df5f5a8aa6f34 100644
+--- a/app/src/model_buk/scanner/settlement.py
++++ b/app/src/model_buk/scanner/settlement.py
+@@ -51,6 +51,7 @@ import numpy as np
+ import pandas as pd
+ 
+ from model_buk.markets.pricing import ClosingLineValue, closing_line_value
++from model_buk.paths import data_root
+ 
+ OUTCOMES: tuple[str, ...] = ("win", "loss", "push", "half_win", "half_loss", "void")
+ 
+@@ -502,7 +503,7 @@ def clv_columns(frame: pd.DataFrame, taus: Sequence[float], *, odd: str = "odd_t
+ # Results from the history archive
+ # --------------------------------------------------------------------------- #
+ 
+-DATA_ROOT = Path(r"C:\Users\oskar\Documents\Model-Buk-Data")
++DATA_ROOT = data_root()  # $MODEL_BUK_DATA, else C:\Users\oskar\Documents\Model-Buk-Data on Windows
+ HISTORY_DB = DATA_ROOT / "api-football" / "tables" / "history.sqlite"
+ DIRECTORY_DB = DATA_ROOT / "fixture-directory" / "directory.sqlite3"
+ 

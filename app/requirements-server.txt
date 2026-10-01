@@ -1,0 +1,23 @@
+# Packages the always-on jobs need on the server (Railway container, deploy/railway/Dockerfile).
+# Derived from the imports of the job scripts (collect_odds, collect_prematch, collect_closing_odds,
+# refresh_current_season, download_history, build_history_tables, run_scanner, fit_live_models,
+# compact_odds_archive, compact_scanner_register, archive_to_bucket) and of model_buk.scanner / .maintenance.
+# Versions = app/.venv on the PC (2026-10-01), so the server computes what the PC computes.
+#
+# NOT here on purpose: catboost is installed by the Dockerfile with --no-deps, because its declared
+# dependencies (matplotlib, plotly, graphviz) are only for plotting and are never imported by the jobs;
+# scikit-learn, fastapi/uvicorn (the local web UI), openpyxl and pytest are not used by any job.
+numpy==2.5.3
+pandas==3.0.5
+python-dateutil==2.9.0.post0
+tzdata==2026.4
+six==1.17.0
+scipy==1.18.1
+joblib==1.6.0
+cloudpickle==3.1.2
+requests==2.34.2
+certifi==2026.7.22
+charset-normalizer==3.5.1
+idna==3.19
+urllib3==2.7.0
+boto3>=1.35,<2

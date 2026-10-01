@@ -182,6 +182,15 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 
 DATA_TABLES: tuple[str, ...] = tuple(TABLE_COLUMNS)
 
+SLIM_SKIPPED_TABLES: tuple[str, ...] = ("lineup_players", "player_match_stats")
+"""Player-level tables a *slim* build leaves empty (``skip_tables``): about two thirds of the database.
+
+Nothing the server runs reads them -- the live models and the count models read ``matches``,
+``team_match_stats``, ``events`` (cards and whether a match has an event feed) and ``build_info``; settlement
+reads ``matches`` and ``team_match_stats``; the scanner reads none of the player tables.  Only research code
+(``download_extras.py``'s player scope, the quality report's line-up / player-stats shares) uses them, on the PC
+with a full build.  The tables are still created (empty), so every query keeps working."""
+
 _REAL_TEAM_STAT_COLUMNS = frozenset({"possession_pct", "passes_pct", "expected_goals", "goals_prevented"})
 
 _TEAM_STAT_DDL = ",\n    ".join(
@@ -317,7 +326,8 @@ CREATE TABLE build_info (
     lineups_rows INTEGER NOT NULL,
     lineup_players_rows INTEGER NOT NULL,
     player_match_stats_rows INTEGER NOT NULL,
-    build_seconds REAL
+    build_seconds REAL,
+    skipped_tables TEXT
 );
 """
 
@@ -936,6 +946,7 @@ class BuildReport:
     duplicate_fixtures_skipped: int
     row_counts: dict[str, int]
     seconds: float
+    skipped_tables: tuple[str, ...] = ()
 
 
 ProgressCallback = Callable[[int, int, int], None]
@@ -960,6 +971,7 @@ def build_history_tables(
     files_per_transaction: int = DEFAULT_FILES_PER_TRANSACTION,
     progress: ProgressCallback | None = None,
     now: Callable[[], str] = _utc_now_iso,
+    skip_tables: Sequence[str] = (),
 ) -> BuildReport:
     """Rebuild the whole analysis database from the raw archive.
 
@@ -972,10 +984,22 @@ def build_history_tables(
 
     ``progress(files_done, files_total, fixtures_done)`` is called after each
     committed chunk of ``files_per_transaction`` batch files.
+
+    ``skip_tables`` (e.g. :data:`SLIM_SKIPPED_TABLES`) leaves those data tables
+    empty: they are created with their indexes but no row is parsed into them,
+    and ``build_info.skipped_tables`` lists them (comma separated; NULL for a
+    full build). ``matches`` cannot be skipped.
     """
 
     if files_per_transaction < 1:
         raise ValueError("files_per_transaction must be positive")
+    skipped = tuple(dict.fromkeys(str(table) for table in skip_tables))
+    unknown = [table for table in skipped if table not in DATA_TABLES]
+    if unknown:
+        raise ValueError(f"unknown table(s) to skip: {', '.join(unknown)}")
+    if "matches" in skipped:
+        raise ValueError("the matches table cannot be skipped")
+    kept_tables = tuple(table for table in DATA_TABLES if table not in skipped)
     started = time.perf_counter()
     root = Path(archive_root)
     out = Path(out_path)
@@ -999,7 +1023,7 @@ def build_history_tables(
             conn.execute("PRAGMA synchronous=OFF")
             conn.executescript(_TABLES_DDL)
 
-            buffers: dict[str, list[dict[str, Any]]] = {table: [] for table in DATA_TABLES}
+            buffers: dict[str, list[dict[str, Any]]] = {table: [] for table in kept_tables}
             seen: set[int] = set()
             fixtures = 0
             without_id = 0
@@ -1029,12 +1053,8 @@ def build_history_tables(
                         batch_file=batch_file,
                     )
                     buffers["matches"].append(rows.match)
-                    buffers["team_match_stats"].extend(rows.team_match_stats)
-                    buffers["extra_team_stats"].extend(rows.extra_team_stats)
-                    buffers["events"].extend(rows.events)
-                    buffers["lineups"].extend(rows.lineups)
-                    buffers["lineup_players"].extend(rows.lineup_players)
-                    buffers["player_match_stats"].extend(rows.player_match_stats)
+                    for table in kept_tables[1:]:
+                        buffers[table].extend(getattr(rows, table))
                     fixtures += 1
                 if index % files_per_transaction == 0 or index == len(files):
                     _flush(conn, buffers)
@@ -1053,8 +1073,9 @@ def build_history_tables(
                        schema_version, built_at, source_root, state_db_used, batch_files,
                        fixtures_count, fixtures_without_id, duplicate_fixtures_skipped,
                        matches_rows, team_match_stats_rows, extra_team_stats_rows, events_rows,
-                       lineups_rows, lineup_players_rows, player_match_stats_rows, build_seconds
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       lineups_rows, lineup_players_rows, player_match_stats_rows, build_seconds,
+                       skipped_tables
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     SCHEMA_VERSION,
                     built_at,
@@ -1066,6 +1087,7 @@ def build_history_tables(
                     duplicates,
                     *(row_counts[table] for table in DATA_TABLES),
                     seconds,
+                    ",".join(skipped) or None,
                 ),
             )
             conn.commit()
@@ -1088,6 +1110,7 @@ def build_history_tables(
         duplicate_fixtures_skipped=duplicates,
         row_counts=row_counts,
         seconds=round(time.perf_counter() - started, 3),
+        skipped_tables=skipped,
     )
 
 
@@ -1322,6 +1345,7 @@ __all__ = [
     "TEAM_STAT_TYPES",
     "TABLE_COLUMNS",
     "DATA_TABLES",
+    "SLIM_SKIPPED_TABLES",
     "parse_number",
     "parse_float",
     "parse_int",

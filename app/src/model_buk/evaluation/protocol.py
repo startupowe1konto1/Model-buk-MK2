@@ -33,9 +33,10 @@ from model_buk.evaluation.framework import (
     over_under,
 )
 from model_buk.ingestion.api_football_history import TOP20_LEAGUES, WAVE2_LEAGUES
+from model_buk.paths import data_root
 
 PROTOCOL_ID = "goals-protocol-v1"
-DATA_ROOT = Path(r"C:\Users\oskar\Documents\Model-Buk-Data")
+DATA_ROOT = data_root()  # $MODEL_BUK_DATA, else C:\Users\oskar\Documents\Model-Buk-Data on Windows
 HISTORY_DB = DATA_ROOT / "api-football" / "tables" / "history.sqlite"
 PREDICTIONS_DIR = DATA_ROOT / "predictions"
 

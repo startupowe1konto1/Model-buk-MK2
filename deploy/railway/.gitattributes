@@ -1,0 +1,5 @@
+# The container runs these with bash/supercronic: never check them out with CRLF on Windows.
+*.sh text eol=lf
+crontab text eol=lf
+Dockerfile text eol=lf
+*.patch text eol=lf

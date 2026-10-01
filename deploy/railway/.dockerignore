@@ -1,0 +1,11 @@
+# Build context = the staged folder from stage_context.py (or the repository root).  Only app/src, app/scripts,
+# app/config, app/requirements-server.txt and deploy/railway are copied into the image.
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+.git
+app/tests
+app/runtime
+runtime
+**/*.patch
