@@ -291,11 +291,14 @@ zdarzenia w kupon, który ma dużą szansę wejść (zgodnie z limitem: noga do
 Uczciwy rachunek, żeby wiedzieć, co sprawdzamy: jeśli najlepszy kurs nie
 przebija uczciwej ceny, oczekiwany wynik kuponu to mniej więcej marża
 bukmachera razy liczba nóg plus 12% podatku, więc kupony będą często wchodzić,
-ale w długim okresie tracić. Przykład: 3 nogi po uczciwej cenie 1,40 (szansa
-71%) dają kupon 2,74 z szansą ok. 36%; przy najlepszym kursie 1,43 na każdej
-nodze wynik po podatku to ok. −8%, bez podatku ok. +4,5%. Pomysł staje się
-opłacalny, gdy najlepszy kurs jest wyraźnie powyżej uczciwego (to już jest
-„wartość”) albo w promocjach bez podatku.
+ale w długim okresie tracić. Przykład: 3 nogi z uczciwym kursem 1,40 (szansa
+71% każda) dają kupon, który wchodzi w ok. 36% przypadków. Jeśli najlepszy
+kurs równa się uczciwemu, wynik bez podatku to 0%, a po podatku −12%. Jeśli
+najlepszy kurs to 1,43 na każdej nodze (2% powyżej uczciwego, kurs łączny
+2,92), wynik bez podatku to ok. +6,6%, a po podatku ok. −6,2%. Żeby kupon z 3
+nóg wyszedł na zero po podatku, każda noga musi być co najmniej 4,4% powyżej
+uczciwej ceny. Pomysł staje się więc opłacalny, gdy najlepszy kurs wyraźnie
+przebija uczciwy (to już jest „wartość”) albo w promocjach bez podatku.
 
 Jak to sprawdzimy bez ryzyka: skaner doda osobną półkę „najlepszy kurs, wysoka
 szansa” (zdarzenia z szansą powyżej progu, najlepszy kurs spośród
