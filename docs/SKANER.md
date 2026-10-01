@@ -1,8 +1,12 @@
 # Skaner wartości (tryb papierowy)
 
-Wersja 1.0.1 z 30.09.2026 (klasy rynków, limit podejrzanych przewag 10%,
-zgodność czasu kursów, wykluczanie odbiegających rodzajów zakładów, unieważnianie
-meczów odwołanych, nowa strona). Skaner co przebieg przegląda **wszystkie** nadchodzące
+Wersja 1.1 z 01.10.2026: nowe rynki (parzyste/nieparzyste, handicap
+europejski, wygrana do zera, do przerwy / koniec, obie połowy, połowa z większą
+liczbą goli, pierwszy i ostatni gol, żółte kartki w 1. połowie) i model podziału
+goli na połowy; opis w „Rynki od wersji 1.1”. Wersja 1.0.1 z 30.09.2026 dodała
+klasy rynków, limit podejrzanych przewag 10%, zgodność czasu kursów, wykluczanie
+odbiegających rodzajów zakładów, unieważnianie meczów odwołanych i nową stronę.
+Skaner co przebieg przegląda **wszystkie** nadchodzące
 mecze, dla których w archiwum są kursy (dziś i kolejne dni, wszystkie ligi,
 wszystkie rynki, wszyscy bukmacherzy, bez limitu liczby meczów), szuka kursów
 wyższych od uczciwej ceny i składa z nich kupony 2–3 nóg. Nic nie jest
@@ -62,14 +66,180 @@ w kolejności (bierzemy pierwsze dostępne):
    1X2 Pinnacle.
 3. **Konsensus**: mediana co najmniej 3 innych bukmacherów po odjęciu marży.
 4. **Macierz wyników dopasowana do Pinnacle**: rynki, których Pinnacle nie
-   wystawia (np. obie drużyny strzelą, dokładny wynik, druga połowa), liczone z
-   rozkładu wyników dopasowanego do wszystkich jego kursów tego meczu.
+   wystawia (np. obie drużyny strzelą, dokładny wynik, druga połowa,
+   parzyste/nieparzyste, handicap europejski), liczone z rozkładu wyników
+   dopasowanego do wszystkich jego kursów tego meczu, a rynki zależne od goli w
+   każdej połowie z **podziału tej macierzy na połowy** (opis niżej).
 5. **Konsensus na skrajnych szansach** (poniżej 15% lub powyżej 85%).
 6. **Betfair** jako ostateczność (w tym źródle danych to zwykły bukmacher, nie
    giełda).
 
 Każda uczciwa szansa ma swój błąd standardowy (`p_se`): im dalej do meczu, im
 słabsze źródło i im mniej spójna drabinka linii, tym większy.
+
+Żółte kartki w 1. połowie mają tylko dwa możliwe źródła ceny: Pinnacle albo
+konsensus co najmniej 3 bukmacherów. Betfair sam nie wystarczy, model też nie.
+Bez takiego źródła kurs zostaje niewyceniony i jest liczony osobno w dzienniku
+przebiegu (`markets_v11.unpriced`) i na stronie („Co pominięto”).
+
+## Rynki od wersji 1.1
+
+### Co doszło
+
+| Rynek (w kodzie) | Rodzaje zakładów API | Uczciwa cena |
+|---|---|---|
+| parzysta / nieparzysta liczba goli (`odd_even`, drużyn: `odd_even_home`, `odd_even_away`) | 21, 1. połowa 22, 2. połowa 63, drużyny 23 i 60 | macierz (mecz), podział na połowy (połowy) |
+| handicap europejski, 3 wyniki (`eh`) | 9, 1. połowa 18, 2. połowa 181 | jw. |
+| wygrana do zera (`win_to_nil_home`, `win_to_nil_away`) | 29, 30, 36 | macierz |
+| do przerwy / koniec meczu (`ht_ft`, 9 wyników) | 7 | podział na połowy |
+| wygra obie połowy / co najmniej jedną (`win_both_halves_*`, `win_either_half_*`) | 37, 53, 32, 39 | jw. |
+| gol w obu połowach (`score_both_halves`, drużyny `_home`, `_away`) | 184, 111, 112, 48 | jw. |
+| obie strzelą w obu połowach (`btts_both_halves`) | 113 | jw. |
+| połowa z większą liczbą goli (`highest_half`, drużyn `_home`, `_away`) | 11, 192, 193 | jw. |
+| pierwszy gol (`first_goal`, także w 1. połowie) i ostatni gol (`last_goal`) | 14, 185, 15 | jw. |
+| żółte kartki w 1. połowie (`yellow_ou`, drużyn `yellow_home_ou`, `yellow_away_ou`) | 155, 309, 310 | tylko Pinnacle albo konsensus 3 bukmacherów |
+
+Kolejność źródeł jak w pozostałych rynkach: Pinnacle nie wystawia żadnego z nich,
+więc pierwszeństwo ma konsensus co najmniej 3 bukmacherów, a model (macierz albo
+podział na połowy) wycenia resztę i zestawy z nogą poniżej 15% (np. prawie cały
+rynek „do przerwy / koniec” i „nikt nie strzeli”). Parzyste/nieparzyste całego
+meczu wycenia więc głównie konsensus.
+
+Rozpoznawanych rodzajów zakładów jest teraz **85 ze 187** w archiwum (było 57) i
+dwa z katalogu dostawcy, których w archiwum jeszcze nie było (309, 310). Udział
+kursów, które skaner rozumie (tablica z 30.09, 21:30 UTC, 471 meczów):
+
+| Bukmacher | przed | po |
+|---|---|---|
+| Bet365 | 37,9% | 49,4% |
+| Betano | 64,9% | 74,3% |
+| Betfair | 71,9% | 80,4% |
+| Marathonbet | 72,9% | 93,8% |
+| William Hill | 76,6% | 87,5% |
+| SBO | 84,5% | 100% |
+| 1xBet | 92,9% | 98,3% |
+| BetVictor | 98,5% | 100% |
+| Pinnacle | 100% | 100% |
+| razem | 68,7% | 79,0% |
+
+Na całym archiwum (1,34 mln zmian kursów) z 72,8% na 82,6%.
+
+Czyste konto (27, 28) było już wcześniej mapowane jako „rywal poniżej 0,5
+gola” i zostaje tak; nie jest osobnym rynkiem. Dalej nierozpoznane: żółte
+kartki całego meczu i 2. połowy (inna statystyka niż „kartki”), dokładna liczba
+goli, rynki łączone (wynik i gole, wynik i obie strzelą), remis z
+bramkami, margines zwycięstwa, strzelcy, rzuty rożne w przedziałach, minuty.
+Katalog dostawcy (`/odds/bets`, 338 rodzajów) **nie ma** rynku na wszystkie
+kartki w 1. połowie; ma tylko żółte kartki, więc tylko one są mapowane.
+
+Kilka rzeczy sprawdzonych na archiwum (30.09):
+
+- **Handicap europejski** ma tę samą konwencję co azjatycki: „Home -1”,
+  „Draw -1”, „Away -1” to trzy wyniki jednej linii, na której gospodarz oddaje
+  gola (RMS zgodności z macierzą 0,025 przy tym odczycie, 0,48 przy odwrotnym).
+  W tych samych dwóch meczach co handicap azjatycki znak jest odwrócony, więc
+  oba handicapy bramkowe „głosują” razem przy korekcie znaku.
+- **Zakłady z nazwą drużyny w wyborze** („Win To Nil” 36, „Win Both Halves” 32,
+  „To Win Either Half” 39, „To Score In Both Halves By Teams” 48: „Home” albo
+  „Away”) to noga „tak” rynku tej drużyny. Ich kursy zgadzają się z modelem tak
+  samo jak kursy zakładów tak/nie innych bukmacherów (korelacja 0,99). Nie mają
+  ceny „nie”, więc same nie dają konsensusu.
+
+### Podział goli na połowy
+
+Rynki zależne od tego, w której połowie padły gole, liczymy z modelu podziału.
+Każdy gol gospodarza pada w 1. połowie z prawdopodobieństwem `s_dom`, gościa z
+`s_gość`, niezależnie od innych goli. Rozkład wyników całego meczu zostaje
+dokładnie ten sam (dopasowany do Pinnacle), a średnie liczby goli w połowach
+sumują się do średnich meczu. Udziały `s` bierzemy:
+
+1. z cen Pinnacle na 1. połowę tego meczu (1X2, sumy goli, handicapy, gole
+   drużyn), jeśli są: dopasowanie najmniejszych kwadratów ze słabym
+   przyciąganiem do udziałów ligi, bo sama suma goli w 1. połowie ustala sumę,
+   a nie podział między drużyny (`fair_detail` = `half:pinnacle_1h`; tak było
+   dla wszystkich meczów z macierzą 30.09),
+2. inaczej z historii ligi: odsetek goli przed przerwą w meczach z ostatnich 4
+   lat **przed chwilą decyzji** (`history.sqlite`), ściągnięty do udziału
+   ogólnego (empiryczny Bayes, siła ok. 9 800 goli, bo ligi różnią się mało:
+   0,39–0,48), `half:league`,
+3. w lidze bez historii: udział ogólny (0,449 gospodarze, 0,441 goście),
+   `half:global`.
+
+Pierwszy i ostatni gol: przy danej liczbie goli w połowie ich kolejność jest
+losowa, więc pierwszy gol połowy z `a` golami gospodarza i `b` gościa należy do
+gospodarza z prawdopodobieństwem `a / (a + b)`. „Nikt nie strzeli” to wynik 0:0.
+
+**Kalibracja na historii** (`app/scripts/measure_half_model.py`): 33 096 meczów
+18 lig z lat 2021–2025, macierz dopasowana do kursów zamknięcia Pinnacle z
+football-data (1X2, powyżej/poniżej 2,5, handicap azjatycki), udziały liczone
+tylko z meczów sprzed miesiąca danego meczu. Log-loss (mniej = lepiej) wobec
+naiwnego podziału po połowie goli na połowę:
+
+| Rynek | naiwny | udziały ligi | różnica (± błąd) |
+|---|---|---|---|
+| wynik do przerwy (1X2 1. połowy) | 1,0353 | 1,0344 | −0,0009 ± 0,0003 |
+| do przerwy / koniec | 1,8808 | 1,8753 | −0,0055 ± 0,0004 |
+| połowa z większą liczbą goli | 1,0876 | 1,0738 | −0,0137 ± 0,0009 |
+| gole 1. połowy powyżej 1,5 | 0,6321 | 0,6262 | −0,0059 ± 0,0006 |
+| gole 2. połowy powyżej 1,5 | 0,6809 | 0,6752 | −0,0056 ± 0,0006 |
+| pierwszy gol w 1. połowie | 1,0588 | 1,0571 | −0,0018 ± 0,0005 |
+| wynik do przerwy przy znanym wyniku końcowym | 1,3490 | 1,3342 | −0,0148 ± 0,0010 |
+
+Udział ogólny daje to samo co udziały ligi (różnice poniżej 0,0002), okno 2
+lata, 4 lata i cała historia też. Rynki, w których podział prawie nie gra roli
+(gol w obu połowach, wygrane połowy, pierwszy i ostatni gol meczu), mają ten sam
+log-loss co podział naiwny.
+
+Kalibracja „w dużym” (średnia przewidywana wobec częstości, udziały ligi):
+największe odchylenia to powroty w „do przerwy / koniec” (gospodarz/gość
+przewidziane 1,8%, było 2,4%; gość/gospodarz 2,2% wobec 2,7%), handicap
+europejski gospodarza −1, wynik „remis” czyli wygrana gospodarza jednym golem
+(20,1% wobec 21,7%), nieparzysta liczba goli (47,8% wobec 49,7%), mecz bez gola
+(8,4% wobec 7,4%) i gol w obu połowach (53,8% wobec 55,4%). Te różnice wchodzą
+do błędu ceny.
+
+**Błąd ceny nowych rynków.** Ceny z modelu dostają `fair_source` =
+`pinnacle_derived`, ale szerszy `p_se` niż zwykłe nogi z macierzy: podział na
+połowy ma dodatkowy składnik 0,05 (macierz 0,045 plus ok. 0,02 na sam podział),
+o 0,03 więcej, gdy udziały nie pochodzą z cen Pinnacle na 1. połowę, a każdy
+nowy rynek dokłada swój składnik równy największemu odchyleniu kalibracji
+(w jednostkach `sqrt(p(1-p))`, zaokrąglonemu w górę): handicap europejski i
+do przerwy / koniec 0,045, parzyste/nieparzyste 0,04, pierwszy i ostatni gol
+oraz gol w obu połowach 0,035, pozostałe 0,01–0,03. Sześć godzin przed meczem
+taka noga potrzebuje przewagi 10–12% przy szansie 0,5 i 8–9% przy 0,7 (noga
+Pinnacle 3,5%, zwykła noga z macierzy 9%), a limit podejrzanych przewag to 10%.
+Z modelu rzadko więc wyjdzie noga z wartością; to celowe. Na żywej tablicy
+(30.09) model zgadza się z konsensusem bukmacherów tak dobrze, jak konsensus
+sam ze sobą (np. do przerwy / koniec: różnica 0,026 w tych jednostkach).
+
+Wszystkie pozostałe zasady bez zmian: limit podejrzanych przewag 10%, klasy
+rynków (noga wyceniona tylko konsensusem jest „słaba”), wykluczanie rodzajów
+zakładów, zgodność czasu tablic.
+
+### Rozliczenie nowych rynków
+
+- Parzyste/nieparzyste, handicap europejski (bez zwrotu: trzy wyniki), wygrana
+  do zera: z wyniku okresu.
+- Do przerwy / koniec, obie połowy, połowa z większą liczbą goli (remis 0:0
+  to „po równo”): z wyniku do przerwy i końcowego; 2. połowa = koniec − przerwa.
+- Pierwszy i ostatni gol: ze zdarzeń meczu (gole z pierwszych 90 minut bez
+  niestrzelonych karnych, w kolejności minut; gol samobójczy liczy się drużynie,
+  którą wskazuje dostawca, czyli tej, która go zyskała: tak sumuje się 99,9%
+  meczów w historii). Tylko gdy gole ze zdarzeń sumują się do wyniku; mecz albo
+  połowa bez goli to „nikt” bez zdarzeń.
+- Żółte kartki w 1. połowie: zdarzenia z minutą (`elapsed`) do 45 włącznie, czyli
+  z doliczonym czasem 1. połowy (45+N). Liczą się tylko z pełnego zapisu zdarzeń
+  (ze zmianą zawodnika w 90 minutach); przy niepełnym zapisie brak danych, nigdy
+  zero. Kartki (żółte i czerwone) w 1. połowie liczymy tak samo ze zdarzeń, a
+  gdy ich brak, z połówkowych statystyk dostawcy jak dotąd. W historii 98,7%
+  liczb kartek drużyn ze zdarzeń zgadza się z blokiem statystyk.
+
+Zdarzenia (gole, kartki, zmiany) z minutami trafiają do tabeli
+`fixture_events` katalogu meczów z tych samych zapytań `/fixtures?ids`, które
+już pobierały statystyki (bez dodatkowych zapytań). Przy pierwszym otwarciu
+katalogu tabela jest wypełniana z zapisanych surowych odpowiedzi
+(`raw/details`). Brakujący wynik do przerwy, kolejność goli albo kartki z
+minutami dociągają statystyki do rozliczeń (20 meczów na zapytanie).
 
 ## Wartość: kiedy noga jest propozycją
 
@@ -306,7 +476,7 @@ Wszystko w `C:\Users\oskar\Documents\Model-Buk-Data\`:
 | `scanner\replay\` | wszystko to samo dla powtórek `--as-of` bez `--live-register` |
 | `logs\scanner.log` | jedna linia na przebieg z `run_scanner.ps1` |
 | `logs\scanner_errors.log` | pełny opis błędu, gdy przebieg się nie udał |
-| `fixture-directory\directory.sqlite3` | kalendarz, wyniki i statystyki meczów (odświeżane przez skaner) |
+| `fixture-directory\directory.sqlite3` | kalendarz, wyniki i statystyki meczów (odświeżane przez skaner), od wersji 1.1 także zdarzenia meczu z minutami (`fixture_events`) |
 | `api-football-odds\odds.sqlite3` | archiwum kursów (pisze kolektor kursów, skaner tylko czyta) |
 
 ## Jak uruchomić
@@ -395,6 +565,14 @@ i dociąga statystyki do rozliczeń.
 - **Nogi kuponu traktujemy jako niezależne.** Korelacja meczów tej samej ligi
   i godziny nie jest modelowana.
 - **Kartki** liczymy jako żółte plus czerwone; bukmacherzy liczą je różnie.
+- **Model podziału na połowy** zakłada, że gole w połowach padają niezależnie.
+  W historii zaniża przez to powroty („do przerwy / koniec” gospodarz/gość i
+  gość/gospodarz) o ok. jedną czwartą; dodatkowy błąd ceny to pokrywa, ale ceny
+  z modelu na tych nogach są niższe od prawdziwych.
+- **Nowe rynki bez Pinnacle.** Pinnacle nie wystawia żadnego z nowych rynków,
+  więc ich ceny to model (z macierzy Pinnacle) albo konsensus. Nie da się też
+  zmierzyć, czy któryś bukmacher systematycznie odbiega na tych rynkach
+  (pomiar rodzajów zakładów porównuje z Pinnacle).
 - **Mecze odwołane i przełożone** są unieważniane (zwrot stawki, zysk zero,
   poza liczeniem trafień). Statusy dostawcy: odwołany (CANC), przerwany (ABD),
   przyznany walkowerem (AWD, WO) — od razu; przełożony (PST), zawieszony (SUSP),
@@ -443,6 +621,11 @@ co 15 minut, do założenia w Harmonogramie), dane przedmeczowe co 20 minut
 (kontuzje, składy, predykcje API), nocna przebudowa historii i nocny trening
 modeli. Surowe kursy są archiwizowane w całości, więc każdy przebieg skanera
 da się później odtworzyć (`--as-of`), a nowe rynki wycenić wstecz.
+
+Od wersji 1.1 przebieg zapisuje też liczby nowych rynków (`markets_v11` w
+`runs.jsonl` i w diagnostyce skanu: kursy, ceny według źródła, kursy bez ceny,
+nogi z wartością według rynku, klasy i podatku) oraz udziały goli w 1. połowie
+użyte w modelu (`half_shares`).
 
 Budżet API skanera na przebieg: kalendarz 1–3 zapytania (najwyżej 15),
 statystyki do rozliczeń najwyżej 20 zapytań (20 meczów na zapytanie) plus 20
@@ -508,3 +691,30 @@ czasu tablic, wykluczone rodzaje zakładów, unieważnianie):
   przewagi są małe (2–9%) i wystarczają najwyżej przy zakładach bez podatku.
 - API: 1 zapytanie (kalendarz na dziś), zostało 2 115. Czas 36 s (66 s w
   przebiegu z pomiarem rodzajów zakładów).
+
+## Przebieg po wersji 1.1 (01.10.2026, 19:19 czasu polskiego)
+
+Nowa konfiguracja `3d4a122f421d` (nowe rynki zmieniają definicję wartości, więc
+wyniki papierowe liczą się od nowa). Przebieg na żywo kilkanaście minut po
+godzinnym skanie kursów:
+
+- 625 meczów z kursami, 475 ocenionych (164 płynne, 311 słabych), 863 164
+  kursy; uczciwe ceny dla 155 104 nóg (Pinnacle 20 522, pochodne z Pinnacle
+  107 102, konsensus 25 980, Betfair 1 500).
+- Nowe rynki: 90 993 kursy; ceny głównie z podziału na połowy
+  (`half:pinnacle_1h`, np. 2 700 nóg „do przerwy / koniec”, 5 032 handicapu
+  europejskiego w połowach) i z macierzy; 148 kursów na żółte kartki w 1.
+  połowie (tylko 1xBet) zostało niewycenionych, zgodnie z regułą.
+- Nogi z wartością: płynne 0 / 0 / 46, słabe 0 / 0 / 46 (podatek 12% / 6% /
+  bez podatku), **żadna z nowych rynków**. Nowe rynki dały 450 nóg powyżej
+  uczciwej ceny: 272 „prawie” (najlepsza dolna granica EV −2,9%) i 178
+  podejrzanych (głównie para kursów daleko od ceny modelu: 140).
+- Kupony przy podatku 12%: 0. Tylko przy niższym podatku: 17 płynnych i 16
+  słabych na liście.
+- API: 2 zapytania (kalendarz). Katalog meczów dostał tabelę zdarzeń (44 mecze
+  z zapisanych odpowiedzi).
+
+Powtórka offline tablicy z 30.09, 20:30 UTC (449 meczów ocenionych, 167 płynnych)
+daje to samo: 56 nóg z wartością bez podatku (7 płynnych), żadna z nowych
+rynków; 392 nogi nowych rynków powyżej uczciwej ceny (231 „prawie”, 161
+podejrzanych).

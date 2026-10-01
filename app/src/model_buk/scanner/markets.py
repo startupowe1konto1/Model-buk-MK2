@@ -16,6 +16,23 @@ Canonical legs
     corners_ou / corners_home_ou / corners_away_ou over|under      corners_ah home|away   corners_1x2 home|draw|away
     cards_ou / cards_home_ou / cards_away_ou over|under            cards_ah home|away
 
+New in v1.1 (priced from the score matrix or the half split, :mod:`model_buk.scanner.halves`)::
+
+    odd_even / odd_even_home / odd_even_away odd|even         eh home|draw|away (line = HOME handicap, whole goals)
+    win_to_nil_home / win_to_nil_away yes|no                  ht_ft 'home/draw' (half time / full time, 9 results)
+    win_both_halves_home|_away, win_either_half_home|_away yes|no
+    score_both_halves (anyone), score_both_halves_home|_away, btts_both_halves yes|no
+    highest_half / highest_half_home / highest_half_away first_half|second_half|equal
+    first_goal (ft; 1h = first goal of the first half) / last_goal home|away|none
+    yellow_ou / yellow_home_ou / yellow_away_ou over|under (first half; yellow cards only)
+
+Bet types that name the team in the selection ("Win To Nil" 36, "Win Both Halves" 32, "To Win Either Half" 39,
+"To Score In Both Halves By Teams" 48: "Home" / "Away") map to the ``yes`` leg of that team's market (the market
+name of the spec ends in ``{side}``); they have no complementary "no" price, so they never give a consensus or a
+book shift on their own.  Their meaning was checked against the yes/no bet types of other books on the archive of
+2026-09-30 (implied over model probability 1.09 to 1.27 with correlation 0.99 for all four, like their yes/no
+counterparts 29, 37, 111 and 184).
+
 Everything else is ``market == "other"`` (``period == "na"``, ``line`` NaN, the raw selection kept, ``bet_id`` and
 ``bet`` untouched) and is never priced.  ``line`` is a float and NaN when a market has none.
 
@@ -39,6 +56,12 @@ or more lines at +0.95, and no ladder of the same fixture and market that says t
 ``line`` of every handicap row of that fixture and market; ``handicap_flipped`` marks them.  Ladders too short to
 tell are left as labelled unless the fixture is flipped as a whole.
 
+European handicaps (9, first half 18, second half 181) follow the same convention: "Home -1", "Draw -1" and "Away
+-1" are the three results of one line on which the home team gives one goal (overround 1.02 to 1.27 per set; the
+de-vigged sets match the score matrix fitted to Pinnacle with an RMS of 0.025 in this reading against 0.48 in the
+other, archive of 2026-09-30).  They are reversed in the same fixtures as the Asian handicaps, so the two goal
+handicaps vote together in :func:`orient_handicaps` (corners and cards each on their own).
+
 Equivalences that are mapped on purpose
 ---------------------------------------
 * Clean sheet home (bet 27) yes/no = ``team_ou_away`` under/over 0.5; clean sheet away (28) likewise for
@@ -50,12 +73,18 @@ Equivalences that are mapped on purpose
   ``other``.  A group counts as three-way when the bet is 85 or the same (fixture, bookmaker, bet) also
   quotes an ``Exactly`` selection.
 
+* Clean sheet (27, 28) already is ``team_ou_* under 0.5``: it is not a separate market in v1.1 either.
+
 Deliberately not mapped (kept ``other``)
 ----------------------------------------
-Yellow-card markets (bets 150-162: yellow cards only, a different statistic from "cards"), shots, offsides, fouls,
-odd/even, exact-goals numbers, European (three-way) handicaps, half-time/full-time doubles, combined markets
-(result and total, result and BTTS), player and time-window markets.  "Cards" (bets 80-83) are mapped; the
-settlement side counts yellow plus red cards, operators differ on red cards.
+Yellow-card markets of the whole match or the second half (bets 150-154, 156-162: yellow cards only, a different
+statistic from "cards"; only the first-half yellow totals 155, 309 and 310 are mapped, see below), shots, offsides,
+fouls, exact-goals numbers, combined markets (result and total, result and BTTS, total and BTTS), scoring draw,
+winning margin, player and time-window markets.  "Cards" (bets 80-83) are mapped; the settlement side counts yellow
+plus red cards, operators differ on red cards.  The provider's catalogue (``/odds/bets``, 338 types) has no
+first-half market on all cards; the first-half card markets it has count yellow cards only ("Yellow Over/Under
+(1st Half)" 155, "Yellow Cards. Home / Away Total (1st Half)" 309 / 310; the last two not yet seen in the archive).
+They are priced only from Pinnacle or a consensus of at least three books (:func:`model_buk.scanner.fair.consensus_only`).
 
 Broken ladders
 --------------
@@ -144,7 +173,36 @@ CANONICAL_MARKETS: Final[tuple[str, ...]] = (
     "cards_home_ou",
     "cards_away_ou",
     "cards_ah",
+    # scanner v1.1: markets priced from the full-time score matrix or the half split (model_buk.scanner.halves)
+    "odd_even",
+    "odd_even_home",
+    "odd_even_away",
+    "eh",
+    "win_to_nil_home",
+    "win_to_nil_away",
+    "ht_ft",
+    "win_both_halves_home",
+    "win_both_halves_away",
+    "win_either_half_home",
+    "win_either_half_away",
+    "score_both_halves",
+    "score_both_halves_home",
+    "score_both_halves_away",
+    "btts_both_halves",
+    "highest_half",
+    "highest_half_home",
+    "highest_half_away",
+    "first_goal",
+    "last_goal",
+    # first-half yellow cards: priced only from Pinnacle or a consensus of at least three books
+    "yellow_ou",
+    "yellow_home_ou",
+    "yellow_away_ou",
 )
+
+_RESULTS: Final = ("home", "draw", "away")
+_YES_NO: Final = ("yes", "no")
+_HALVES: Final = ("first_half", "second_half", "equal")
 
 SELECTIONS: Final[dict[str, tuple[str, ...]]] = {
     "1x2": ("home", "draw", "away"),
@@ -164,11 +222,58 @@ SELECTIONS: Final[dict[str, tuple[str, ...]]] = {
     "cards_home_ou": ("over", "under"),
     "cards_away_ou": ("over", "under"),
     "cards_ah": ("home", "away"),
+    "odd_even": ("odd", "even"),
+    "odd_even_home": ("odd", "even"),
+    "odd_even_away": ("odd", "even"),
+    "eh": _RESULTS,
+    "win_to_nil_home": _YES_NO,
+    "win_to_nil_away": _YES_NO,
+    "ht_ft": tuple(f"{first}/{final}" for first in _RESULTS for final in _RESULTS),
+    "win_both_halves_home": _YES_NO,
+    "win_both_halves_away": _YES_NO,
+    "win_either_half_home": _YES_NO,
+    "win_either_half_away": _YES_NO,
+    "score_both_halves": _YES_NO,
+    "score_both_halves_home": _YES_NO,
+    "score_both_halves_away": _YES_NO,
+    "btts_both_halves": _YES_NO,
+    "highest_half": _HALVES,
+    "highest_half_home": _HALVES,
+    "highest_half_away": _HALVES,
+    "first_goal": ("home", "away", "none"),
+    "last_goal": ("home", "away", "none"),
+    "yellow_ou": ("over", "under"),
+    "yellow_home_ou": ("over", "under"),
+    "yellow_away_ou": ("over", "under"),
 }
 """Complementary selections of one line of a market (``cs`` has an open-ended list of ``h:a``)."""
 
-NO_LINE_MARKETS: Final[frozenset[str]] = frozenset({"1x2", "dc", "dnb", "btts", "cs", "corners_1x2"})
+NO_LINE_MARKETS: Final[frozenset[str]] = frozenset(
+    {
+        "1x2", "dc", "dnb", "btts", "cs", "corners_1x2",
+        "odd_even", "odd_even_home", "odd_even_away", "win_to_nil_home", "win_to_nil_away", "ht_ft",
+        "win_both_halves_home", "win_both_halves_away", "win_either_half_home", "win_either_half_away",
+        "score_both_halves", "score_both_halves_home", "score_both_halves_away", "btts_both_halves",
+        "highest_half", "highest_half_home", "highest_half_away", "first_goal", "last_goal",
+    }
+)  # fmt: skip
 """Markets without a line: the canonical ``line`` is NaN."""
+
+MATRIX_MARKETS_V11: Final[frozenset[str]] = frozenset(
+    {"odd_even", "odd_even_home", "odd_even_away", "eh", "win_to_nil_home", "win_to_nil_away"}
+)
+"""New in v1.1, priced from a score matrix (full time: the fitted matrix; halves: the half split)."""
+HALF_MARKETS_V11: Final[frozenset[str]] = frozenset(
+    {
+        "ht_ft", "win_both_halves_home", "win_both_halves_away", "win_either_half_home", "win_either_half_away",
+        "score_both_halves", "score_both_halves_home", "score_both_halves_away", "btts_both_halves",
+        "highest_half", "highest_half_home", "highest_half_away", "first_goal", "last_goal",
+    }
+)  # fmt: skip
+"""New in v1.1, priced from the joint of the two halves (:mod:`model_buk.scanner.halves`)."""
+YELLOW_MARKETS: Final[frozenset[str]] = frozenset({"yellow_ou", "yellow_home_ou", "yellow_away_ou"})
+"""Yellow cards only (a different statistic from ``cards_*``, which count yellow plus red)."""
+NEW_MARKETS_V11: Final[frozenset[str]] = MATRIX_MARKETS_V11 | HALF_MARKETS_V11 | YELLOW_MARKETS
 
 LEG_KEY: Final[tuple[str, ...]] = ("fixture_id", "market", "period", "line", "selection")
 
@@ -290,7 +395,54 @@ def _parse_keeps_clean_sheet(selection: str) -> _Parsed | None:
     return (0.5, "under" if key == "yes" else "over") if key in ("yes", "no") else None
 
 
-_PARSERS: Final[dict[str, Callable[[str], _Parsed | None]]] = {
+_EUROPEAN_HANDICAP_RE = re.compile(r"^(Home|Draw|Away)\s+([+-]?\d+)$", re.IGNORECASE)
+_HIGHEST_HALF = {"1st half": "first_half", "2nd half": "second_half", "draw": "equal"}
+_GOAL_TEAM = {"home": "home", "away": "away", "no goal": "none"}
+
+
+def _parse_odd_even(selection: str) -> _Parsed | None:
+    key = selection.strip().lower()
+    return (_NAN, key) if key in ("odd", "even") else None
+
+
+def _parse_european_handicap(selection: str) -> _Parsed | None:
+    """"Home -1", "Draw -1", "Away -1": the three results of one line, all labelled with the HOME handicap."""
+    match = _EUROPEAN_HANDICAP_RE.match(selection.strip())
+    if match is None:
+        return None
+    return float(int(match.group(2))) + 0.0, match.group(1).lower()
+
+
+def _parse_ht_ft(selection: str) -> _Parsed | None:
+    parts = [part.strip().lower() for part in selection.split("/")]
+    if len(parts) != 2 or any(part not in _TEAMS for part in parts):
+        return None
+    return _NAN, f"{parts[0]}/{parts[1]}"
+
+
+def _parse_highest_half(selection: str) -> _Parsed | None:
+    key = " ".join(selection.strip().lower().split())
+    return (_NAN, _HIGHEST_HALF[key]) if key in _HIGHEST_HALF else None
+
+
+def _parse_goal_team(selection: str) -> _Parsed | None:
+    key = " ".join(selection.strip().lower().split())
+    return (_NAN, _GOAL_TEAM[key]) if key in _GOAL_TEAM else None
+
+
+def _parse_side_yes(selection: str) -> tuple[float, str, str] | None:
+    """"Home" / "Away" of a bet type that names the team in the selection: the ``yes`` leg of that team's market."""
+    key = selection.strip().lower()
+    return (_NAN, "yes", key) if key in ("home", "away") else None
+
+
+_PARSERS: Final[dict[str, Callable[[str], _Parsed | tuple[float, str, str] | None]]] = {
+    "odd_even": _parse_odd_even,
+    "european_handicap": _parse_european_handicap,
+    "ht_ft": _parse_ht_ft,
+    "highest_half": _parse_highest_half,
+    "goal_team": _parse_goal_team,
+    "side_yes": _parse_side_yes,
     "three_way": _parse_three_way,
     "two_way_teams": _parse_two_way_teams,
     "double_chance": _parse_double_chance,
@@ -305,7 +457,10 @@ _PARSERS: Final[dict[str, Callable[[str], _Parsed | None]]] = {
 
 @dataclass(frozen=True)
 class BetSpec:
-    """How one API-Football bet type maps to a canonical market."""
+    """How one API-Football bet type maps to a canonical market.
+
+    A market ending in ``{side}`` is completed by the selection (``side_yes`` parser: "Home" -> ``..._home``).
+    """
 
     market: str
     period: str
@@ -374,6 +529,39 @@ def _specs() -> dict[int, BetSpec]:
     add((115,), "team_ou_home", "2h", "scores_a_goal")
     add((116,), "team_ou_away", "1h", "scores_a_goal")
     add((117,), "team_ou_away", "2h", "scores_a_goal")
+    # v1.1: score-matrix markets
+    add((21,), "odd_even", "ft", "odd_even")
+    add((22,), "odd_even", "1h", "odd_even")
+    add((63,), "odd_even", "2h", "odd_even")
+    add((23,), "odd_even_home", "ft", "odd_even")
+    add((60,), "odd_even_away", "ft", "odd_even")
+    add((9,), "eh", "ft", "european_handicap")
+    add((18,), "eh", "1h", "european_handicap")
+    add((181,), "eh", "2h", "european_handicap")
+    add((29,), "win_to_nil_home", "ft", "yes_no")
+    add((30,), "win_to_nil_away", "ft", "yes_no")
+    add((36,), "win_to_nil_{side}", "ft", "side_yes")
+    # v1.1: half-split markets
+    add((7,), "ht_ft", "ft", "ht_ft")
+    add((37,), "win_both_halves_home", "ft", "yes_no")
+    add((53,), "win_both_halves_away", "ft", "yes_no")
+    add((32,), "win_both_halves_{side}", "ft", "side_yes")
+    add((39,), "win_either_half_{side}", "ft", "side_yes")
+    add((184,), "score_both_halves", "ft", "yes_no")
+    add((111,), "score_both_halves_home", "ft", "yes_no")
+    add((112,), "score_both_halves_away", "ft", "yes_no")
+    add((48,), "score_both_halves_{side}", "ft", "side_yes")
+    add((113,), "btts_both_halves", "ft", "yes_no")
+    add((11,), "highest_half", "ft", "highest_half")
+    add((192,), "highest_half_home", "ft", "highest_half")
+    add((193,), "highest_half_away", "ft", "highest_half")
+    add((14,), "first_goal", "ft", "goal_team")
+    add((185,), "first_goal", "1h", "goal_team")
+    add((15,), "last_goal", "ft", "goal_team")
+    # v1.1: first-half yellow cards (309 and 310 are in the provider's catalogue, not yet in the archive)
+    add((155,), "yellow_ou", "1h", "total")
+    add((309,), "yellow_home_ou", "1h", "total")
+    add((310,), "yellow_away_ou", "1h", "total")
     return table
 
 
@@ -399,10 +587,15 @@ def map_bet(bet_id: int, selection: str) -> tuple[str, str, float, str] | None:
     parsed = _PARSERS[spec.parser](str(selection))
     if parsed is None:
         return None
-    line, canonical = parsed
-    if spec.market in NO_LINE_MARKETS:
+    market = spec.market
+    if len(parsed) == 3:
+        line, canonical, side = parsed  # type: ignore[misc]
+        market = market.format(side=side)
+    else:
+        line, canonical = parsed  # type: ignore[misc]
+    if market in NO_LINE_MARKETS:
         line = _NAN
-    return spec.market, spec.period, line, canonical
+    return market, spec.period, line, canonical
 
 
 def _map_unique(pairs: pd.DataFrame) -> pd.DataFrame:
@@ -463,7 +656,10 @@ def _resolve_three_way(frame: pd.DataFrame) -> np.ndarray:
     return is_total.to_numpy() & integer_line & (board_has_exactly | always)
 
 
-HANDICAP_MARKETS: Final[tuple[str, ...]] = ("ah", "corners_ah", "cards_ah")
+HANDICAP_MARKETS: Final[tuple[str, ...]] = ("ah", "eh", "corners_ah", "cards_ah")
+_HANDICAP_GROUP: Final[dict[str, str]] = {"ah": "goals", "eh": "goals", "corners_ah": "corners", "cards_ah": "cards"}
+"""Handicap markets whose ladders vote together on the orientation of a fixture (the Asian and the European goal
+handicaps of a fixture arrive reversed together)."""
 
 
 def orient_handicaps(quotes: pd.DataFrame, *, min_lines: int = 4, min_rank_correlation: float = 0.8) -> pd.DataFrame:
@@ -471,8 +667,9 @@ def orient_handicaps(quotes: pd.DataFrame, *, min_lines: int = 4, min_rank_corre
 
     Evidence: for every ladder (fixture, bookmaker, market, period) with at least ``min_lines`` lines, the rank
     correlation of the home price with the line.  A correct ladder has home prices that fall as the line rises
-    (a bigger head start is cheaper); a reversed one has them rise.  A (fixture, market) is flipped when no ladder
-    is clearly correct and either two ladders are clearly reversed or a single one is beyond doubt (rank
+    (a bigger head start is cheaper); a reversed one has them rise.  The Asian and the European goal handicaps
+    (``ah``, ``eh``) vote together; corners and cards each on their own.  A (fixture, group) is flipped when no
+    ladder is clearly correct and either two ladders are clearly reversed or a single one is beyond doubt (rank
     correlation at least 0.95 over at least five lines): ``line`` is then negated on all its handicap rows.
     Returns a copy with the boolean column ``handicap_flipped``.
     """
@@ -482,7 +679,7 @@ def orient_handicaps(quotes: pd.DataFrame, *, min_lines: int = 4, min_rank_corre
     if home.empty:
         return out
     ladder_key = ["fixture_id", "bookmaker_id" if "bookmaker_id" in out.columns else "bookmaker", "market", "period"]
-    # per (fixture, market): [reversed ladders, correct ladders, ladders beyond doubt]
+    # per (fixture, handicap group): [reversed ladders, correct ladders, ladders beyond doubt]
     evidence: dict[tuple[int, str], list[int]] = {}
     for (fixture_id, _book, market, _period), ladder in home.groupby(ladder_key, sort=False):
         ladder = ladder.drop_duplicates("line")
@@ -491,7 +688,7 @@ def orient_handicaps(quotes: pd.DataFrame, *, min_lines: int = 4, min_rank_corre
         rho = ladder["line"].corr(ladder["odd"], method="spearman")
         if not np.isfinite(rho):
             continue
-        votes = evidence.setdefault((int(fixture_id), market), [0, 0, 0])
+        votes = evidence.setdefault((int(fixture_id), _HANDICAP_GROUP[market]), [0, 0, 0])
         if rho >= min_rank_correlation:
             votes[0] += 1
             votes[2] += int(rho >= 0.95 and len(ladder) >= 5)
@@ -499,7 +696,7 @@ def orient_handicaps(quotes: pd.DataFrame, *, min_lines: int = 4, min_rank_corre
             votes[1] += 1
     flipped = {key for key, (reversed_n, correct_n, sure_n) in evidence.items() if correct_n == 0 and (reversed_n >= 2 or sure_n >= 1)}
     if flipped:
-        keys = pd.MultiIndex.from_arrays([out["fixture_id"], out["market"]])
+        keys = pd.MultiIndex.from_arrays([out["fixture_id"], out["market"].map(_HANDICAP_GROUP).fillna("")])
         mask = keys.isin(list(flipped))
         out.loc[mask, "line"] = -out.loc[mask, "line"].to_numpy(dtype=float) + 0.0
         out.loc[mask, "handicap_flipped"] = True
@@ -509,7 +706,7 @@ def orient_handicaps(quotes: pd.DataFrame, *, min_lines: int = 4, min_rank_corre
 LADDER_MARKETS: Final[dict[str, tuple[str, str]]] = {
     market: (selections[0], selections[1])
     for market, selections in SELECTIONS.items()
-    if len(selections) == 2 and market not in ("dnb", "btts")
+    if len(selections) == 2 and market not in NO_LINE_MARKETS
 }
 """Two-way markets that come as a ladder of lines, with the two selections of one line."""
 

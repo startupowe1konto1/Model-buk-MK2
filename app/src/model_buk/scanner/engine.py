@@ -12,8 +12,12 @@ A leg is identified by ``(fixture_id, market, period, line, selection)``; ``peri
 Markets and selections: ``1x2`` home|draw|away, ``dc`` 1x|x2|12, ``dnb`` home|away, ``ah`` (line = handicap of the
 HOME team, selection home|away), ``ou`` and ``team_ou_home`` / ``team_ou_away`` over|under, ``btts`` yes|no, ``cs``
 ``h:a``, ``corners_ou`` / ``corners_home_ou`` / ``corners_away_ou`` over|under, ``corners_ah``, ``corners_1x2``,
-``cards_ou`` / ``cards_home_ou`` / ``cards_away_ou`` and ``cards_ah``.  Anything else is market ``other`` and is
-never priced.
+``cards_ou`` / ``cards_home_ou`` / ``cards_away_ou`` and ``cards_ah``; since v1.1 also ``odd_even`` (and the team
+versions), ``eh`` (European handicap, line = whole-goal handicap of the HOME team, home|draw|away), ``win_to_nil_*``,
+``ht_ft`` (``home/draw`` = half time / full time), ``win_both_halves_*``, ``win_either_half_*``,
+``score_both_halves*``, ``btts_both_halves``, ``highest_half*`` (first_half|second_half|equal), ``first_goal`` /
+``last_goal`` (home|away|none) and the first-half yellow-card totals ``yellow_ou`` / ``yellow_home_ou`` /
+``yellow_away_ou`` (see :mod:`model_buk.scanner.markets`).  Anything else is market ``other`` and is never priced.
 
 Frames (column names are the contract)
 --------------------------------------
@@ -22,7 +26,8 @@ Frames (column names are the contract)
   *change* because the archive stores changes only).
 * fair: ``fixture_id, market, period, line, selection, p_fair, p_se, fair_source, devig_method, n_books,
   book_margin`` with ``fair_source`` in ``pinnacle | pinnacle_derived | betfair | consensus``, optionally
-  ``fair_board_at`` (when the source board was produced, see :mod:`model_buk.scanner.fair`).
+  ``fair_board_at`` (when the source board was produced) and ``fair_detail`` (which model derived a
+  ``pinnacle_derived`` price: ``exact``, ``matrix``, ``half:<source>``; see :mod:`model_buk.scanner.fair`).
 * model: ``fixture_id, market, period, line, selection, p_model, model_name`` (optional, one row per leg).
 
 Rules encoded here
@@ -151,6 +156,7 @@ FAIR_COLUMNS: tuple[str, ...] = (
     "n_books",
     "book_margin",
     "fair_board_at",
+    "fair_detail",
 )
 MODEL_COLUMNS: tuple[str, ...] = ("fixture_id", "market", "period", "line", "selection", "p_model", "model_name")
 FIXTURE_COLUMNS: tuple[str, ...] = (
@@ -197,6 +203,30 @@ _FAMILY_OF_MARKET: Mapping[str, str] = {
     "cards_home_ou": "cards",
     "cards_away_ou": "cards",
     "cards_ah": "cards",
+    # v1.1
+    "odd_even": "goals",
+    "odd_even_home": "goals",
+    "odd_even_away": "goals",
+    "eh": "result",
+    "win_to_nil_home": "result",
+    "win_to_nil_away": "result",
+    "ht_ft": "result",
+    "win_both_halves_home": "result",
+    "win_both_halves_away": "result",
+    "win_either_half_home": "result",
+    "win_either_half_away": "result",
+    "first_goal": "result",
+    "last_goal": "result",
+    "score_both_halves": "goals",
+    "score_both_halves_home": "goals",
+    "score_both_halves_away": "goals",
+    "btts_both_halves": "goals",
+    "highest_half": "goals",
+    "highest_half_home": "goals",
+    "highest_half_away": "goals",
+    "yellow_ou": "cards",
+    "yellow_home_ou": "cards",
+    "yellow_away_ou": "cards",
 }
 
 _AH_MARKETS = frozenset({"ah", "corners_ah", "cards_ah"})
@@ -212,6 +242,9 @@ _TOTAL_MARKETS = frozenset(
         "cards_ou",
         "cards_home_ou",
         "cards_away_ou",
+        "yellow_ou",
+        "yellow_home_ou",
+        "yellow_away_ou",
     }
 )
 """Over/under markets: the covering side is ``over``."""
@@ -221,6 +254,23 @@ _SET_SIZE: Mapping[str, int] = {
     "dnb": 2,
     "btts": 2,
     **{market: 2 for market in _AH_MARKETS | _TOTAL_MARKETS},
+    # v1.1: the complete sets of one line of one bookmaker
+    "eh": 3,
+    "ht_ft": 9,
+    "highest_half": 3,
+    "highest_half_home": 3,
+    "highest_half_away": 3,
+    "first_goal": 3,
+    "last_goal": 3,
+    **{
+        market: 2
+        for market in (
+            "odd_even", "odd_even_home", "odd_even_away", "win_to_nil_home", "win_to_nil_away", "win_both_halves_home",
+            "win_both_halves_away", "win_either_half_home", "win_either_half_away", "score_both_halves",
+            "score_both_halves_home", "score_both_halves_away", "btts_both_halves", "yellow_ou", "yellow_home_ou",
+            "yellow_away_ou",
+        )
+    },  # fmt: skip
 }
 """Complementary selections of one line of one bookmaker (double chance and exact score have no such set)."""
 
@@ -692,6 +742,7 @@ def evaluate_legs_with_diagnostics(
     out["p_fair"] = np.where(has_market, p_fair, np.nan)
     out["p_se"] = np.where(has_market, p_se, np.nan)
     out["fair_source"] = np.where(has_market, out["fair_source"].astype("object"), "model")
+    out["fair_detail"] = np.where(has_market, out["fair_detail"].astype("object"), "model")
     out["p_model"] = p_model
     out["p_used"] = p_used
     out["p_se_used"] = se_used
@@ -782,6 +833,7 @@ def evaluate_legs_with_diagnostics(
         "p_fair",
         "p_se",
         "fair_source",
+        "fair_detail",
         "devig_method",
         "n_books",
         "book_margin",
@@ -863,7 +915,8 @@ def _prepare_fair(fair: pd.DataFrame) -> pd.DataFrame:
     f["n_books"] = pd.to_numeric(f["n_books"], errors="coerce")
     f = f.sort_values("n_books", ascending=False, kind="mergesort", na_position="last")
     f = f.drop_duplicates(_KEY, keep="first")
-    return f[[*_KEY, "p_fair", "p_se", "fair_source", "devig_method", "n_books", "book_margin", "fair_board_at"]]
+    f["fair_detail"] = f["fair_detail"].astype("object").where(f["fair_detail"].notna(), f["fair_source"])
+    return f[[*_KEY, "p_fair", "p_se", "fair_source", "fair_detail", "devig_method", "n_books", "book_margin", "fair_board_at"]]
 
 
 def _prepare_model(model: pd.DataFrame | None) -> pd.DataFrame:

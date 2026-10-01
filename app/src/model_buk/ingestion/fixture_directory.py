@@ -23,6 +23,10 @@ Two jobs live here:
    splits need one ``/fixtures/statistics?fixture=ID&half=true`` call per match
    (:meth:`FixtureDirectoryCollector.fetch_half_stats`) and land in
    ``fixture_stats_half``; ask for them only for matches with half-time legs.
+   The goal, card and substitution events of the same ``/fixtures?ids`` response
+   are kept with their minutes in ``fixture_events`` (first and last goal, cards
+   of the first half); a directory that predates the table is filled from the raw
+   ``details`` files the first time it is opened (:meth:`FixtureDirectory.backfill_events`).
 
 Score convention (important for settlement): ``home_goals``/``away_goals`` are the
 **regular-time (90 minute) score**, which is what bookmakers settle on; goals
@@ -198,6 +202,18 @@ CREATE TABLE IF NOT EXISTS stats_attempts (
     teams_found INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_stats_attempts ON stats_attempts (fixture_id, kind);
+CREATE TABLE IF NOT EXISTS fixture_events (
+    fixture_id INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    elapsed INTEGER,
+    extra INTEGER,
+    team_id INTEGER,
+    side TEXT,
+    type TEXT,
+    detail TEXT,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (fixture_id, seq)
+);
 CREATE TABLE IF NOT EXISTS odds_probes (
     fixture_id INTEGER NOT NULL,
     league_id INTEGER,
@@ -444,6 +460,47 @@ def _card_event_counts(obj: Mapping[str, Any]) -> tuple[dict[int, dict[str, int]
     return counts, n_events
 
 
+EVENT_TYPES: frozenset[str] = frozenset({"goal", "card", "subst"})
+"""Event types kept in ``fixture_events``: goals (goal order), cards (cards by minute) and substitutions (a log with
+a substitution in regular time is complete, so a team without card events really had none)."""
+_EVENT_COLUMNS: tuple[str, ...] = ("fixture_id", "seq", "elapsed", "extra", "team_id", "side", "type", "detail", "fetched_at")
+
+
+def parse_fixture_events(obj: Mapping[str, Any], fetched_at: str) -> list[dict[str, Any]]:
+    """``fixture_events`` rows of one ``/fixtures?ids`` object: goal, card and substitution events with their minute.
+
+    ``seq`` is the position in the provider's list (its chronological order), ``elapsed`` / ``extra`` the minute and
+    the stoppage-time minute (a first-half stoppage-time event is 45 + ``extra``).  Nothing is filtered by minute
+    here (extra-time events are kept; readers cut at 90).  A missing value stays ``None``.
+    """
+
+    fixture_id = parse_int(_obj(obj.get("fixture")).get("id"))
+    if fixture_id is None:
+        return []
+    teams = _obj(obj.get("teams"))
+    home_id, away_id = parse_int(_obj(teams.get("home")).get("id")), parse_int(_obj(teams.get("away")).get("id"))
+    rows: list[dict[str, Any]] = []
+    for seq, event in enumerate(e for e in _list(obj.get("events")) if isinstance(e, dict)):
+        kind = str(event.get("type") or "").strip().lower()
+        if kind not in EVENT_TYPES:
+            continue
+        team_id = parse_int(_obj(event.get("team")).get("id"))
+        rows.append(
+            {
+                "fixture_id": fixture_id,
+                "seq": seq,
+                "elapsed": _elapsed(event),
+                "extra": parse_int(_obj(event.get("time")).get("extra")),
+                "team_id": team_id,
+                "side": team_side(team_id, home_id, away_id) if team_id is not None else None,
+                "type": kind,
+                "detail": _text(event.get("detail")),
+                "fetched_at": fetched_at,
+            }
+        )
+    return rows
+
+
 def has_stat_data(row: Mapping[str, Any]) -> bool:
     """True if the row carries any value from the provider's statistics block."""
 
@@ -622,11 +679,16 @@ class FixtureDirectory:
         self.root.mkdir(parents=True, exist_ok=True)
         self.db_path = self.root / DIRECTORY_DB
         with closing(self._connect()) as conn:
+            had_events = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'fixture_events'"
+            ).fetchone() is not None
             conn.executescript(_SCHEMA)
             for table, column, sql_type in _MIGRATIONS:
                 if column not in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
             conn.commit()
+        if not had_events:
+            self.backfill_events()
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path, timeout=60)
@@ -732,6 +794,58 @@ class FixtureDirectory:
                 [[row[c] for c in _STATS_COLUMNS] for row in rows],
             )
             conn.commit()
+
+    def replace_events(self, fixture_id: int, rows: Sequence[Mapping[str, Any]], fetched_at: str) -> None:
+        """Store the events of one fixture as of ``fetched_at`` (a newer stored list is never replaced)."""
+
+        with closing(self._connect()) as conn:
+            newest = conn.execute("SELECT MAX(fetched_at) FROM fixture_events WHERE fixture_id = ?", (int(fixture_id),)).fetchone()[0]
+            if newest is not None and newest > fetched_at:
+                return
+            conn.execute("DELETE FROM fixture_events WHERE fixture_id = ?", (int(fixture_id),))
+            conn.executemany(
+                f"INSERT INTO fixture_events ({','.join(_EVENT_COLUMNS)}) VALUES ({','.join('?' * len(_EVENT_COLUMNS))})",
+                [[row[c] for c in _EVENT_COLUMNS] for row in rows],
+            )
+            conn.commit()
+
+    def backfill_events(self) -> int:
+        """Fill ``fixture_events`` from the raw ``details`` files (responses of ``/fixtures?ids``) for finished
+        fixtures that have no stored events; returns the number of fixtures filled.  Unreadable files are skipped."""
+
+        details = self.root / "raw" / "details"
+        if not details.exists():
+            return 0
+        latest: dict[int, tuple[str, Mapping[str, Any]]] = {}
+        for path in sorted(details.rglob("*.jsonl.gz")):
+            try:
+                lines = gzip.decompress(path.read_bytes()).decode("utf-8").splitlines()
+            except (OSError, EOFError, UnicodeDecodeError):
+                continue
+            for line in lines:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                obj = _obj(record.get("fixture"))
+                fid = parse_int(_obj(obj.get("fixture")).get("id"))
+                status = _text(_obj(_obj(obj.get("fixture")).get("status")).get("short"))
+                stamp = str(record.get("fetched_at") or "")
+                if fid is None or status not in FINISHED_STATUSES or not stamp:
+                    continue
+                if fid not in latest or latest[fid][0] < stamp:
+                    latest[fid] = (stamp, obj)
+        with closing(self._connect()) as conn:
+            have = {r[0] for r in conn.execute("SELECT DISTINCT fixture_id FROM fixture_events")}
+        filled = 0
+        for fid, (stamp, obj) in latest.items():
+            if fid in have:
+                continue
+            rows = parse_fixture_events(obj, stamp)
+            if rows:
+                self.replace_events(fid, rows, stamp)
+                filled += 1
+        return filled
 
     def upsert_half_stats(self, rows: Sequence[Mapping[str, Any]]) -> None:
         with closing(self._connect()) as conn:
@@ -992,6 +1106,26 @@ def load_fixtures(
     return _read_frame(db_path, f"SELECT {columns} FROM fixtures{where} ORDER BY kickoff_utc, fixture_id", params)
 
 
+def load_fixture_events(db_path: str | Path, fixture_ids: Sequence[int]) -> Any:
+    """``fixture_events`` of the given fixtures as a DataFrame (``fixture_id, seq, elapsed, extra, team_id, side,
+    type, detail``); an empty frame when the table does not exist yet."""
+
+    import pandas as pd
+
+    columns = ["fixture_id", "seq", "elapsed", "extra", "team_id", "side", "type", "detail"]
+    ids = sorted({int(i) for i in fixture_ids})
+    if not ids:
+        return pd.DataFrame(columns=columns)
+    frames = []
+    try:
+        for chunk in _chunks(ids, 500):
+            marks = ",".join("?" * len(chunk))
+            frames.append(_read_frame(db_path, f"SELECT {', '.join(columns)} FROM fixture_events WHERE fixture_id IN ({marks})", list(chunk)))
+    except (sqlite3.Error, pd.errors.DatabaseError):
+        return pd.DataFrame(columns=columns)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=columns)
+
+
 def load_fixture_stats(db_path: str | Path, fixture_ids: Sequence[int] | None = None, *, halves: bool = False) -> Any:
     """``fixture_stats`` (or ``fixture_stats_half`` with ``halves=True``) as a DataFrame."""
 
@@ -1238,6 +1372,8 @@ class FixtureDirectoryCollector:
                 # once stored, would never be fetched again: keep them out, retry after the match.
                 finished = _text(_obj(_obj(obj.get("fixture")).get("status")).get("short")) in FINISHED_STATUSES
                 rows = parse_fixture_stats(obj, fetched) if finished else []
+                if finished:
+                    self.directory.replace_events(fid, parse_fixture_events(obj, fetched), fetched)
                 report.fixtures_returned += 1
                 teams_found[fid] = sum(1 for r in rows if has_stat_data(r))
                 stat_rows.extend(rows)
@@ -1337,9 +1473,11 @@ __all__ = [
     "FixtureDirectoryCollector",
     "UpsertResult",
     "load_fixtures",
+    "load_fixture_events",
     "load_fixture_stats",
     "parse_directory_fixture",
     "has_stat_data",
+    "parse_fixture_events",
     "parse_fixture_stats",
     "parse_half_stats",
     "plan_dates",

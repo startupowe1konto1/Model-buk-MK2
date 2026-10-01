@@ -63,6 +63,8 @@ Fair price (:func:`model_buk.scanner.fair.fair_prices`)
     ``fair_derive = True`` derive legs Pinnacle does not quote from the score matrix fitted to Pinnacle;
     ``fair_score_model = "dc"`` Dixon-Coles score matrix; ``fair_se_model`` the standard-error model;
     ``include_suspect_ladders = False`` drop bookmaker ladders that are flat against Pinnacle.
+    ``fair_half_window_years = 4`` years of finished matches before the decision time that estimate the league
+    shares of first-half goals of the half-split model (:mod:`model_buk.scanner.halves`; ``None`` = all history).
 Coupons
     ``coupon_sizes = (2, 3)`` legs; ``min_hit = 0.30`` minimum win probability; ``min_coupon_ev = 0`` threshold of
     the lower-bound EV at ``coupon_keep_tau = 0.88`` (a proposed coupon stays profitable under the full stake
@@ -90,6 +92,7 @@ from model_buk.scanner.fair import (
     DEFAULT_MIN_CONSENSUS_BOOKS,
     SeModel,
 )
+from model_buk.scanner.halves import DEFAULT_WINDOW_YEARS
 
 DEFAULT_MAX_AGE_FAR_MINUTES: float = 480.0
 """Age bound of the boards the fair price uses for matches beyond ``far_lead_hours`` (8 hours, like the quotes)."""
@@ -114,6 +117,7 @@ class ScanConfig(ScannerConfig):
     fair_derive: bool = True
     fair_score_model: str = "dc"
     fair_se_model: SeModel = field(default_factory=SeModel)
+    fair_half_window_years: float | None = DEFAULT_WINDOW_YEARS
     include_suspect_ladders: bool = False
     use_models: bool = True
     model_max_fit_age_hours: float = 24.0
@@ -151,6 +155,8 @@ class ScanConfig(ScannerConfig):
             raise ValueError(f"fair_score_model must be one of {SCORE_MODELS}")
         if not isinstance(self.fair_se_model, SeModel):
             raise ValueError("fair_se_model must be a SeModel")
+        if self.fair_half_window_years is not None and not (math.isfinite(self.fair_half_window_years) and self.fair_half_window_years > 0):
+            raise ValueError("fair_half_window_years must be a positive number of years or None")
         if not (math.isfinite(self.model_max_fit_age_hours) and self.model_max_fit_age_hours > 0):
             raise ValueError("model_max_fit_age_hours must be a positive number of hours")
         for name in ("bet_type_max_abs_median", "bet_type_max_dispersion_ratio", "bet_type_max_tail_share"):

@@ -124,10 +124,14 @@ def test_real_bet_and_selection_strings_map_to_canonical_legs(bet_id, selection,
 @pytest.mark.parametrize(
     ("bet_id", "selection"),
     [
-        (7, "Home/Home"),  # HT/FT
-        (21, "Odd"),
+        (7, "Home/Over"),  # HT/FT with a malformed half
+        (21, "Odd 1"),
         (25, "Home/Over 2.5"),  # result and total
-        (9, "Home -1"),  # European (three-way) handicap
+        (9, "Home -1.5"),  # a European handicap is a whole number of goals
+        (9, "Home"),
+        (11, "3rd Half"),
+        (14, "Nobody"),
+        (36, "Draw"),  # "Win To Nil" names a team
         (38, "more 6"),
         (92, "Erling Haaland"),
         (153, "Over 2.5"),  # yellow cards only, not "cards"
@@ -169,9 +173,9 @@ def test_canonicalize_keeps_rows_order_and_marks_other_rows_raw():
             "fixture_id": [1, 1, 1, 1],
             "bookmaker_id": [4, 4, 4, 4],
             "bookmaker": ["Pinnacle"] * 4,
-            "bet_id": [1, 7, 92, 5],
-            "bet": ["Match Winner", "HT/FT Double", "Anytime Goal Scorer", "Goals Over/Under"],
-            "selection": ["Draw", "Home/Home", "Some Player", "Over 2.0"],
+            "bet_id": [1, 25, 92, 5],
+            "bet": ["Match Winner", "Result/Total Goals", "Anytime Goal Scorer", "Goals Over/Under"],
+            "selection": ["Draw", "Home/Over 2.5", "Some Player", "Over 2.0"],
             "odd": [3.4, 2.1, 4.5, 1.9],
         }
     )
@@ -180,8 +184,8 @@ def test_canonicalize_keeps_rows_order_and_marks_other_rows_raw():
     assert out["bet"].tolist() == raw["bet"].tolist()
     assert out["raw_selection"].tolist() == raw["selection"].tolist()
     other = out[out["market"] == "other"]
-    assert other["bet_id"].tolist() == [7, 92]
-    assert other["selection"].tolist() == ["Home/Home", "Some Player"]  # the raw text is kept
+    assert other["bet_id"].tolist() == [25, 92]
+    assert other["selection"].tolist() == ["Home/Over 2.5", "Some Player"]  # the raw text is kept
     assert (other["period"] == "na").all() and other["line"].isna().all()
     assert not out["three_way"].any()
     assert out.loc[3, ["market", "period", "line", "selection"]].tolist() == ["ou", "ft", 2.0, "over"]

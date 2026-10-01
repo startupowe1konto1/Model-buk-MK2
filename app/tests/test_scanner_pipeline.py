@@ -586,7 +586,7 @@ def test_statistics_needed_asks_only_for_what_the_settlement_lacks() -> None:
         ]
     )
     details, halves = statistics_needed(pending, results, now, min_age_hours=2.0)
-    assert details == [1, 2, 4, 7]
+    assert details == [1, 2, 3, 4, 7]  # 3: the card events of the details response give the first-half cards
     assert halves == [3, 4]
     assert statistics_needed(pending.iloc[0:0], results, now) == ([], [])
 

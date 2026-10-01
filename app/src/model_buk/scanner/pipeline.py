@@ -14,6 +14,8 @@ upcoming match that has odds in the archive (no fixture cap, all markets, all bo
    **Quotes.**  The latest price of every bookmaker for every leg of every fixture that has not started
    (:func:`model_buk.scanner.markets.load_current_quotes`, only prices seen at or before ``as_of``).
 3. **Fair prices.**  Pinnacle de-vigged, derived legs and consensus (:func:`model_buk.scanner.fair.fair_prices`).
+   The half-split model gets the league shares of first-half goals estimated from the finished matches of
+   ``history.sqlite`` that kicked off before ``as_of`` (:func:`model_buk.scanner.halves.estimate_half_shares`).
 4. **Models.**  The pooled goal models and the corner / card count models for the fixtures of the modelled
    competitions, predicted from the cached nightly fit (:mod:`model_buk.scanner.live_models`).  A missing fit or
    one older than :attr:`ScanConfig.model_max_fit_age_hours` (one day) is skipped with a warning: the models are a
@@ -73,9 +75,11 @@ from model_buk.scanner.engine import (
     select_value_picks,
     to_utc,
 )
+from model_buk.scanner.halves import estimate_half_shares
+from model_buk.scanner.markets import HALF_MARKETS_V11, NEW_MARKETS_V11, YELLOW_MARKETS
 from model_buk.scanner.settlement import RESULT_FIELDS, format_line, tau_label
 
-PIPELINE_VERSION = "scanner-pipeline-v1.0.1"
+PIPELINE_VERSION = "scanner-pipeline-v1.1"
 """Written to the run log and the scan diagnostics; bump when the meaning of a pipeline output changes."""
 
 FINISHED_STATUSES: frozenset[str] = frozenset({"FT", "AET", "PEN"})
@@ -602,10 +606,13 @@ def statistics_needed(
 
     ``pending`` holds unsettled legs (``fixture_id, market, period, kickoff_utc``), ``results`` the settlement
     statistics already known (:func:`model_buk.scanner.settlement.load_results`).  Only matches that kicked off at
-    least ``min_age_hours`` before ``as_of`` are considered.  A fixture needs *details* (final score and full-time
-    statistics, 20 per request) when it has no score yet, when a first- or second-half goal leg has no half-time
-    score, or when a full-time or second-half corner / card leg has no count; it needs *halves* (one request per
-    match) when a first- or second-half corner / card leg has no first-half count.
+    least ``min_age_hours`` before ``as_of`` are considered.  A fixture needs *details* (final score, full-time
+    statistics and the event list, 20 per request) when it has no score yet, when a first- or second-half goal leg
+    or a half-split leg (half time / full time, both halves, highest scoring half) has no half-time score, when a
+    full-time or second-half corner / card leg has no count, when a first / last goal leg of a match with goals has
+    no goal order, when a yellow-card leg has no count, or when a first- or second-half card leg has no first-half
+    count (the card events may give it); it needs *halves* (one request per match) when a first- or second-half
+    corner / card leg has no first-half count.
     """
     if pending is None or len(pending) == 0:
         return [], []
@@ -627,15 +634,32 @@ def statistics_needed(
     period = legs["period"].astype(str)
     corners = market.str.startswith("corners_").to_numpy()
     cards = market.str.startswith("cards_").to_numpy()
-    goals = ~(corners | cards)
+    yellow = market.isin(list(YELLOW_MARKETS)).to_numpy()
+    goals = ~(corners | cards | yellow)
     full = period.isin(["ft", "2h"]).to_numpy()
     half = period.isin(["1h", "2h"]).to_numpy()
+    split = market.isin(list(HALF_MARKETS_V11 - {"first_goal", "last_goal"})).to_numpy()
+    first_goal = (market == "first_goal").to_numpy()
+    last_goal = (market == "last_goal").to_numpy()
     fid = legs["fixture_id"]
+
+    def value(column: str) -> np.ndarray:
+        values = known[column].reindex(fid.to_numpy()) if column in known.columns else pd.Series(np.nan, index=fid)
+        return pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
+
+    with np.errstate(invalid="ignore"):
+        goalless = (value("home_goals") + value("away_goals")) == 0
+        goalless_1h = (value("home_goals_1h") + value("away_goals_1h")) == 0
     details = (
         missing(fid, "home_goals")
-        | (goals & half & missing(fid, "home_goals_1h"))
+        | (goals & (half | split) & missing(fid, "home_goals_1h"))
         | (corners & full & missing(fid, "home_corners"))
         | (cards & full & missing(fid, "home_cards"))
+        | (cards & half & missing(fid, "home_cards_1h"))
+        | (first_goal & missing(fid, "first_goal_side") & ~np.where(period.eq("1h").to_numpy(), goalless_1h, goalless))
+        | (last_goal & missing(fid, "last_goal_side") & ~goalless)
+        | (yellow & half & missing(fid, "home_yellow_1h"))
+        | (yellow & full & missing(fid, "home_yellow"))
     )
     halves = (corners & half & missing(fid, "home_corners_1h")) | (cards & half & missing(fid, "home_cards_1h"))
     order = legs.sort_values("kickoff", kind="mergesort")
@@ -874,6 +898,50 @@ def append_run_log(path: Path, record: Mapping[str, Any]) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def new_market_counts(quotes: pd.DataFrame, fair: pd.DataFrame, legs: pd.DataFrame, config: ScanConfig) -> dict[str, Any]:
+    """What the markets added in v1.1 did in a scan: quotes, fair prices by detail, unpriced quotes, value legs.
+
+    ``unpriced`` counts the quotes of soft bookmakers (the reference books never make legs) of each new market
+    without any fair price: for the yellow cards of the first half this is the log of legs no fair source prices
+    (they need Pinnacle or a consensus of at least three books).  ``value`` counts value legs per market, tier and
+    tax regime (``value_t###`` of the value list: not suspect, not unsynced).
+    """
+    from model_buk.markets.pricing import normalise_bookmaker_name
+
+    out: dict[str, Any] = {"quotes": {}, "fair": {}, "unpriced": {}, "value": {}}
+    if quotes is None or len(quotes) == 0 or "market" not in quotes.columns:
+        return out
+    new = quotes[quotes["market"].isin(list(NEW_MARKETS_V11))]
+    if new.empty:
+        return out
+    out["quotes"] = {str(k): int(v) for k, v in new["market"].value_counts().sort_index().items()}
+    reference = {normalise_bookmaker_name(b) for b in config.reference_bookmakers}
+    soft = new[~new["bookmaker"].map(normalise_bookmaker_name).isin(reference)]
+    key = ["fixture_id", "market", "period", "line_key", "selection"]
+    priced = pd.DataFrame(columns=key)
+    if fair is not None and len(fair):
+        fair_new = fair[fair["market"].isin(list(NEW_MARKETS_V11))].copy()
+        if len(fair_new):
+            detail = fair_new["fair_detail"] if "fair_detail" in fair_new.columns else fair_new["fair_source"]
+            table = fair_new.assign(detail=detail).groupby(["market", "detail"]).size()
+            out["fair"] = {f"{m}|{d}": int(v) for (m, d), v in table.items()}
+            fair_new["line_key"] = pd.to_numeric(fair_new["line"], errors="coerce").round(4).fillna(-9999.0)
+            priced = fair_new[key].drop_duplicates()
+    soft = soft.assign(line_key=pd.to_numeric(soft["line"], errors="coerce").round(4).fillna(-9999.0))
+    joined = soft.merge(priced.assign(_priced=True), on=key, how="left")
+    missing = joined[joined["_priced"].isna()]
+    out["unpriced"] = {str(k): int(v) for k, v in missing["market"].value_counts().sort_index().items()}
+    if legs is not None and len(legs) and "is_value" in legs.columns:
+        value = legs[legs["market"].isin(list(NEW_MARKETS_V11)) & legs["is_value"].astype(bool)]
+        table: dict[str, dict[str, dict[str, int]]] = {}
+        for (market, tier), group in value.groupby(["market", "tier"]):
+            table.setdefault(str(market), {})[str(tier)] = {
+                label: int(group[f"value_{label}"].astype(bool).sum()) for label in config.labels()
+            }
+        out["value"] = table
+    return out
+
+
 def scan_counts(quotes: pd.DataFrame, fair: pd.DataFrame, scan: ScanResult, config: ScanConfig) -> dict[str, Any]:
     """Headline numbers of a scan (fixtures, quotes, fair prices by source, legs above fair, value per regime)."""
     legs = scan.legs
@@ -943,6 +1011,7 @@ def scan_counts(quotes: pd.DataFrame, fair: pd.DataFrame, scan: ScanResult, conf
         "legs_by_tier": legs_by_tier,
         "unsynced": unsynced,
         "diagnostics": scan.diagnostics.to_dict(),
+        "markets_v11": new_market_counts(quotes, fair, legs, config),
     }
 
 
@@ -1027,8 +1096,18 @@ def run_pipeline(
     say(f"quotes: {len(quotes)} rows, {quotes['fixture_id'].nunique() if len(quotes) else 0} fixtures")
 
     # 3. fair prices ---------------------------------------------------------------------------------------------
+    with _timed(result, "half_shares"):
+        half_shares = estimate_half_shares(settings.history_db, decision_time, window_years=config.fair_half_window_years)
+    result.counts["half_shares"] = {
+        "global_home": round(float(half_shares.global_home), 4),
+        "global_away": round(float(half_shares.global_away), 4),
+        "leagues": len(half_shares.leagues),
+        "prior_strength_goals": None if not math.isfinite(half_shares.prior_strength) else round(float(half_shares.prior_strength), 1),
+        "cutoff": _iso(half_shares.cutoff) if half_shares.cutoff is not None else None,
+        "source": "history" if half_shares.cutoff is not None else "built-in",  # built-in: no history database
+    }
     with _timed(result, "fair"):
-        fair = fair_module.fair_prices(quotes, as_of=decision_time, **config.fair_kwargs())
+        fair = fair_module.fair_prices(quotes, as_of=decision_time, half_shares=half_shares, **config.fair_kwargs())
     result.fair = fair
     say(f"fair: {len(fair)} legs")
 
@@ -1092,6 +1171,8 @@ def run_pipeline(
                     "fixtures_thin": result.counts["fixtures_thin"],
                     "coupons_by_tier": result.counts["coupons_by_tier"],
                     "coupons_passing_lower_tax": result.counts["coupons_passing_lower_tax"],
+                    "markets_v11": result.counts.get("markets_v11", {}),
+                    "half_shares": result.counts.get("half_shares", {}),
                     "bet_types": result.bet_types,
                     "model": result.model_info,
                     "directory": {k: v for k, v in result.directory.items() if k != "errors"},
@@ -1137,7 +1218,16 @@ def run_pipeline(
                         exclude_bet_types=excluded_bets,
                     )
                     if len(closing_quotes):
-                        closing_fair = fair_module.fair_prices(closing_quotes, **config.closing_fair_kwargs())
+                        # the half model of a closing board uses only matches before the earliest of these kickoffs
+                        first_kickoff = pd.to_datetime(closing_quotes["kickoff_utc"], utc=True, errors="coerce").min()
+                        closing_shares = estimate_half_shares(
+                            settings.history_db,
+                            first_kickoff if pd.notna(first_kickoff) else decision_time,
+                            window_years=config.fair_half_window_years,
+                        )
+                        closing_fair = fair_module.fair_prices(
+                            closing_quotes, half_shares=closing_shares, **config.closing_fair_kwargs()
+                        )
                         clv_rows = register.record_clv(
                             closing_fair, taus=config.taus, closing_quotes=closing_quotes, now=decision_time
                         )
@@ -1279,6 +1369,7 @@ __all__ = [
     "coupons_table",
     "fetch_settlement_statistics",
     "forecast_models",
+    "new_market_counts",
     "load_fixture_frame",
     "refresh_directory",
     "run_pipeline",

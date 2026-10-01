@@ -20,6 +20,19 @@ Rules that matter
 * **Second half = full time minus half time**, for goals, corners and cards alike.
 * **Cards** are counted as yellow plus red cards.  Operators differ (some count a red card as two, some use booking
   points), so card legs are an approximation and the settlement ``source`` says so.
+* **Cards of the first half** come from the card events of the match: a card whose minute (``elapsed``) is at most
+  45 is a first-half card, first-half stoppage time included (the provider records it as 45 plus ``extra``).  Every
+  card event counts one card (a second yellow arrives as a yellow and a red event, 98.7% of team counts agree with
+  the statistics block, history 2023-2026); the yellow-card markets count the ``Yellow Card`` and ``Second Yellow
+  Card`` events.  Events count only when the log of the match is complete (it holds a substitution in regular
+  time); otherwise the count is missing, never zero.  Where the events are missing, the first-half statistics of
+  the provider (``fixture_stats_half``) are used for the cards (not for yellow cards alone).
+* **Goal order** (first / last team to score) comes from the goal events of the regular 90 minutes (missed
+  penalties excluded; an own goal counts for the team the provider lists, which is the team credited: 99.9% of
+  history matches add up that way) in the order of ``(elapsed, extra, seq)``.  It is known only when the events add
+  up to the 90-minute score of both teams; a goalless match (or half) is ``none`` without events.
+* **Half-split markets** (half time / full time, win both halves, to score in both halves, highest scoring half)
+  need the half-time score; the second half is the final score minus the half-time score.
 * **Money.**  Every "net" quantity uses the stake-tax multiplier ``tau`` once per bet: a leg with return factor ``f``
   (win ``odds``, half win ``(1 + odds) / 2``, push ``1``, half loss ``0.5``, loss ``0``) has a net profit of
   ``tau * f - 1`` per unit stake.  A bet that is entirely void (a single push, or a coupon of pushes) is treated as
@@ -74,8 +87,22 @@ RESULT_FIELDS: tuple[str, ...] = (
     "away_cards",
     "home_cards_1h",
     "away_cards_1h",
+    "home_yellow",
+    "away_yellow",
+    "home_yellow_1h",
+    "away_yellow_1h",
+    "first_goal_side",
+    "last_goal_side",
 )
-"""Match statistics :func:`settle_leg` reads from a result (a mapping, a Series or a :class:`MatchResult`)."""
+"""Match statistics :func:`settle_leg` reads from a result (a mapping, a Series or a :class:`MatchResult`).
+
+``first_goal_side`` / ``last_goal_side`` are 1 (home) or 2 (away): the side of the first and the last goal of the
+90 minutes (missing for a goalless match, where the legs settle as ``none`` without them)."""
+
+GOAL_SIDE_HOME: int = 1
+GOAL_SIDE_AWAY: int = 2
+FIRST_HALF_LAST_MINUTE: int = 45
+"""A card or goal event with ``elapsed`` at most 45 belongs to the first half (stoppage time is 45 + ``extra``)."""
 
 _PERIODS = ("ft", "1h", "2h")
 _LINE_MARKETS = frozenset(
@@ -92,8 +119,28 @@ _LINE_MARKETS = frozenset(
         "cards_home_ou",
         "cards_away_ou",
         "cards_ah",
+        "yellow_ou",
+        "yellow_home_ou",
+        "yellow_away_ou",
+        "eh",
     }
 )
+_GOAL_MARKETS = frozenset(
+    {
+        "1x2", "dc", "dnb", "ah", "ou", "team_ou_home", "team_ou_away", "btts", "cs",
+        "odd_even", "odd_even_home", "odd_even_away", "eh", "win_to_nil_home", "win_to_nil_away",
+    }
+)  # fmt: skip
+"""Markets settled on the goals of their own period."""
+_HALF_SPLIT_MARKETS = frozenset(
+    {
+        "ht_ft", "win_both_halves_home", "win_both_halves_away", "win_either_half_home", "win_either_half_away",
+        "score_both_halves", "score_both_halves_home", "score_both_halves_away", "btts_both_halves",
+        "highest_half", "highest_half_home", "highest_half_away",
+    }
+)  # fmt: skip
+"""Markets settled on the goals of both halves (period ``ft``)."""
+_GOAL_ORDER_MARKETS = frozenset({"first_goal", "last_goal"})
 
 
 @dataclass(frozen=True)
@@ -112,6 +159,12 @@ class MatchResult:
     away_cards: float | None = None
     home_cards_1h: float | None = None
     away_cards_1h: float | None = None
+    home_yellow: float | None = None
+    away_yellow: float | None = None
+    home_yellow_1h: float | None = None
+    away_yellow_1h: float | None = None
+    first_goal_side: float | None = None
+    last_goal_side: float | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -250,13 +303,80 @@ def _settle_handicap(diff: float, line: float | None, selection: str) -> str | N
     return None
 
 
+def _result_word(home: float, away: float) -> str:
+    return "home" if home > away else "draw" if home == away else "away"
+
+
+def _yes_no(selection: str, event: bool) -> str | None:
+    if selection == "yes":
+        return _yes(event)
+    if selection == "no":
+        return _yes(not event)
+    return None
+
+
+def _settle_half_split(market: str, selection: str, first: tuple[float, float], second: tuple[float, float]) -> str | None:
+    """Markets on both halves: ``first`` and ``second`` are the (home, away) goals of each half."""
+    h1, a1 = first
+    h2, a2 = second
+    if market == "ht_ft":
+        return _yes(selection == f"{_result_word(h1, a1)}/{_result_word(h1 + h2, a1 + a2)}")
+    if market == "win_both_halves_home":
+        return _yes_no(selection, h1 > a1 and h2 > a2)
+    if market == "win_both_halves_away":
+        return _yes_no(selection, a1 > h1 and a2 > h2)
+    if market == "win_either_half_home":
+        return _yes_no(selection, h1 > a1 or h2 > a2)
+    if market == "win_either_half_away":
+        return _yes_no(selection, a1 > h1 or a2 > h2)
+    if market == "score_both_halves":
+        return _yes_no(selection, h1 + a1 > 0 and h2 + a2 > 0)
+    if market == "score_both_halves_home":
+        return _yes_no(selection, h1 > 0 and h2 > 0)
+    if market == "score_both_halves_away":
+        return _yes_no(selection, a1 > 0 and a2 > 0)
+    if market == "btts_both_halves":
+        return _yes_no(selection, h1 > 0 and a1 > 0 and h2 > 0 and a2 > 0)
+    if market in ("highest_half", "highest_half_home", "highest_half_away"):
+        x, y = {"highest_half": (h1 + a1, h2 + a2), "highest_half_home": (h1, h2), "highest_half_away": (a1, a2)}[market]
+        if selection not in ("first_half", "second_half", "equal"):
+            return None
+        return _yes(selection == ("first_half" if x > y else "second_half" if y > x else "equal"))
+    return None
+
+
+def _goal_side(result: Any, name: str) -> str | None:
+    side = _stat(result, name)
+    return {GOAL_SIDE_HOME: "home", GOAL_SIDE_AWAY: "away"}.get(int(side)) if side is not None else None
+
+
+def _settle_goal_order(market: str, period: str, selection: str, result: Any) -> str | None:
+    """First / last team to score (``home`` | ``away`` | ``none``) of the match, or the first goal of the first half."""
+    if selection not in ("home", "away", "none") or (market, period) not in (("first_goal", "ft"), ("first_goal", "1h"), ("last_goal", "ft")):
+        return None
+    goals = _pair(result, "goals", period)
+    if goals is None:
+        return None
+    home, away = goals
+    if home + away == 0:
+        return _yes(selection == "none")
+    side = _goal_side(result, "first_goal_side" if market == "first_goal" else "last_goal_side")
+    if side is None:
+        return None
+    full = _pair(result, "goals", "ft")
+    if full is not None and ((side == "home" and full[0] == 0) or (side == "away" and full[1] == 0)):
+        return None  # the goal order contradicts the score: never guess
+    return _yes(selection == side)
+
+
 def settle_leg(market: str, period: str, line: float | None, selection: str, result: Any) -> str | None:
     """Outcome of one canonical leg, or ``None`` when it cannot be settled from ``result``.
 
     ``result`` supplies the statistics listed in :data:`RESULT_FIELDS` (a mapping, a pandas Series or a
     :class:`MatchResult`; a missing or NaN value is treated as missing).  ``line`` is a float or ``None``/NaN
     where the market has no line.  For handicaps the line is the handicap applied to the home side, so an away
-    selection wins when ``away - home - line`` is positive.
+    selection wins when ``away - home - line`` is positive (European handicaps: three results of ``home + line``
+    against ``away``, never a refund).
     """
     market = str(market).strip().lower()
     period = str(period).strip().lower()
@@ -266,13 +386,22 @@ def settle_leg(market: str, period: str, line: float | None, selection: str, res
         return None
     if market in _LINE_MARKETS and line_value is None:
         return None
+    if market in _HALF_SPLIT_MARKETS:
+        if period != "ft":
+            return None
+        first, second = _pair(result, "goals", "1h"), _pair(result, "goals", "2h")
+        return None if first is None or second is None else _settle_half_split(market, selection, first, second)
+    if market in _GOAL_ORDER_MARKETS:
+        return _settle_goal_order(market, period, selection, result)
 
-    if market in ("1x2", "dc", "dnb", "ah", "ou", "team_ou_home", "team_ou_away", "btts", "cs"):
+    if market in _GOAL_MARKETS:
         pair = _pair(result, "goals", period)
     elif market.startswith("corners_"):
         pair = _pair(result, "corners", period)
     elif market.startswith("cards_"):
         pair = _pair(result, "cards", period)
+    elif market.startswith("yellow_"):
+        pair = _pair(result, "yellow", period)
     else:
         return None
     if pair is None:
@@ -299,12 +428,25 @@ def settle_leg(market: str, period: str, line: float | None, selection: str, res
         return None
     if market in ("ah", "corners_ah", "cards_ah"):
         return _settle_handicap(home - away, line_value, selection)
-    if market in ("ou", "corners_ou", "cards_ou"):
+    if market in ("ou", "corners_ou", "cards_ou", "yellow_ou"):
         return _settle_over_under(home + away, line_value, selection)
-    if market in ("team_ou_home", "corners_home_ou", "cards_home_ou"):
+    if market in ("team_ou_home", "corners_home_ou", "cards_home_ou", "yellow_home_ou"):
         return _settle_over_under(home, line_value, selection)
-    if market in ("team_ou_away", "corners_away_ou", "cards_away_ou"):
+    if market in ("team_ou_away", "corners_away_ou", "cards_away_ou", "yellow_away_ou"):
         return _settle_over_under(away, line_value, selection)
+    if market == "eh":
+        if line_value is None or abs(line_value - round(line_value)) > 1e-9:
+            return None
+        return _settle_three_way(home + round(line_value), away, selection)
+    if market in ("odd_even", "odd_even_home", "odd_even_away"):
+        total = {"odd_even": home + away, "odd_even_home": home, "odd_even_away": away}[market]
+        if selection not in ("odd", "even"):
+            return None
+        return _yes((selection == "odd") == (int(total) % 2 == 1))
+    if market == "win_to_nil_home":
+        return _yes_no(selection, home > away and away == 0)
+    if market == "win_to_nil_away":
+        return _yes_no(selection, away > home and home == 0)
     if market == "btts":
         if selection == "yes":
             return _yes(home > 0 and away > 0)
@@ -499,6 +641,109 @@ def clv_columns(frame: pd.DataFrame, taus: Sequence[float], *, odd: str = "odd_t
 
 
 # --------------------------------------------------------------------------- #
+# Statistics from the event log
+# --------------------------------------------------------------------------- #
+
+EVENT_FIELDS: tuple[str, ...] = (
+    "home_cards_1h",
+    "away_cards_1h",
+    "home_yellow",
+    "away_yellow",
+    "home_yellow_1h",
+    "away_yellow_1h",
+    "first_goal_side",
+    "last_goal_side",
+)
+"""Result fields :func:`event_results` derives from the event log."""
+_YELLOW_DETAILS = frozenset({"yellow card", "second yellow card"})
+
+
+def event_results(events: pd.DataFrame, fixtures: pd.DataFrame) -> pd.DataFrame:
+    """Settlement statistics from the event log of finished matches (see the module docstring for the rules).
+
+    ``events``: ``fixture_id, seq, elapsed, extra, team_id, type, detail`` (``type`` as the provider spells it:
+    ``Goal``, ``Card``, ``subst``; case does not matter).  ``fixtures``: ``fixture_id, home_team_id, away_team_id,
+    home_goals, away_goals`` (the 90-minute score).  Returns ``fixture_id`` and :data:`EVENT_FIELDS` for every
+    fixture of ``fixtures``, NaN where the log does not tell: cards and yellow cards only from a complete log (a
+    substitution in regular time) whose card events all name a team of the match (yellow cards: and a known
+    detail), the goal order only when the goal events add up to the score.
+    """
+    columns = ["fixture_id", *EVENT_FIELDS]
+    if fixtures is None or len(fixtures) == 0:
+        return pd.DataFrame(columns=columns)
+    base = fixtures[["fixture_id", "home_team_id", "away_team_id", "home_goals", "away_goals"]].copy()
+    base["fixture_id"] = pd.to_numeric(base["fixture_id"], errors="coerce").astype("Int64")
+    base = base.dropna(subset=["fixture_id"]).drop_duplicates("fixture_id").set_index("fixture_id")
+    out = pd.DataFrame(index=base.index, columns=list(EVENT_FIELDS), dtype=float)
+    if events is None or len(events) == 0:
+        return out.reset_index()[columns]
+    ev = events.copy()
+    ev["fixture_id"] = pd.to_numeric(ev["fixture_id"], errors="coerce").astype("Int64")
+    ev = ev[ev["fixture_id"].isin(base.index)]
+    ev["elapsed"] = pd.to_numeric(ev["elapsed"], errors="coerce")
+    ev["extra"] = pd.to_numeric(ev["extra"], errors="coerce").fillna(0.0)
+    ev["seq"] = pd.to_numeric(ev["seq"], errors="coerce")
+    ev["kind"] = ev["type"].astype("object").map(lambda v: str(v).strip().lower() if v is not None else "")
+    ev["detail_l"] = ev["detail"].astype("object").map(lambda v: str(v).strip().lower() if isinstance(v, str) else "")
+    ev = ev[ev["elapsed"].notna() & (ev["elapsed"] <= 90)]  # regular time only
+    home_id = ev["fixture_id"].map(base["home_team_id"])
+    away_id = ev["fixture_id"].map(base["away_team_id"])
+    team = pd.to_numeric(ev["team_id"], errors="coerce")
+    ev["side"] = np.where(team.notna() & (team == pd.to_numeric(home_id, errors="coerce")), "home",
+                          np.where(team.notna() & (team == pd.to_numeric(away_id, errors="coerce")), "away", ""))  # fmt: skip
+    first_half = ev["elapsed"] <= FIRST_HALF_LAST_MINUTE
+
+    complete = set(ev.loc[ev["kind"] == "subst", "fixture_id"].dropna().astype(int))
+    cards = ev[ev["kind"] == "card"]
+    no_side = set(cards.loc[cards["side"] == "", "fixture_id"].dropna().astype(int))
+    unknown_detail = set(cards.loc[cards["detail_l"] == "", "fixture_id"].dropna().astype(int))
+    card_ok = [int(f) in complete and int(f) not in no_side for f in out.index]
+    yellow_ok = [ok and int(f) not in unknown_detail for ok, f in zip(card_ok, out.index, strict=True)]
+
+    def count(mask: pd.Series, side: str) -> pd.Series:
+        return cards[mask & (cards["side"] == side)].groupby("fixture_id").size().reindex(out.index, fill_value=0).astype(float)
+
+    card_1h = first_half.reindex(cards.index)
+    is_yellow = cards["detail_l"].isin(_YELLOW_DETAILS)
+    for side in ("home", "away"):
+        out[f"{side}_cards_1h"] = count(card_1h, side).where(card_ok)
+        out[f"{side}_yellow"] = count(is_yellow, side).where(yellow_ok)
+        out[f"{side}_yellow_1h"] = count(is_yellow & card_1h, side).where(yellow_ok)
+
+    goals = ev[(ev["kind"] == "goal") & (ev["detail_l"] != "missed penalty")].sort_values(["fixture_id", "elapsed", "extra", "seq"])
+    if len(goals):
+        grouped = goals.groupby("fixture_id")
+        n_home = grouped["side"].agg(lambda v: int((v == "home").sum())).reindex(out.index)
+        n_away = grouped["side"].agg(lambda v: int((v == "away").sum())).reindex(out.index)
+        n_all = grouped.size().reindex(out.index)
+        score_home = pd.to_numeric(base["home_goals"], errors="coerce")
+        score_away = pd.to_numeric(base["away_goals"], errors="coerce")
+        consistent = (n_home == score_home) & (n_away == score_away) & (n_all == n_home + n_away) & (n_all > 0)
+        code = {"home": float(GOAL_SIDE_HOME), "away": float(GOAL_SIDE_AWAY)}
+        first = grouped["side"].first().map(code).reindex(out.index)
+        last = grouped["side"].last().map(code).reindex(out.index)
+        out["first_goal_side"] = first.where(consistent.fillna(False).astype(bool))
+        out["last_goal_side"] = last.where(consistent.fillna(False).astype(bool))
+    return out.reset_index().rename(columns={"index": "fixture_id"})[columns]
+
+
+def _has_columns(con: sqlite3.Connection, table: str, columns: Sequence[str]) -> bool:
+    """True when ``table`` exists and has every one of ``columns`` (older or test databases may lack them)."""
+    present = {row[1] for row in con.execute(f"PRAGMA table_info({table})")}
+    return bool(present) and all(column in present for column in columns)
+
+
+def _history_events(con: sqlite3.Connection, chunk: Sequence[int]) -> pd.DataFrame:
+    marks = ",".join("?" * len(chunk))
+    return pd.read_sql_query(
+        "SELECT fixture_id, seq, elapsed, extra, team_id, type, detail FROM events "
+        f"WHERE type IN ('Goal', 'Card', 'subst') AND fixture_id IN ({marks})",
+        con,
+        params=list(chunk),
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Results from the history archive
 # --------------------------------------------------------------------------- #
 
@@ -523,8 +768,9 @@ def load_match_results(fixture_ids: Sequence[int], history_db: str | Path = HIST
     """Settlement statistics of finished matches from ``history.sqlite`` (columns of :data:`RESULT_FIELDS`).
 
     Only matches with status ``FT`` (regular time) are returned.  Goals come from ``matches``, half-time goals
-    from ``ht_*`` and corners and cards (yellow plus red) from ``team_match_stats``; a statistic that the archive
-    does not hold stays NaN.  Returns an empty frame (no exception) when the database is unavailable.
+    from ``ht_*``, corners and cards (yellow plus red) from ``team_match_stats`` and the cards of the first half,
+    yellow cards and the goal order from ``events`` (:func:`event_results`); a statistic that the archive does not
+    hold stays NaN.  Returns an empty frame (no exception) when the database is unavailable.
     """
     ids = sorted({int(x) for x in fixture_ids})
     columns = ["fixture_id", *RESULT_FIELDS]
@@ -536,13 +782,18 @@ def load_match_results(fixture_ids: Sequence[int], history_db: str | Path = HIST
             for start in range(0, len(ids), 500):
                 chunk = ids[start : start + 500]
                 marks = ",".join("?" * len(chunk))
+                teams = ", home_team_id, away_team_id" if _has_columns(con, "matches", ("home_team_id", "away_team_id")) else ""
                 matches = pd.read_sql_query(
                     "SELECT fixture_id, home_goals, away_goals, ht_home_goals AS home_goals_1h, "
-                    "ht_away_goals AS away_goals_1h FROM matches "
+                    f"ht_away_goals AS away_goals_1h{teams} FROM matches "
                     f"WHERE status_short = 'FT' AND fixture_id IN ({marks})",
                     con,
                     params=chunk,
                 )
+                derived = pd.DataFrame(columns=["fixture_id", *EVENT_FIELDS])
+                if teams and _has_columns(con, "events", ("fixture_id", "seq", "elapsed", "extra", "team_id", "type", "detail")):
+                    derived = event_results(_history_events(con, chunk), matches)
+                matches = matches.drop(columns=["home_team_id", "away_team_id"], errors="ignore")
                 stats = pd.read_sql_query(
                     "SELECT fixture_id, side, corners, "
                     "CASE WHEN yellow_cards IS NULL AND red_cards IS NULL THEN NULL "
@@ -555,6 +806,9 @@ def load_match_results(fixture_ids: Sequence[int], history_db: str | Path = HIST
                     wide = stats.pivot_table(index="fixture_id", columns="side", values=["corners", "cards"], aggfunc="first", dropna=False)
                     wide.columns = [f"{side}_{stat}" for stat, side in wide.columns]
                     matches = matches.merge(wide.reset_index(), on="fixture_id", how="left")
+                if len(derived):
+                    derived["fixture_id"] = derived["fixture_id"].astype("int64")
+                    matches = matches.merge(derived, on="fixture_id", how="left")
                 frames.append(matches)
     except sqlite3.Error:
         return pd.DataFrame(columns=columns)
@@ -572,9 +826,11 @@ def load_directory_results(fixture_ids: Sequence[int], directory_db: str | Path 
 
     The directory's ``home_goals`` / ``away_goals`` are the regular-time (90 minute) score, so matches that
     ended ``AET`` or ``PEN`` are settled on their 90 minutes too.  Half-time goals come from ``ht_*``; corners and
-    cards (yellow plus red) per side from ``fixture_stats`` and their first-half values from
-    ``fixture_stats_half``.  A statistic the provider did not give stays NaN.  Only finished matches (``FT``,
-    ``AET``, ``PEN``) are returned; an unavailable database gives an empty frame.
+    cards (yellow plus red) per side from ``fixture_stats``; the cards of the first half from the card events
+    (``fixture_events``, :func:`event_results`), else from ``fixture_stats_half``; the first-half corners from
+    ``fixture_stats_half``; yellow cards and the goal order from the events only.  A statistic the provider did
+    not give stays NaN.  Only finished matches (``FT``, ``AET``, ``PEN``) are returned; an unavailable database
+    gives an empty frame.
     """
     ids = sorted({int(x) for x in fixture_ids})
     columns = ["fixture_id", *RESULT_FIELDS]
@@ -590,15 +846,26 @@ def load_directory_results(fixture_ids: Sequence[int], directory_db: str | Path 
             for start in range(0, len(ids), 500):
                 chunk = ids[start : start + 500]
                 marks = ",".join("?" * len(chunk))
+                teams = ", home_team_id, away_team_id" if _has_columns(con, "fixtures", ("home_team_id", "away_team_id")) else ""
                 base = pd.read_sql_query(
                     "SELECT fixture_id, home_goals, away_goals, ht_home_goals AS home_goals_1h, "
-                    "ht_away_goals AS away_goals_1h "
+                    f"ht_away_goals AS away_goals_1h{teams} "
                     f"FROM fixtures WHERE status_short IN ('FT', 'AET', 'PEN') AND fixture_id IN ({marks})",
                     con,
                     params=chunk,
                 )
                 if base.empty:
                     continue
+                derived = pd.DataFrame(columns=["fixture_id", *EVENT_FIELDS])
+                if teams and _has_columns(con, "fixture_events", ("fixture_id", "seq", "elapsed", "extra", "team_id", "type", "detail")):
+                    events = pd.read_sql_query(
+                        "SELECT fixture_id, seq, elapsed, extra, team_id, type, detail FROM fixture_events "
+                        f"WHERE fixture_id IN ({marks})",
+                        con,
+                        params=chunk,
+                    )
+                    derived = event_results(events, base)
+                base = base.drop(columns=["home_team_id", "away_team_id"], errors="ignore")
                 full = pd.read_sql_query(
                     f"SELECT fixture_id, side, corners, {cards} AS cards FROM fixture_stats WHERE fixture_id IN ({marks})",
                     con,
@@ -618,6 +885,16 @@ def load_directory_results(fixture_ids: Sequence[int], directory_db: str | Path 
                     )
                     wide.columns = [f"{side}_{stat}{suffix}" for stat, side in wide.columns]
                     base = base.merge(wide.reset_index(), on="fixture_id", how="left")
+                if len(derived):
+                    derived = derived.set_index(derived["fixture_id"].astype("int64")).drop(columns="fixture_id")
+                    base = base.set_index(base["fixture_id"].astype("int64"), drop=False)
+                    for column in EVENT_FIELDS:
+                        from_events = pd.to_numeric(derived[column], errors="coerce").reindex(base.index)
+                        if column in base.columns:  # the events win, the half statistics fill what they leave missing
+                            base[column] = from_events.where(from_events.notna(), pd.to_numeric(base[column], errors="coerce"))
+                        else:
+                            base[column] = from_events
+                    base = base.reset_index(drop=True)
                 frames.append(base)
     except sqlite3.Error:
         return pd.DataFrame(columns=columns)

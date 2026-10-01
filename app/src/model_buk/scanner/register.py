@@ -75,6 +75,7 @@ _LEG_COLUMNS: dict[str, str] = {
     "p_fair": "REAL",
     "p_se": "REAL",
     "fair_source": "TEXT",
+    "fair_detail": "TEXT",
     "devig_method": "TEXT",
     "n_books": "REAL",
     "book_margin": "REAL",

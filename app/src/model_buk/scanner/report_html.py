@@ -140,6 +140,8 @@ def _ev_class(value: object) -> str:
 
 _TOTAL_WORD = {"over": "powyżej", "under": "poniżej"}
 _PERIOD_PREFIX = {"ft": "", "1h": "1. połowa: ", "2h": "2. połowa: "}
+_YES_NO_PL = {"yes": "tak", "no": "nie"}
+_HALF_PL = {"first_half": "więcej w 1. połowie", "second_half": "więcej w 2. połowie", "equal": "tyle samo w obu połowach"}
 
 
 def leg_label_pl(market: str, period: str, line: object, selection: str, home: str, away: str) -> str:
@@ -194,6 +196,48 @@ def leg_label_pl(market: str, period: str, line: object, selection: str, home: s
         text = f"Kartki {away}: {word} {line_text}"
     elif market == "cards_ah":
         text = "Kartki, " + handicap(selection)
+    elif market in ("odd_even", "odd_even_home", "odd_even_away"):
+        whose = {"odd_even": "Gole", "odd_even_home": f"Gole {home}", "odd_even_away": f"Gole {away}"}[market]
+        text = f"{whose}: " + {"odd": "nieparzysta liczba", "even": "parzysta liczba"}.get(selection, selection)
+    elif market == "eh":
+        value = float(line) if _finite(line) else float("nan")
+        text = f"Handicap europejski {home} {_signed_line(value)}: " + {
+            "home": f"{home} wygra", "draw": "remis", "away": f"{away} wygra"
+        }.get(selection, selection)  # fmt: skip
+    elif market in ("win_to_nil_home", "win_to_nil_away"):
+        team = home if market.endswith("home") else away
+        text = f"{team} wygra do zera: " + _YES_NO_PL.get(selection, selection)
+    elif market == "ht_ft":
+        parts = selection.split("/")
+        word = {"home": home, "draw": "remis", "away": away}
+        text = (
+            f"Do przerwy / koniec: {word.get(parts[0], parts[0])} / {word.get(parts[1], parts[1])}" if len(parts) == 2 else selection
+        )
+    elif market in ("win_both_halves_home", "win_both_halves_away"):
+        team = home if market.endswith("home") else away
+        text = f"{team} wygra obie połowy: " + _YES_NO_PL.get(selection, selection)
+    elif market in ("win_either_half_home", "win_either_half_away"):
+        team = home if market.endswith("home") else away
+        text = f"{team} wygra co najmniej jedną połowę: " + _YES_NO_PL.get(selection, selection)
+    elif market == "score_both_halves":
+        text = "Gol w obu połowach: " + _YES_NO_PL.get(selection, selection)
+    elif market in ("score_both_halves_home", "score_both_halves_away"):
+        team = home if market.endswith("home") else away
+        text = f"{team} strzeli w obu połowach: " + _YES_NO_PL.get(selection, selection)
+    elif market == "btts_both_halves":
+        text = "Obie strzelą w obu połowach: " + _YES_NO_PL.get(selection, selection)
+    elif market in ("highest_half", "highest_half_home", "highest_half_away"):
+        whose = {"highest_half": "", "highest_half_home": f" {home}", "highest_half_away": f" {away}"}[market]
+        text = f"Gole{whose}: " + _HALF_PL.get(selection, selection)
+    elif market in ("first_goal", "last_goal"):
+        which = "Pierwszy gol" if market == "first_goal" else "Ostatni gol"
+        text = f"{which}: " + {"home": home, "away": away, "none": "nikt nie strzeli"}.get(selection, selection)
+    elif market == "yellow_ou":
+        text = f"Żółte kartki: {word} {line_text}"
+    elif market == "yellow_home_ou":
+        text = f"Żółte kartki {home}: {word} {line_text}"
+    elif market == "yellow_away_ou":
+        text = f"Żółte kartki {away}: {word} {line_text}"
     else:
         text = f"{market} {selection}"
     return prefix + text
@@ -441,6 +485,13 @@ def _status_box(result: ScanResult, status: Mapping[str, Any] | None) -> str:
         )
     elif bet_types.get("status") == "error":
         skipped.append("<li>Sprawdzenie rodzajów zakładów nie powiodło się: nic nie wykluczono.</li>")
+    unpriced = ((counts.get("markets_v11") or {}).get("unpriced") or {}) if isinstance(counts.get("markets_v11"), Mapping) else {}
+    cards_half = sum(int(v) for k, v in unpriced.items() if str(k).startswith("yellow_"))
+    if cards_half:
+        skipped.append(
+            f"<li><b>{esc(fmt_int(cards_half))}</b> kursów na kartki w 1. połowie bez uczciwej ceny "
+            "(potrzebny Pinnacle albo konsensus co najmniej 3 bukmacherów; zapisane jako niewycenione)</li>"
+        )
     no_calendar = counts.get("fixtures_without_calendar")
     if no_calendar:
         skipped.append(f"<li><b>{esc(fmt_int(no_calendar))}</b> meczów bez nazw w kalendarzu (ocenione tylko regułami danych)</li>")

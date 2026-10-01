@@ -18,10 +18,20 @@ Sources, in order of preference
    ``TAIL_LIMIT`` or above ``1 - TAIL_LIMIT``) rank after the matrix: the soft books' favourite-longshot bias
    survives the de-vig there (below).
 4. ``pinnacle_derived`` from the market-implied score matrix (below), for the markets Pinnacle does not quote
-   (BTTS, correct score, team totals and totals lines it lacks, second-half markets, ...) and for the tails.
+   (BTTS, correct score, team totals and totals lines it lacks, second-half markets, odd/even, European handicap,
+   win to nil, ...) and for the tails; and from the half split of that matrix (:mod:`model_buk.scanner.halves`,
+   ``kind`` ``derived_half``) for the markets on the goals of each half (half time / full time, win both or either
+   half, to score in both halves, highest scoring half, first / last team to score) and the first- and
+   second-half versions of odd/even and the European handicap.
 5. ``consensus`` in the tails, then ``betfair``: Betfair's own de-vigged board as a single-book fallback where
    fewer than ``min_consensus_books`` bookmakers quote the set.  Correct score is never taken from a bookmaker
-   board (boards are 30-60% overround and incomplete); it comes from the matrix only.
+   board (boards are 30-60% overround and incomplete); it comes from the matrix only.  Yellow cards and the cards
+   of a half (:func:`consensus_only`) are priced only by Pinnacle or a consensus: never by Betfair alone, never by
+   a model; without such a source they stay unpriced (the pipeline counts them).
+
+``fair_detail`` names the source of every price: ``pinnacle``, ``exact`` (double chance / draw no bet from the
+Pinnacle 1X2), ``matrix``, ``half:pinnacle_1h`` / ``half:league`` / ``half:global`` (the half split and where its
+shares came from), ``consensus`` or ``betfair``.
 
 The task brief ranks Betfair second, as a near-fair exchange.  The archive says otherwise: "Betfair" in the
 API-Football feed is the fixed-odds sportsbook.  Its 1X2 overround is 1.03 to 1.14 (median 1.109; Pinnacle 1.065,
@@ -66,6 +76,24 @@ Uncertainty ``p_se``
   ``0.07 / sqrt(n_books)`` (0.041 / 0.031 / 0.030 / 0.023 for 3 / 4 / 5 / 6+ books), the score matrix 0.045
   (held-out team totals: 0.042).  Double chance and draw no bet derived from the Pinnacle 1X2 are exact algebra:
   0.  Second-half legs add 0.02 (halves assumed independent).
+* The v1.1 markets are priced beyond what the matrix was fitted to, so their derived legs are wider (the choice
+  of ``SeModel``): the half split has ``extra`` 0.05 (the matrix's 0.045 and about 0.02 for the split), plus 0.03
+  when its shares were not calibrated to Pinnacle's first-half prices (league or global shares), and every derived
+  leg of these markets adds ``market_extra`` in quadrature: the largest calibration bias of the market on history,
+  ``max |predicted - observed| / sqrt(p (1 - p))`` over its selections, rounded up (``app/scripts/
+  measure_half_model.py``: 33 096 matches of 18 leagues 2021-2025, the matrix fitted to Pinnacle's closing 1X2, over
+  2.5 and Asian handicap from football-data).  Largest: European handicap 0.045 (the draw of ``home -1``, i.e. a
+  one-goal home win: 0.201 predicted, 0.217 observed), half time / full time 0.045 (the comebacks home/away and
+  away/home: 0.018 and 0.022 predicted, 0.024 and 0.027 observed), odd/even 0.04 (odd 0.478 / 0.497), first and
+  last goal 0.035 (no goal 0.084 / 0.074), to score in both halves 0.035; win to nil, the team versions of both
+  halves and the highest scoring half 0.01 to 0.015.  The live matrix is fitted to the whole Pinnacle ladder (more
+  lines than the football-data closing prices), so these terms are on the safe side.  On the live archive
+  (2026-09-30) the half split agrees with the consensus of the soft books as closely as the consensus agrees with
+  itself (RMS of the standardised difference 0.026 for half time / full time, 0.038 highest scoring half, 0.041
+  European handicap, 0.012-0.037 odd/even).  With these terms (six hours before kickoff, fit residual 0.01) a leg
+  of these markets needs an edge of 10-12% at a probability of 0.5 and 8-9% at 0.7 to pass the lower-bound test
+  (a plain matrix leg 9% at 0.5, a Pinnacle leg 3.5%), against the 10% cap of the engine: few of them become value
+  legs, by design.
 * ``tail`` = ``0.18 * m * (1 - 2m)`` with ``m = min(p, 1 - p)`` for every source but Pinnacle: soft-book
   de-vigging leaves the favourite-longshot bias in the tails (consensus and Betfair legs below 20% are 3 to 4
   points lower than the matrix, above 80% higher), and the ``p * (1 - p)`` scaling shrinks to nothing there.
@@ -116,7 +144,8 @@ from scipy import optimize
 from scipy.stats import poisson
 
 from model_buk.markets.pricing import DEVIG_METHODS, devig_probabilities, normalise_bookmaker_name
-from model_buk.scanner.markets import SELECTIONS
+from model_buk.scanner.halves import DEFAULT_HALF_SHARES, HalfShares, HalfSplit, half_leg_probability, split_fixture
+from model_buk.scanner.markets import HALF_MARKETS_V11, MATRIX_MARKETS_V11, SELECTIONS, YELLOW_MARKETS
 
 FAIR_COLUMNS: Final[tuple[str, ...]] = (
     "fixture_id",
@@ -131,6 +160,7 @@ FAIR_COLUMNS: Final[tuple[str, ...]] = (
     "n_books",
     "book_margin",
     "fair_board_at",
+    "fair_detail",
 )
 
 DEFAULT_METHOD: Final = "power"
@@ -161,9 +191,18 @@ PRIORITY: Final[dict[str, int]] = {
     "derived_exact": 1,
     "consensus": 2,
     "derived_matrix": 3,
+    "derived_half": 3,
     "betfair": 5,
 }
-"""Preference between sources of one leg (lower wins); a tail consensus ranks 4 (after the matrix)."""
+"""Preference between sources of one leg (lower wins); a tail consensus ranks 4 (after the matrix and the half
+split, which never price the same leg)."""
+
+
+def consensus_only(market: object, period: object) -> bool:
+    """Legs priced only from Pinnacle or a consensus of at least ``min_consensus_books`` (never Betfair's board
+    alone, never a model): yellow cards, and cards of a half."""
+    market = str(market)
+    return market in YELLOW_MARKETS or (market.startswith("cards_") and str(period) in ("1h", "2h"))
 
 
 # --------------------------------------------------------------------------- #
@@ -215,7 +254,10 @@ class SeModel:
     ``extra`` maps a source key (``pinnacle``, ``derived_exact``, ``betfair``, ``derived_matrix``, ``consensus``)
     to its additional scale in the units of ``c`` (consensus: divided by ``sqrt(n_books)``); ``tail_relative``
     is the relative tail term of the non-Pinnacle sources; ``extra_second_half`` is added in quadrature to
-    derived second-half legs.
+    derived second-half legs.  ``market_extra`` adds a per-market scale (quadrature) to the derived legs of the
+    markets priced from a matrix beyond the ones it was fitted to (odd/even, European handicap, win to nil and
+    the half-split markets), and ``extra_half_uncalibrated`` is added to half-split legs whose shares were not
+    calibrated to Pinnacle's first-half prices (league or global shares).
     """
 
     c_ref: float = 0.06
@@ -229,11 +271,39 @@ class SeModel:
             "derived_exact": 0.0,
             "betfair": 0.04,
             "derived_matrix": 0.045,
+            "derived_half": 0.05,
             "consensus": 0.07,
         }
     )
     tail_relative: float = 0.18
     extra_second_half: float = 0.02
+    market_extra: Mapping[str, float] = field(
+        default_factory=lambda: {
+            # the largest calibration bias of the market on history, in the units of ``c``, rounded up
+            # (``app/scripts/measure_half_model.py``: 33 096 matches 2021-2025, see the module docstring)
+            "odd_even": 0.04,
+            "odd_even_home": 0.02,
+            "odd_even_away": 0.02,
+            "eh": 0.045,
+            "win_to_nil_home": 0.01,
+            "win_to_nil_away": 0.01,
+            "ht_ft": 0.045,
+            "win_both_halves_home": 0.025,
+            "win_both_halves_away": 0.025,
+            "win_either_half_home": 0.03,
+            "win_either_half_away": 0.03,
+            "score_both_halves": 0.035,
+            "score_both_halves_home": 0.01,
+            "score_both_halves_away": 0.01,
+            "btts_both_halves": 0.015,
+            "highest_half": 0.015,
+            "highest_half_home": 0.015,
+            "highest_half_away": 0.015,
+            "first_goal": 0.035,
+            "last_goal": 0.035,
+        }
+    )
+    extra_half_uncalibrated: float = 0.03
 
     def c(self, lead_hours: np.ndarray | float) -> np.ndarray:
         """Drift scale at ``lead_hours`` before kickoff (``c_ref`` where the lead is unknown)."""
@@ -251,6 +321,8 @@ class SeModel:
         n_books: np.ndarray | float = 1,
         abs_err: np.ndarray | float = 0.0,
         second_half: np.ndarray | bool = False,
+        markets: Sequence[str] | None = None,
+        half_uncalibrated: np.ndarray | bool = False,
     ) -> np.ndarray:
         p = np.asarray(p, dtype=float)
         n = np.clip(np.asarray(n_books, dtype=float), 1.0, None)
@@ -258,6 +330,12 @@ class SeModel:
         extra = np.array([self.extra.get(str(k), self.extra["consensus"]) for k in keys], dtype=float)
         extra = np.where(keys == "consensus", extra / np.sqrt(n), extra)
         extra = np.sqrt(extra**2 + np.where(np.asarray(second_half, dtype=bool), self.extra_second_half**2, 0.0))
+        derived = np.isin(keys, ("derived_matrix", "derived_half"))
+        if markets is not None and derived.any():
+            per_market = np.array([self.market_extra.get(str(m), 0.0) for m in markets], dtype=float)
+            extra = np.sqrt(extra**2 + np.where(derived, per_market, 0.0) ** 2)
+        uncalibrated = np.asarray(half_uncalibrated, dtype=bool) & (keys == "derived_half")
+        extra = np.sqrt(extra**2 + np.where(uncalibrated, self.extra_half_uncalibrated**2, 0.0))
         sharp = np.isin(keys, ("pinnacle", "derived_exact"))
         m = np.minimum(p, 1.0 - p)
         tail = np.where(sharp, 0.0, self.tail_relative * m * (1.0 - 2.0 * m))
@@ -358,6 +436,21 @@ def leg_masks(market: str, selection: str, line: float, size: int = _GRID) -> tu
         except ValueError:
             return None
         return ((x == home_goals) & (y == away_goals)).astype(float), ones
+    if market in ("odd_even", "odd_even_home", "odd_even_away"):
+        stat = {"odd_even": x + y, "odd_even_home": x + 0.0 * y, "odd_even_away": 0.0 * x + y}[market]
+        wins = {"odd": stat % 2 == 1, "even": stat % 2 == 0}.get(selection)
+        return None if wins is None else (wins.astype(float), ones)
+    if market in ("win_to_nil_home", "win_to_nil_away"):
+        event = (x > y) & (y == 0) if market == "win_to_nil_home" else (y > x) & (x == 0)
+        wins = {"yes": event, "no": ~event}.get(selection)
+        return None if wins is None else (wins.astype(float), ones)
+    if market == "eh":
+        # European (three-way) handicap: ``line`` is the whole-goal handicap of the home team, no refund
+        if not math.isfinite(line) or abs(line - round(line)) > 1e-9:
+            return None
+        margin = x - y + round(line)
+        wins = {"home": margin > 0, "draw": margin == 0, "away": margin < 0}.get(selection)
+        return None if wins is None else (wins.astype(float), ones)
 
     def stat_result(stat: np.ndarray, sub: float, side: str) -> np.ndarray:
         return stat - sub if side == "over" else sub - stat
@@ -545,7 +638,7 @@ def _prepare(
     missing = [c for c in needed if c not in quotes.columns]
     if missing:
         raise ValueError(f"quotes frame is missing columns: {', '.join(missing)}")
-    columns = needed + [c for c in ("kickoff_utc", "age_minutes", "three_way") if c in quotes.columns]
+    columns = needed + [c for c in ("kickoff_utc", "age_minutes", "three_way", "league_id") if c in quotes.columns]
     q = quotes[columns].copy()
     q["board_at"] = board_times(quotes)
     odd = pd.to_numeric(q["odd"], errors="coerce").to_numpy(dtype=float)
@@ -672,7 +765,10 @@ def _consensus(devigged: pd.DataFrame, min_books: int) -> pd.DataFrame:
 # --------------------------------------------------------------------------- #
 
 _FIT_MARKETS: Final = ("1x2", "ou", "ah", "team_ou_home", "team_ou_away")
-_MATRIX_MARKETS: Final = ("1x2", "dc", "dnb", "ah", "ou", "team_ou_home", "team_ou_away", "btts", "cs")
+_MATRIX_MARKETS: Final = (
+    "1x2", "dc", "dnb", "ah", "ou", "team_ou_home", "team_ou_away", "btts", "cs",
+    *sorted(MATRIX_MARKETS_V11), *sorted(HALF_MARKETS_V11),
+)  # fmt: skip
 
 
 def _targets_from_pinnacle(rows: pd.DataFrame) -> list[FitTarget]:
@@ -693,6 +789,17 @@ class _FixtureMatrices:
     first: ScoreMatrixFit | None = None
     second: np.ndarray | None = None
     second_rmse: float = float("nan")
+    first_targets: list[FitTarget] = field(default_factory=list)
+    _half: HalfSplit | None = None
+
+    def half_split(self, league_shares: tuple[float, float, str]) -> HalfSplit | None:
+        """The half split of the full-time matrix (:mod:`model_buk.scanner.halves`): calibrated to Pinnacle's
+        first-half prices when there are any, else ``league_shares``; built on first use."""
+        if self.ft is None:
+            return None
+        if self._half is None:
+            self._half = split_fixture(self.ft.matrix, league_shares, self.first_targets)
+        return self._half
 
 
 def fit_fixture_matrices(pinnacle: pd.DataFrame, *, model: str = "dc") -> dict[int, _FixtureMatrices]:
@@ -701,12 +808,14 @@ def fit_fixture_matrices(pinnacle: pd.DataFrame, *, model: str = "dc") -> dict[i
     if pinnacle.empty:
         return result
     for (fixture_id, period), rows in pinnacle[pinnacle["period"].isin(("ft", "1h"))].groupby(["fixture_id", "period"], sort=False):
-        fit = fit_score_matrix(_targets_from_pinnacle(rows), model=model)
+        targets = _targets_from_pinnacle(rows)
+        fit = fit_score_matrix(targets, model=model)
         entry = result.setdefault(int(fixture_id), _FixtureMatrices())
         if period == "ft":
             entry.ft = fit
         else:
             entry.first = fit
+            entry.first_targets = targets
     for entry in result.values():
         if entry.ft is not None and entry.first is not None:
             entry.second = second_half_matrix(entry.ft, entry.first)
@@ -756,9 +865,18 @@ def _derived_rows(
     wanted: pd.DataFrame,
     pinnacle: pd.DataFrame,
     matrices: dict[int, _FixtureMatrices],
+    half_shares: HalfShares = DEFAULT_HALF_SHARES,
+    leagues: Mapping[int, object] | None = None,
 ) -> pd.DataFrame:
-    """Derived legs for the wanted keys: exact double chance / draw no bet, and matrix-based everything else."""
+    """Derived legs for the wanted keys: exact double chance / draw no bet, matrix-based legs and half-split legs.
+
+    The v1.1 markets of a whole match that need only the final score (odd/even, European handicap, win to nil) come
+    from the full-time matrix; their first- and second-half versions and every market that needs the goals of each
+    half (:data:`model_buk.scanner.markets.HALF_MARKETS_V11`) come from the half split (``kind`` ``derived_half``,
+    ``detail`` ``half:<source>``).
+    """
     out: list[dict[str, object]] = []
+    leagues = leagues or {}
     have = set(zip(pinnacle["fixture_id"], pinnacle["market"], pinnacle["period"], pinnacle["line_key"], pinnacle["selection"], strict=True))
     one_x_two: dict[tuple[int, str], dict[str, float]] = {}
     for record in pinnacle[pinnacle["market"] == "1x2"].itertuples(index=False):
@@ -782,10 +900,21 @@ def _derived_rows(
                 ("dnb", "away"): away / (home + away),
             }.get((record.market, record.selection))
             if exact is not None:
-                out.append({**base, "p": exact, "kind": "derived_exact", "abs_err": 0.0, "second_half": False})
+                out.append({**base, "p": exact, "kind": "derived_exact", "abs_err": 0.0, "second_half": False, "detail": "exact"})
                 continue
         entry = matrices.get(fixture_id)
         if entry is None or record.market not in _MATRIX_MARKETS:
+            continue
+        if record.market in HALF_MARKETS_V11 or (record.market in MATRIX_MARKETS_V11 and record.period in ("1h", "2h")):
+            split = entry.half_split(half_shares.for_league(leagues.get(fixture_id)))
+            if split is None:
+                continue
+            p = half_leg_probability(split, record.market, record.period, record.selection, line)
+            if math.isfinite(p) and 0.0 < p < 1.0:
+                rmse = math.hypot(entry.ft.rmse if entry.ft else 0.0, split.rmse_1h if math.isfinite(split.rmse_1h) else 0.0)
+                out.append(
+                    {**base, "p": p, "kind": "derived_half", "abs_err": rmse, "second_half": False, "detail": f"half:{split.source}"}
+                )
             continue
         if record.period == "ft":
             fit, matrix, second = entry.ft, entry.ft.matrix if entry.ft else None, False
@@ -801,7 +930,7 @@ def _derived_rows(
             continue
         p = matrix_leg_probability(matrix, record.market, record.selection, line)
         if math.isfinite(p) and 0.0 < p < 1.0:
-            out.append({**base, "p": p, "kind": "derived_matrix", "abs_err": rmse, "second_half": second})
+            out.append({**base, "p": p, "kind": "derived_matrix", "abs_err": rmse, "second_half": second, "detail": "matrix"})
     return pd.DataFrame(out)
 
 
@@ -844,20 +973,22 @@ def fair_candidates(
     coherence: bool = True,
     max_age_far_minutes: float | None = None,
     far_lead_hours: float = DEFAULT_FAR_LEAD_HOURS,
+    half_shares: HalfShares | None = None,
 ) -> pd.DataFrame:
     """Every source's probability for every leg it can price, before the choice of the preferred one.
 
     Columns: ``fixture_id, market, period, line_key, selection, p, kind, n_books, book_margin, abs_err,
-    second_half, board_at``; ``kind`` is a key of :data:`PRIORITY` (``derived_exact`` and ``derived_matrix`` both have
-    ``fair_source == "pinnacle_derived"`` in the public frame).  ``line_key`` is the line with NaN replaced by
-    -9999.  :func:`fair_prices` documents the parameters.
+    second_half, board_at, detail``; ``kind`` is a key of :data:`PRIORITY` (``derived_exact``, ``derived_matrix``
+    and ``derived_half`` all have ``fair_source == "pinnacle_derived"`` in the public frame; ``detail`` tells them
+    apart and names the source of the half split).  ``line_key`` is the line with NaN replaced by -9999.
+    :func:`fair_prices` documents the parameters.
     """
     if method not in DEVIG_METHODS:
         raise ValueError(f"unknown de-vig method {method!r}; expected one of: {', '.join(sorted(DEVIG_METHODS))}")
     prepared = _prepare(quotes, max_age_minutes, max_age_far_minutes, far_lead_hours)
     columns = [
         "fixture_id", "market", "period", "line_key", "selection", "p", "kind", "n_books", "book_margin", "abs_err",
-        "second_half", "board_at",
+        "second_half", "board_at", "detail",
     ]  # fmt: skip
     if prepared.empty:
         return pd.DataFrame({c: pd.Series(dtype="object") for c in columns})
@@ -885,6 +1016,7 @@ def fair_candidates(
         abs_err: object = 0.0,
         second_half: object = False,
         board_at: object = None,
+        detail: object = None,
     ) -> None:
         if frame.empty:
             return
@@ -895,6 +1027,7 @@ def fair_candidates(
         piece["abs_err"] = abs_err
         piece["second_half"] = second_half
         piece["board_at"] = pd.NaT if board_at is None else pd.to_datetime(np.asarray(board_at), utc=True)
+        piece["detail"] = kind if detail is None else detail
         candidates.append(piece)
 
     pinnacle = devigged[devigged["bk"] == PINNACLE]
@@ -908,6 +1041,9 @@ def fair_candidates(
         board_at=pinnacle["board_at"] if "board_at" in pinnacle.columns else None,
     )
     betfair = devigged[devigged["bk"] == BETFAIR]
+    if len(betfair):
+        # yellow cards and the cards of a half: Pinnacle or a consensus only, never one soft board
+        betfair = betfair[~np.array([consensus_only(m, p) for m, p in zip(betfair["market"], betfair["period"], strict=True)], dtype=bool)]
     add(betfair, "betfair", 1, betfair["margin"].to_numpy(), board_at=betfair["board_at"] if "board_at" in betfair.columns else None)
     consensus = _consensus(devigged[devigged["bk"] != PINNACLE], min_consensus_books)
     add(
@@ -919,11 +1055,15 @@ def fair_candidates(
     )
     if derive and not pinnacle.empty:
         wanted = prepared[prepared["market"].isin(_MATRIX_MARKETS)][key].drop_duplicates()
-        derived = _derived_rows(wanted, pinnacle, matrices)
+        leagues = (
+            dict(zip(prepared["fixture_id"], prepared["league_id"], strict=True)) if "league_id" in prepared.columns else {}
+        )
+        derived = _derived_rows(wanted, pinnacle, matrices, half_shares or DEFAULT_HALF_SHARES, leagues)
         for kind, part in (derived.groupby("kind") if not derived.empty else []):
             add(
                 part, kind, 1, np.nan, part["abs_err"].to_numpy(), part["second_half"].to_numpy(),
                 board_at=pd.to_datetime(board_of(part["fixture_id"], PINNACLE)).tz_localize("UTC"),
+                detail=part["detail"].to_numpy(),
             )
     if not candidates:
         return pd.DataFrame({c: pd.Series(dtype="object") for c in columns})
@@ -937,6 +1077,7 @@ _FAIR_SOURCE: Final = {
     "pinnacle": "pinnacle",
     "derived_exact": "pinnacle_derived",
     "derived_matrix": "pinnacle_derived",
+    "derived_half": "pinnacle_derived",
     "betfair": "betfair",
     "consensus": "consensus",
 }
@@ -957,9 +1098,12 @@ def fair_prices(
     keep_all: bool = False,
     max_age_far_minutes: float | None = None,
     far_lead_hours: float = DEFAULT_FAR_LEAD_HOURS,
+    half_shares: HalfShares | None = None,
 ) -> pd.DataFrame:
     """Fair frame of a quotes frame: ``fixture_id, market, period, line, selection, p_fair, p_se, fair_source,
-    devig_method, n_books, book_margin, fair_board_at`` (see the module docstring for the sources and their order).
+    devig_method, n_books, book_margin, fair_board_at, fair_detail`` (see the module docstring for the sources and
+    their order; ``fair_detail`` is ``pinnacle``, ``exact``, ``matrix``, ``half:<source>``, ``consensus`` or
+    ``betfair``).
 
     Parameters
     ----------
@@ -983,6 +1127,9 @@ def fair_prices(
         ``fetched_at`` of its quotes; ``p_se`` of a closing frame is then that of a price seen just before kickoff).
     keep_all:
         Return one row per (leg, source) instead of the preferred source only.
+    half_shares:
+        First-half goal shares per league for the half split (:func:`model_buk.scanner.halves.estimate_half_shares`,
+        estimated from matches before the decision time); None uses the built-in global shares.
 
     A group that is not a complete complementary set of one bookmaker gets no fair price from that bookmaker;
     a leg no source can price is absent (missing stays missing).  Only information in ``quotes`` is used, so a
@@ -1000,6 +1147,7 @@ def fair_prices(
         coherence=coherence,
         max_age_far_minutes=max_age_far_minutes,
         far_lead_hours=far_lead_hours,
+        half_shares=half_shares,
     )
     if stacked.empty:
         return pd.DataFrame({c: pd.Series(dtype="object") for c in FAIR_COLUMNS})
@@ -1027,9 +1175,11 @@ def fair_prices(
         n_books=stacked["n_books"].to_numpy(dtype=float),
         abs_err=stacked["abs_err"].to_numpy(dtype=float),
         second_half=stacked["second_half"].to_numpy(dtype=bool),
+        markets=stacked["market"].astype(str).tolist(),
+        half_uncalibrated=stacked["detail"].isin(["half:league", "half:global"]).to_numpy(dtype=bool),
     )
     stacked["fair_source"] = stacked["kind"].map(_FAIR_SOURCE)
     stacked["line"] = np.where(stacked["line_key"] == _NO_LINE_KEY, np.nan, stacked["line_key"])
     stacked["devig_method"] = method
-    stacked = stacked.rename(columns={"p": "p_fair", "board_at": "fair_board_at"})
+    stacked = stacked.rename(columns={"p": "p_fair", "board_at": "fair_board_at", "detail": "fair_detail"})
     return stacked[list(FAIR_COLUMNS)].sort_values(["fixture_id", "market", "period", "line", "selection"]).reset_index(drop=True)
