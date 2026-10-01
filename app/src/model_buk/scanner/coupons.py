@@ -241,6 +241,8 @@ def build_coupons(
                 evs[f"ev_net_{label}"] = tau_row * product_point - 1.0
                 evs[f"ev_net_lower_{label}"] = tau_row * product_lower - 1.0
             passing = (evs[f"ev_net_lower_{keep_label}"] > config.min_coupon_ev) & (hit >= config.min_hit)
+            if config.max_coupon_odds is not None:
+                passing &= odds_total <= config.max_coupon_odds
             if fail_label is not None:
                 passing &= ~(evs[f"ev_net_lower_{fail_label}"] > config.min_coupon_ev)
             if not passing.any():

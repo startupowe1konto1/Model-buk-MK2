@@ -917,6 +917,24 @@ def _legacy_summary(summary: pd.DataFrame, config: Any) -> str:
     return f'<div class="scroll"><table><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
+def _risk_limits_item(config: Any) -> str:
+    """One "Jak czytać" bullet with the user's odds limits (empty when both are off)."""
+
+    leg = getattr(config, "max_leg_odds", None)
+    coupon = getattr(config, "max_coupon_odds", None)
+    if leg is None and coupon is None:
+        return ""
+    parts = []
+    if leg is not None:
+        parts.append(f"pojedyncze zdarzenia z kursem najwyżej {fmt_num(leg, 2)}")
+    if coupon is not None:
+        parts.append(f"kupony z kursem łącznym najwyżej {fmt_num(coupon, 2)}")
+    return (
+        "<li><b>Twój limit ryzyka.</b> Polecamy tylko " + " i ".join(parts) + ". Zdarzenia z wyższym kursem skaner "
+        "nadal ocenia i zapisuje (do raportu), ale ich nie proponuje.</li>"
+    )
+
+
 def _howto(config: Any) -> str:
     return (
         "<h2>Jak czytać</h2>"
@@ -924,7 +942,8 @@ def _howto(config: Any) -> str:
         "<li><b>Wartość to cena kontra uczciwa szansa.</b> Uczciwą szansę bierzemy z rynku (Pinnacle po odjęciu marży, "
         "a gdy go brak: Betfair albo zgodna średnia bukmacherów). Noga ma wartość, gdy kurs u bukmachera jest wyższy od uczciwego "
         f"nawet po odjęciu marginesu ostrożności ({fmt_num(config.z, 3)} błędu standardowego).</li>"
-        "<li><b>Kupon liczy podatek raz.</b> Podatek 12% od stawki płaci się od całego kuponu, więc kilka nóg z niewielką przewagą "
+        + _risk_limits_item(config)
+        + "<li><b>Kupon liczy podatek raz.</b> Podatek 12% od stawki płaci się od całego kuponu, więc kilka nóg z niewielką przewagą "
         "może dać dodatnie EV, choć pojedynczy zakład na takiej nodze traci po podatku.</li>"
         "<li><b>Co znaczą klasy rynków.</b> <i>Płynny</i>: mecz ligi lub turnieju, w którym Pinnacle przyjmuje duże stawki "
         f"(marża 1X2 Pinnacle najwyżej {fmt_num((config.tier_max_pinnacle_overround - 1) * 100, 0)}%, co najmniej "

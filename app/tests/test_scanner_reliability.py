@@ -508,3 +508,60 @@ def test_importing_the_scanner_does_not_load_scikit_learn() -> None:
     assert out.stdout.strip() == "False"
     source = (Path(src) / "model_buk" / "scanner" / "live_models.py").read_text(encoding="utf-8")
     assert "SKLEARN_STANDIN" not in source and "_ensure_optional_sklearn" not in source
+
+
+def test_users_odds_limits_filter_recommendations_but_not_the_evaluation():
+    import pandas as pd
+
+    from model_buk.scanner.config import ScanConfig
+    from model_buk.scanner.engine import ScannerConfig, select_value_picks
+
+    assert ScanConfig().max_leg_odds == 2.00 and ScanConfig().max_coupon_odds == 3.00
+    assert ScannerConfig().max_leg_odds is None
+    legs = pd.DataFrame(
+        {
+            "is_value": [True, True, True],
+            "is_model_only": [False, False, False],
+            "ev_net_lower_t100": [0.05, 0.04, 0.03],
+            "p_fair": [0.40, 0.55, 0.60],
+            "odd": [2.80, 1.95, 2.00],
+            "leg_key": ["a", "b", "c"],
+            "bookmaker": ["X", "X", "X"],
+            "fixture_id": [1, 2, 3],
+            "market_family": ["ou", "ou", "ou"],
+        }
+    )
+    picks = select_value_picks(legs, ScannerConfig(max_leg_odds=2.00))
+    assert sorted(picks["odd"]) == [1.95, 2.00]  # 2.00 is allowed, 2.80 is not proposed
+    assert len(select_value_picks(legs, ScannerConfig())) == 3
+    import pytest
+
+    with pytest.raises(ValueError):
+        ScannerConfig(max_leg_odds=1.0)
+
+
+def test_coupon_total_odds_limit():
+    import numpy as np
+    import pandas as pd
+
+    from model_buk.scanner.coupons import build_coupons
+    from model_buk.scanner.engine import ScannerConfig
+
+    rows = []
+    for i, odd in enumerate([1.60, 1.70, 1.90]):
+        rows.append(
+            {
+                "fixture_id": 100 + i, "bookmaker": "Bet365", "market": "1x2", "period": "ft", "line": np.nan,
+                "selection": "home", "market_family": "1x2", "leg_key": f"k{i}", "odd": odd,
+                "p_fair": 1.08 / odd, "p_lower": 1.06 / odd, "refund_share": 0.0, "tier": "liquid",
+                "kickoff_utc": pd.Timestamp("2026-10-02T18:00Z") + pd.Timedelta(hours=i), "fair_source": "pinnacle",
+                "is_value": True, "is_model_only": False,
+            }
+        )
+    legs = pd.DataFrame(rows)
+    free = build_coupons(legs, ScannerConfig(min_hit=0.0, taus=(1.0,), leg_tau=1.0, coupon_keep_tau=1.0))
+    capped = build_coupons(
+        legs, ScannerConfig(min_hit=0.0, taus=(1.0,), leg_tau=1.0, coupon_keep_tau=1.0, max_coupon_odds=3.00)
+    )
+    assert (free.coupons["odds_total"] > 3.0).any()
+    assert len(capped.coupons) and (capped.coupons["odds_total"] <= 3.0).all()

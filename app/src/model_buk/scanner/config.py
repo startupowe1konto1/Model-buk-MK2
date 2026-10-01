@@ -131,6 +131,9 @@ class ScanConfig(ScannerConfig):
     bet_type_step_hours: float = 12.0
     bet_type_refresh_hours: float = 24.0
     void_grace_hours: float = 48.0
+    # The user's risk limits (2026-10-01): recommend legs up to odds 2.00 and coupons up to total odds 3.00.
+    max_leg_odds: float | None = 2.00
+    max_coupon_odds: float | None = 3.00
 
     def __post_init__(self) -> None:
         super().__post_init__()

@@ -298,7 +298,7 @@ def seed_calendar(settings: RunSettings, api: FakeApi) -> None:
 
 def test_full_cycle_scan_value_coupons_settlement_clv_and_outputs(world) -> None:
     settings, api = world
-    config = ScanConfig()
+    config = ScanConfig(max_leg_odds=None, max_coupon_odds=None)  # mechanics test: the synthetic prices exceed the user's odds limits
 
     # ---- first run: six hours before the matches -------------------------------------------------------------
     first = run_pipeline(config, as_of=SCAN_1, settings=settings, client=api, clock=clock_at(SCAN_1))

@@ -323,6 +323,10 @@ class ScannerConfig:
 
     Coupons (see :mod:`model_buk.scanner.coupons`)
     ---------------------------------------------
+    ``max_leg_odds`` is a risk limit for a recommended leg: value legs at longer odds are still evaluated and
+    logged but are not proposed as singles nor used in coupons; ``max_coupon_odds`` caps the total odds of a
+    coupon.  Both are off (``None``) here; the production :class:`~model_buk.scanner.config.ScanConfig` sets the
+    user's choice (2.00 per leg, 3.00 per coupon, 2026-10-01).
     ``coupon_sizes`` legs per coupon; ``min_hit`` minimum win probability; ``min_coupon_ev`` strict threshold of
     the lower-bound EV at ``coupon_keep_tau`` (default 0.88: only coupons that stay profitable under the full
     stake tax are kept); ``top_k_legs`` and ``top_k_hit_legs`` prune the legs per bookmaker before combining (best
@@ -358,6 +362,8 @@ class ScannerConfig:
     max_days_ahead: float | None = None
     coupon_sizes: tuple[int, ...] = (2, 3)
     min_hit: float = 0.30
+    max_leg_odds: float | None = None
+    max_coupon_odds: float | None = None
     min_coupon_ev: float = 0.0
     coupon_keep_tau: float = 0.88
     top_k_legs: int = 60
@@ -402,6 +408,10 @@ class ScannerConfig:
         ):
             require_non_negative(getattr(self, name), name)
         require_probability(self.min_hit, "min_hit")
+        for name in ("max_leg_odds", "max_coupon_odds"):
+            limit = getattr(self, name)
+            if limit is not None and not (math.isfinite(limit) and limit > 1.0):
+                raise ValueError(f"{name} must be above 1.0 or None")
         if self.max_quote_age_far_hours < self.max_quote_age_hours:
             raise ValueError("max_quote_age_far_hours must not be below max_quote_age_hours")
         if self.stake_pln is not None and not (math.isfinite(self.stake_pln) and self.stake_pln > 0):
@@ -952,11 +962,13 @@ def select_value_picks(legs: pd.DataFrame, config: ScannerConfig | None = None) 
 
     Ranking: lower-bound EV at ``leg_tau`` (value comes first), then the win probability (a higher chance is
     preferred among value legs), then the price.  ``model_only`` legs and legs at reference bookmakers are never
-    included.  Adds ``rank`` (1 = best overall).
+    included, nor legs priced above ``max_leg_odds`` (the user's risk limit).  Adds ``rank`` (1 = best overall).
     """
     config = config or ScannerConfig()
     ev_lower = f"ev_net_lower_{config.leg_label}"
     picks = legs[legs["is_value"] & ~legs["is_model_only"]]
+    if config.max_leg_odds is not None:
+        picks = picks[picks["odd"] <= config.max_leg_odds]
     picks = picks.sort_values(
         [ev_lower, "p_fair", "odd", "leg_key", "bookmaker"],
         ascending=[False, False, False, True, True],
