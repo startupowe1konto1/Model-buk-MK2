@@ -280,6 +280,30 @@ szansie”.
   Wszystkie kursy i tak są archiwizowane, więc te rynki da się wycenić
   później także wstecz.
 
+## Pomysł Oskara: najlepsze kursy na zdarzeniach o wysokim prawdopodobieństwie (1.10.2026)
+
+Alternatywa dla szukania przewagi nad rynkiem: zamiast „bić rynek” wybierać
+zdarzenia o **wysokim prawdopodobieństwie** (np. szansa ≥ 60–75%), brać na nie
+**najlepszy dostępny kurs** u polskich bukmacherów i łączyć 2–3 takie
+zdarzenia w kupon, który ma dużą szansę wejść (zgodnie z limitem: noga do
+2,00, kupon do 3,00).
+
+Uczciwy rachunek, żeby wiedzieć, co sprawdzamy: jeśli najlepszy kurs nie
+przebija uczciwej ceny, oczekiwany wynik kuponu to mniej więcej marża
+bukmachera razy liczba nóg plus 12% podatku, więc kupony będą często wchodzić,
+ale w długim okresie tracić. Przykład: 3 nogi po uczciwej cenie 1,40 (szansa
+71%) dają kupon 2,74 z szansą ok. 36%; przy najlepszym kursie 1,43 na każdej
+nodze wynik po podatku to ok. −8%, bez podatku ok. +4,5%. Pomysł staje się
+opłacalny, gdy najlepszy kurs jest wyraźnie powyżej uczciwego (to już jest
+„wartość”) albo w promocjach bez podatku.
+
+Jak to sprawdzimy bez ryzyka: skaner doda osobną półkę „najlepszy kurs, wysoka
+szansa” (zdarzenia z szansą powyżej progu, najlepszy kurs spośród
+bukmacherów, kupony 2–3 nóg) i zapisze ją w rejestrze papierowym obok kuponów
+z wartością. Po kilku tygodniach raport pokaże dla obu półek: odsetek
+trafionych kuponów, wynik po podatku i bez podatku oraz CLV. Do tego potrzebne
+są prawdziwe kursy polskich bukmacherów (feed).
+
 ## Na później: sygnały przepływu pieniędzy (pomysł z 29.09.2026)
 
 Idea: wyłapać moment, w którym duże („ostre”) pieniądze przesuwają kurs,
