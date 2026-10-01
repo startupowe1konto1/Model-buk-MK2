@@ -24,3 +24,4 @@ CRON_TZ=Europe/Warsaw
 30 4 * * *             /opt/model-buk/deploy/railway/jobs/compact_odds.sh
 50 4 * * *             /opt/model-buk/deploy/railway/jobs/compact_register.sh
 20 5 * * *             /opt/model-buk/deploy/railway/jobs/archive_upload.sh
+50 * * * *             /opt/model-buk/deploy/railway/jobs/cost_guard.sh

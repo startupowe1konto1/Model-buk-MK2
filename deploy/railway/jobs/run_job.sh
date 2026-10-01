@@ -9,6 +9,7 @@
 # Cost guards (Railway bills CPU and RAM per minute; the workspace has a hard limit):
 # * A job never overlaps itself (non-blocking lock $DATA/locks/job-<name>.lock; a second start exits 75).
 # * timeout(1) stops a runaway run (SIGTERM, then SIGKILL 60 s later).
+# * Cost guard: once $DATA/.cost_guard_stop exists (written by the hourly cost_guard job) every other job skips.
 # * Daily budget: the wall seconds of every finished run are added to $DATA/logs/usage-<YYYY-MM-DD>.tsv (Polish
 #   date); once today's total exceeds DAILY_JOB_BUDGET_SECONDS (default 14400 = 4 h, about 3x the normal day)
 #   further runs are skipped (exit 75) until midnight, so even a job that hangs on every run cannot run the bill
@@ -57,7 +58,10 @@ trap 'rm -f "$out"' EXIT
 started=$(date +%s)
 spent=0
 [ -f "$usage" ] && spent=$(awk -F'\t' '{s += $3} END {print s + 0}' "$usage")
-if [ "$budget" -gt 0 ] && [ "$spent" -ge "$budget" ]; then
+if [ "$name" != "cost_guard" ] && [ -f "$DATA/.cost_guard_stop" ]; then
+    echo "skipped: cost guard stopped the service ($DATA/.cost_guard_stop); delete the file and redeploy to resume" > "$out"
+    code=75
+elif [ "$budget" -gt 0 ] && [ "$spent" -ge "$budget" ]; then
     echo "skipped: daily job budget used (${spent}s of ${budget}s today; DAILY_JOB_BUDGET_SECONDS)" > "$out"
     code=75
 else
