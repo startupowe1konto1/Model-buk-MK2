@@ -64,6 +64,7 @@ import numpy as np
 import pandas as pd
 
 from model_buk.markets.pricing import ClosingLineValue, closing_line_value
+from model_buk.paths import data_root
 
 OUTCOMES: tuple[str, ...] = ("win", "loss", "push", "half_win", "half_loss", "void")
 
@@ -747,7 +748,7 @@ def _history_events(con: sqlite3.Connection, chunk: Sequence[int]) -> pd.DataFra
 # Results from the history archive
 # --------------------------------------------------------------------------- #
 
-DATA_ROOT = Path(r"C:\Users\oskar\Documents\Model-Buk-Data")
+DATA_ROOT = data_root()  # $MODEL_BUK_DATA, else C:\Users\oskar\Documents\Model-Buk-Data on Windows
 HISTORY_DB = DATA_ROOT / "api-football" / "tables" / "history.sqlite"
 DIRECTORY_DB = DATA_ROOT / "fixture-directory" / "directory.sqlite3"
 

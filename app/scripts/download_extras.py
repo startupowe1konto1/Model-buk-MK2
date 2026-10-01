@@ -64,9 +64,10 @@ from model_buk.ingestion.api_football_extras import (  # noqa: E402
     team_ids_from_history,
 )
 from model_buk.ingestion.api_football_history import CURRENT_SEASON, RequestBudget  # noqa: E402
+from model_buk.paths import data_root  # noqa: E402
 
-DEFAULT_DATA_DIR = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football-extras")
-DEFAULT_HISTORY_DB = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football\tables\history.sqlite")
+DEFAULT_DATA_DIR = data_root() / "api-football-extras"
+DEFAULT_HISTORY_DB = data_root() / "api-football" / "tables" / "history.sqlite"
 
 
 def parse_kinds(text: str) -> list[str]:

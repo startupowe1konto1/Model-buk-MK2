@@ -31,11 +31,12 @@ from model_buk.ingestion.api_football_odds_archive import (  # noqa: E402
     OddsCollector,
     scan_dates,
 )
+from model_buk.paths import data_root  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-dir", default=r"C:\Users\oskar\Documents\Model-Buk-Data\api-football-odds")
+    parser.add_argument("--data-dir", default=str(data_root() / "api-football-odds"))
     parser.add_argument("--days-ahead", type=int, default=2)
     parser.add_argument("--wide-days", type=int, default=4)
     parser.add_argument("--wide-every-hours", type=int, default=6)

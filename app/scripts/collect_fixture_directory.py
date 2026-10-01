@@ -37,8 +37,9 @@ from model_buk.ingestion.fixture_directory import (  # noqa: E402
     FixtureDirectoryCollector,
     read_pending_ids,
 )
+from model_buk.paths import data_root  # noqa: E402
 
-DEFAULT_DATA_DIR = r"C:\Users\oskar\Documents\Model-Buk-Data\fixture-directory"
+DEFAULT_DATA_DIR = str(data_root() / "fixture-directory")
 
 
 def main() -> int:

@@ -44,11 +44,12 @@ from model_buk.ingestion.api_football_prematch import (  # noqa: E402
     PrematchArchive,
     PrematchCollector,
 )
+from model_buk.paths import data_root  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data-dir", default=r"C:\Users\oskar\Documents\Model-Buk-Data\api-football-prematch")
+    parser.add_argument("--data-dir", default=str(data_root() / "api-football-prematch"))
     parser.add_argument("--max-requests", type=int, default=150, help="Hard cap on API calls for this run")
     parser.add_argument("--reserve", type=int, default=1500, help="Stop when the daily remaining quota drops to this")
     parser.add_argument("--days-ahead", type=int, default=1, help="Fixture/injury dates: today plus this many days")

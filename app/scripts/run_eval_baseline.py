@@ -49,8 +49,9 @@ from model_buk.evaluation.framework import (  # noqa: E402
     prepare_matches,
 )
 from model_buk.evaluation.reliability import corp_diagram_table, corp_reliability  # noqa: E402
+from model_buk.paths import data_root  # noqa: E402
 
-DEFAULT_DB = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football\tables\history.sqlite")
+DEFAULT_DB = data_root() / "api-football" / "tables" / "history.sqlite"
 DEFAULT_REPORT = Path(__file__).resolve().parents[2] / "reports" / "Rama ewaluacji - baseline.md"
 MATCH_COLUMNS = (
     "fixture_id, league_code, season, round, kickoff_utc, status_short, home_goals, away_goals"

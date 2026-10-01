@@ -116,13 +116,14 @@ from model_buk.markets.pricing import (
     require_tax_multiplier,
 )
 from model_buk.markets.staking import DEFAULT_PIT_RULE, PitRule
+from model_buk.paths import data_root
 from model_buk.scanner.settlement import leg_key, tau_label
 
 if TYPE_CHECKING:  # pragma: no cover
     from model_buk.scanner.coupons import CouponSet
     from model_buk.scanner.register import ScannerRegister
 
-DATA_ROOT = Path(r"C:\Users\oskar\Documents\Model-Buk-Data")
+DATA_ROOT = data_root()  # $MODEL_BUK_DATA, else C:\Users\oskar\Documents\Model-Buk-Data on Windows
 SCANNER_DIR = DATA_ROOT / "scanner"
 
 REFERENCE_BOOKMAKERS: tuple[str, ...] = ("Pinnacle", "Betfair")

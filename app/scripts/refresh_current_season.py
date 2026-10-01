@@ -33,11 +33,12 @@ from model_buk.ingestion.api_football_history import (  # noqa: E402
     RequestBudget,
     current_season_scope,
 )
+from model_buk.paths import data_root  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-dir", default=r"C:\Users\oskar\Documents\Model-Buk-Data\api-football")
+    parser.add_argument("--data-dir", default=str(data_root() / "api-football"))
     parser.add_argument(
         "--mode",
         choices=("leagues", "dates"),

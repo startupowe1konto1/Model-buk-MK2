@@ -34,14 +34,15 @@ from model_buk.ingestion.closing_odds import (  # noqa: E402
     ClosingOddsCollector,
 )
 from model_buk.ingestion.fixture_directory import FixtureDirectory  # noqa: E402
+from model_buk.paths import data_root  # noqa: E402
 
-DATA_ROOT = r"C:\Users\oskar\Documents\Model-Buk-Data"
+DATA_ROOT = data_root()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data-dir", default=DATA_ROOT + r"\api-football-odds", help="The odds archive to append to")
-    parser.add_argument("--directory-dir", default=DATA_ROOT + r"\fixture-directory",
+    parser.add_argument("--data-dir", default=str(DATA_ROOT / "api-football-odds"), help="The odds archive to append to")
+    parser.add_argument("--directory-dir", default=str(DATA_ROOT / "fixture-directory"),
                         help="Fixture directory (calendar, probe and quota state)")
     parser.add_argument("--window-minutes", type=float, default=150.0, help="Fetch fixtures kicking off within this many minutes")
     parser.add_argument("--max-requests", type=int, default=80, help="Hard cap on API calls for this run")

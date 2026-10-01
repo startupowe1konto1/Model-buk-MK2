@@ -32,8 +32,9 @@ from model_buk.ingestion.api_football_extras import (  # noqa: E402
     RETROSPECTIVE_WARNING,
     build_extras_tables,
 )
+from model_buk.paths import data_root  # noqa: E402
 
-DEFAULT_ARCHIVE_ROOT = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football-extras")
+DEFAULT_ARCHIVE_ROOT = data_root() / "api-football-extras"
 
 
 def main() -> None:

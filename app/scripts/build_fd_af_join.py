@@ -32,14 +32,15 @@ from model_buk.ingestion.fd_af_join import (  # noqa: E402
     run_join,
     summarize_by_league_season,
 )
+from model_buk.paths import data_root  # noqa: E402
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ARCHIVES = tuple(
     Path(r"C:\Users\oskar\Desktop\Model Buk") / f"football_data-20260916T173459Z-1-00{part}.zip"
     for part in range(1, 6)
 )
-DEFAULT_HISTORY_DB = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\api-football\tables\history.sqlite")
-DEFAULT_OUT_DIR = Path(r"C:\Users\oskar\Documents\Model-Buk-Data\joined")
+DEFAULT_HISTORY_DB = data_root() / "api-football" / "tables" / "history.sqlite"
+DEFAULT_OUT_DIR = data_root() / "joined"
 DEFAULT_ALIASES = APP_ROOT / "config" / "team_aliases_fd_af.csv"
 
 
