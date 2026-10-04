@@ -7,7 +7,10 @@
 if (-not $env:MODEL_BUK_DATA) {
     $env:MODEL_BUK_DATA = Join-Path $HOME "Documents\Model-Buk-Data"
 }
-if (-not $env:API_FOOTBALL_KEY) {
-    $env:API_FOOTBALL_KEY = [Environment]::GetEnvironmentVariable("API_FOOTBALL_KEY", "User")
+# Zmienna użytkownika (rejestr) ma pierwszeństwo: po `setx` procesy uruchomione
+# wcześniej (np. aplikacja Claude) trzymają starą wartość w swoim środowisku.
+$userKey = [Environment]::GetEnvironmentVariable("API_FOOTBALL_KEY", "User")
+if ($userKey) {
+    $env:API_FOOTBALL_KEY = $userKey
 }
 $env:PYTHONIOENCODING = "utf-8"

@@ -21,8 +21,12 @@ czytamy: jego zmiany dociągamy `git fetch upstream`, a wysyłanie na pilota
   strona HTML), wdrożenie na Railway, `docs/SKANER.md`,
   `docs/PLAN-SKANERA-VALUE-BETOW.md` i raporty.
 - Katalog danych: każdy skrypt czyta zmienną `MODEL_BUK_DATA`; bez niej
-  domyślnie wskazuje na dysk Oskara. U nas: `Documents\Model-Buk-Data`
-  (skrypty w `app/scripts/mk2/` ustawiają to same).
+  domyślnie wskazuje na dysk Oskara. U nas: `Documents\Model-Buk-Data`.
+  Skrypty w `app/scripts/mk2/`: `env.ps1` (katalog danych, klucz z rejestru
+  użytkownika), `run_job.ps1 -Job <zadanie>` (jeden runner dla wszystkich
+  zadań, log w `<dane>\logs\<zadanie>.log`), `register_tasks.ps1`
+  (Harmonogram zadań Windows, folder `\ModelBukMK2\`, profil `Shared` albo
+  `Full`).
 - Kolektor kursów sprawdzony na Twoim kluczu: 3 zapytania → 10 meczów,
   27 311 kursów, 9 bukmacherów (Bet365, Marathonbet, 1xBet, Betfair,
   William Hill, BetVictor, **Pinnacle**, Betano, SBO).
@@ -171,16 +175,22 @@ Wnioski:
    nie da się ściągnąć historii do modeli. Skaner Oskara zakłada plan Pro
    (7 500/dzień) z rezerwą 1 500 i ~100–300 zapytań na dobę dla samego
    skanera plus ~600 dla kursów.
-2. Potrzebny jest klucz z planu Pro. Dwie drogi: (a) podnieść plan na
-   koncie, którego klucz jest w systemie; (b) użyć klucza z opłaconego konta
-   (jeśli to konto Oskara, obaj dzielicie te same 7 500/dzień, więc wasze
-   kolektory muszą mieć zgodne rezerwy, inaczej jeden wyłączy drugiego).
-   Klucz zostaje w zmiennej użytkownika Windows (`setx API_FOOTBALL_KEY
-   "..."`), nigdy w repo.
-3. Niezależnie od planu: kolektor `collect_odds.py` ma twarde limity
-   `--max-requests` i `--reserve`, a `RunSettings.api_reserve` skanera
-   domyślnie 1 500. Na planie Pro zostawiamy domyślne; na Free, do testów,
-   `--max-requests 25 --reserve 15`.
+2. Decyzja 4.10: **używamy klucza ze wspólnego opłaconego konta**, czyli
+   dzielimy z instancją Oskara te same 7 500 zapytań dziennie. Klucz zostaje
+   w zmiennej użytkownika Windows (`setx API_FOOTBALL_KEY "..."`), nigdy w
+   repo. Oskar musi o tym wiedzieć: w soboty jego kolektor sam potrafi
+   zjeść 2–3 tys. zapytań.
+3. Zasada współdzielenia: nasze zadania mają rezerwę **3 000**, wyższą od
+   jego rezerw (kolektory 1 500, kursy zamknięcia 2 500), więc gdy limit się
+   kurczy, zatrzymujemy się pierwsi. Profil `Shared` w `register_tasks.ps1`
+   uruchamia u nas tylko: kolektor kursów co 2 h (`--days-ahead 1
+   --max-requests 60`, ≤ 720/dzień), kursy zamknięcia co 15 min
+   (`--max-requests 15`) i skaner co 30 min (1–3 zapytania na kalendarz,
+   do 40 na rozliczenia). Kolektora przedmeczowego, odświeżania sezonu,
+   pobierania historii i nocnego fitu modeli u nas nie uruchamiamy: te dane
+   utrzymuje instancja Oskara, a tabele (`history.sqlite`, `model_cache`)
+   bierzemy od niego paczką `seed.tar.gz` (`deploy/railway/build_slim_dataset.py`).
+   Profil `Full` (własny klucz Pro) włącza wszystkie zadania jak u Oskara.
 4. Sieć: Avast podmienia certyfikaty TLS; venv ma włączony `truststore`
    (§0). Bez tego każdy skrypt kończy się `CERTIFICATE_VERIFY_FAILED`.
 
@@ -189,8 +199,8 @@ Wnioski:
 | Krok | Co | Gotowe, gdy | Stan |
 |---|---|---|---|
 | 0 | gałąź `mk/praca`, blokada pusha do repo Oskara, dane z V7, venv, testy, gałąź Oskara dołączona | zielone testy na czystym klonie | 4.10: zrobione, testy w toku |
-| 1 | klucz z planu Pro; kolektor kursów co godzinę (Harmonogram zadań) + katalog meczów; `MODEL_BUK_DATA` ustawione na stałe | po 24 h archiwum ma kursy ≥ 8 bukmacherów dla wszystkich meczów okna | czeka na decyzję o kluczu (§9 pkt 1) |
-| 2 | historia meczów: paczka od Oskara albo `download_history.py`; nocny fit modeli (`fit_live_models`) | skaner widzi `model_cache` nie starszy niż 24 h | |
+| 1 | klucz ze wspólnego konta (`setx`), `register_tasks.ps1` (profil Shared: kolektor kursów co 2 h, kursy zamknięcia, skaner) | po 24 h archiwum ma kursy ≥ 8 bukmacherów dla meczów dziś+jutro, `scanner.log` ma wpisy co 30 min | skrypty gotowe i przetestowane; czeka na klucz i rejestrację zadań |
+| 2 | historia meczów i fit modeli: paczka `seed.tar.gz` od Oskara rozpakowana do `Model-Buk-Data` (nie pobieramy historii na wspólnym kluczu) | skaner raportuje `model=` zamiast `model=no_fit` | do umówienia z Oskarem |
 | 3 | pierwszy przebieg skanera Oskara u nas (`run_scanner.py`), odczyt `latest.html` i rejestru; zrozumienie, które progi odpowiadają za „0 kuponów przy τ 0,88” | przebieg zapisany z `config_id`, strona pokazuje wynik | można zacząć przed krokiem 2 w trybie bez modeli |
 | 4 | nasz profil: filtr pasma 1,30–2,00 na kurs łączny i rozmiar kuponu 2 jako pola `ScanConfig` (nowy `config_id`), półka B dla rynków bez Pinnacle; testy graniczne 1,30/2,00 i podatku | testy zielone, przebieg z nowym `config_id` w rejestrze | |
 | 5 | raport 7/30 dni z rejestru: mediana CLV, pobite zamknięcia, zysk po podatku, osobno A/B i single/kupony | po tygodniu raport liczy się sam | |
@@ -214,8 +224,9 @@ i tylko jeśli półka B pokaże, że model coś wnosi względem konsensusu.
 
 ## 9. Decyzje po Twojej stronie
 
-1. **Klucz API-Football z planu Pro**: własne konto czy klucz ze wspólnego
-   konta (wtedy ustalić z Oskarem rezerwy). Bez tego kroki 1–3 stoją.
+1. ~~Klucz API-Football z planu Pro~~ — rozstrzygnięte 4.10: wspólne konto
+   (§6 pkt 2–3). Do zrobienia: `setx`, powiadomić Oskara, poprosić o
+   `seed.tar.gz`.
 2. Lista lig: top 10 (które dokładnie?) + LM/LE/LKE, czy — jak Oskar —
    wszystkie rozgrywki z kursami (zob. §10 pkt 3).
 3. Bukmacher docelowy do pomiaru: na razie Bet365/Betano z feedu jako
