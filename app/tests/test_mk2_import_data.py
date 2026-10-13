@@ -109,3 +109,50 @@ def test_apply_refuses_while_a_database_is_open(tmp_path, baseline, capsys):
     assert imp.main([str(source), "--target", str(baseline), "--apply"]) == 2
     assert "refused" in capsys.readouterr().out
     assert (baseline / "logs" / "odds_collector.log").read_text(encoding="utf-8") == "old\n"
+
+
+def zip_of(tmp_path: Path, files: dict[str, tuple[Path | None, str | None, float]]) -> Path:
+    """A snapshot zip from {relative path: (source db file or None, text or None, mtime)}."""
+    src = tmp_path / "src2" / "Model-Buk-Data"
+    for rel, (db, text, mtime) in files.items():
+        target = src / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if db is not None:
+            target.write_bytes(db.read_bytes())
+        else:
+            target.write_text(text or "", encoding="utf-8")
+        os.utime(target, (mtime, mtime))
+    out = tmp_path / "snap2.zip"
+    with zipfile.ZipFile(out, "w") as zf:
+        for path in sorted(src.parent.rglob("*")):
+            if path.is_file():
+                zf.write(path, path.relative_to(src.parent).as_posix())
+    return out
+
+
+def test_apply_refuses_a_snapshot_that_would_remove_rows(tmp_path, baseline, capsys):
+    smaller = tmp_path / "small.sqlite3"
+    make_db(smaller, 1)  # the baseline has 3 scans
+    source = zip_of(tmp_path, {"api-football-odds/odds.sqlite3": (smaller, None, NEW)})
+    assert imp.main([str(source), "--target", str(baseline), "--apply"]) == 4
+    out = capsys.readouterr().out
+    assert "would remove data" in out and "scans 3 -> 1" in out
+    con = sqlite3.connect(baseline / "api-football-odds" / "odds.sqlite3")
+    assert con.execute("select count(*) from scans").fetchone()[0] == 3  # untouched
+    con.close()
+    assert not list(tmp_path.glob("Model-Buk-Data._staging_*"))
+    assert imp.main([str(source), "--target", str(baseline), "--apply", "--allow-shrink"]) == 0
+
+
+def test_apply_refuses_unfinished_writes(tmp_path, baseline, capsys):
+    source = zip_of(tmp_path, {"scanner/scanner.sqlite-wal": (None, "pending pages", NEW)})
+    assert imp.main([str(source), "--target", str(baseline), "--apply"]) == 5
+    assert "unfinished database writes" in capsys.readouterr().out
+    assert not (baseline / "scanner" / "scanner.sqlite-wal").exists()
+
+
+def test_a_one_hour_clock_shift_is_not_a_change(tmp_path, baseline, capsys):
+    same_text = (baseline / "fixture-directory" / "README.md").read_text(encoding="utf-8")
+    source = zip_of(tmp_path, {"fixture-directory/README.md": (None, same_text, OLD + 3600)})
+    assert imp.main([str(source), "--target", str(baseline)]) == 0
+    assert "changed 0" in capsys.readouterr().out

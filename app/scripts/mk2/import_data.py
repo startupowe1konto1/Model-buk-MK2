@@ -22,6 +22,17 @@ Usage (from app/):
 
 Stop the scheduled MK2 jobs before ``--apply`` (``register_tasks.ps1 -Unregister`` or disable them): a
 database that is open while it is replaced is refused (its ``-wal`` / ``-journal`` file is present).
+
+Guards against losing data that exists only in the current baseline:
+
+* **Shrinking databases.**  A snapshot made after Oskar moved to his server can hold less than the one we have
+  (odds kept 7 days, a slim history without player tables, fewer model fits).  ``--apply`` counts the rows of
+  every changed database in the staged copy and refuses when any table would lose more than 1% of its rows;
+  ``--allow-shrink`` imports anyway (the replaced files still go to the backup).
+* **Unfinished writes.**  A staged ``-wal`` file that is not empty means the snapshot was zipped while a job was
+  writing; immutable reads would miss that part, so the import is refused.
+* **Clock shifts.**  A zip written in another daylight-saving period can shift every timestamp by exactly one
+  hour; a file of the same size whose time differs by exactly 3 600 s is compared by CRC instead of re-copied.
 """
 
 from __future__ import annotations
@@ -35,6 +46,7 @@ import sqlite3
 import sys
 import time
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -82,8 +94,22 @@ def same(a: Entry, b: Entry) -> bool:
     return a.size == b.size and abs(a.mtime - b.mtime) <= MTIME_TOLERANCE_S
 
 
-def table_rows(path: Path) -> dict[str, int] | str:
-    """Approximate rows per table (``max(rowid)``; fast on big tables), or the error text."""
+def hour_shift(a: Entry, b: Entry) -> bool:
+    """Same size and a time difference of exactly one hour (a daylight-saving shift of the zip tool)."""
+    return a.size == b.size and abs(abs(a.mtime - b.mtime) - 3600.0) <= MTIME_TOLERANCE_S
+
+
+def crc32_of(path: Path) -> int:
+    crc = 0
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(8 << 20), b""):
+            crc = zlib.crc32(chunk, crc)
+    return crc & 0xFFFFFFFF
+
+
+def table_rows(path: Path, exact: bool = False) -> dict[str, int] | str:
+    """Rows per table, or the error text: ``max(rowid)`` (fast, approximate after deletes or VACUUM) or, with
+    ``exact``, ``COUNT(*)`` (used by the shrink guard: a VACUUM renumbers rowids without losing rows)."""
     try:
         con = sqlite3.connect(f"file:{path.as_posix()}?mode=ro&immutable=1", uri=True)
         try:
@@ -91,7 +117,8 @@ def table_rows(path: Path) -> dict[str, int] | str:
             rows: dict[str, int] = {}
             for name in names:
                 try:
-                    rows[name] = int(con.execute(f'select coalesce(max(rowid), 0) from "{name}"').fetchone()[0])
+                    sql = f'select count(*) from "{name}"' if exact else f'select coalesce(max(rowid), 0) from "{name}"'
+                    rows[name] = int(con.execute(sql).fetchone()[0])
                 except sqlite3.DatabaseError:  # WITHOUT ROWID tables
                     rows[name] = int(con.execute(f'select count(*) from "{name}"').fetchone()[0])
             return rows
@@ -135,6 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--keep-prev", type=int, default=1, help="backups of earlier imports to keep (default: 1)")
     parser.add_argument("--prune", action="store_true", help="also move files that are not in the snapshot into the backup")
     parser.add_argument("--list", type=int, default=25, help="how many changed files to list (default: 25)")
+    parser.add_argument("--allow-shrink", action="store_true", help="import even if a database would lose rows")
     args = parser.parse_args(argv)
 
     source = Path(args.source)
@@ -154,7 +182,10 @@ def main(argv: list[str] | None = None) -> int:
 
     new = sorted(r for r in src if r not in dst)
     changed = sorted(r for r in src if r in dst and not same(src[r], dst[r]))
-    unchanged = [r for r in src if r in dst and same(src[r], dst[r])]
+    if zf is not None:  # a one-hour shift with equal content is not a change
+        changed = [r for r in changed if not (hour_shift(src[r], dst[r]) and crc32_of(target / r) == infos[r].CRC)]
+    changed_set = set(changed)
+    unchanged = [r for r in src if r in dst and r not in changed_set]
     local_only = sorted(r for r in dst if r not in src)
     incoming = sum(src[r].size for r in new + changed)
 
@@ -206,6 +237,31 @@ def main(argv: list[str] | None = None) -> int:
             print(f"refused: size mismatch after extraction of {rel}; staging left at {staging}")
             return 3
     print(f"staged {len(new) + len(changed)} files in {time.time() - t0:.0f}s")
+
+    pending = [rel for rel in new + changed if rel.endswith("-wal") and (staging / rel).stat().st_size > 0]
+    if pending:
+        print("refused: the snapshot holds unfinished database writes (non-empty -wal): " + ", ".join(pending)
+              + ". Ask for a snapshot made with the jobs stopped.")
+        shutil.rmtree(staging, ignore_errors=True)
+        return 5
+    staged_rows = {rel: table_rows(staging / rel, exact=True) for rel in db_changes}
+    shrinking = []
+    for rel in db_changes:
+        old = table_rows(target / rel, exact=True)
+        new_rows = staged_rows[rel]
+        if not isinstance(old, dict) or not isinstance(new_rows, dict):
+            continue
+        for name, count in old.items():
+            after_count = new_rows.get(name)
+            if count > 0 and (after_count is None or after_count < count * 0.99):
+                shrinking.append(f"{rel}:{name} {count} -> {after_count if after_count is not None else 'missing'}")
+    if shrinking and not args.allow_shrink:
+        print("refused: the snapshot would remove data we have now (rows per table):")
+        for line in shrinking[: args.list]:
+            print(f"   {line}")
+        print("Archive the current files first, or run again with --allow-shrink (replaced files go to the backup).")
+        shutil.rmtree(staging, ignore_errors=True)
+        return 4
 
     replaced: list[str] = []
     for rel in new + changed:

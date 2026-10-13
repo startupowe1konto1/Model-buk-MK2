@@ -47,6 +47,7 @@ HERE = Path(__file__).resolve().parent
 APP = HERE.parent.parent
 sys.path.insert(0, str(APP / "src"))
 
+from model_buk.scanner import live_models as lm  # noqa: E402
 from model_buk.scanner import settlement as st  # noqa: E402
 from model_buk.scanner.config import ScanConfig  # noqa: E402
 from model_buk.scanner.register import ScannerRegister  # noqa: E402
@@ -59,12 +60,15 @@ TAUS = (0.88, 0.94, 1.00)
 LABELS = {
     "oskar-live": "Oskar · rejestr na żywo",
     "oskar-offline": "Oskar · badania offline",
-    "mk2-replay-oskar-config": "MK2 · powtórka, ustawienia Oskara",
+    "mk2-replay-oskar-config": "MK2 · powtórka, ustawienia domyślne",
     "mk2-replay-mk2-band": "MK2 · powtórka, 2 nogi do kursu 2,00",
     "mk2-live-smoke": "MK2 · test na żywo (klucz Free)",
     "mk2-live": "MK2 · na żywo",
 }
-KINDS = {"oskar-live": "Oskar", "oskar-offline": "Oskar"}
+RUN_KIND = {"oskar-live": "na żywo (Oskar)", "oskar-offline": "offline (Oskar)", "mk2-live-smoke": "test na żywo (MK2)",
+            "mk2-live": "na żywo (MK2)"}
+MODEL_PL = {"ok": "użyty", "fit_stale": "pominięty: fit starszy niż 24 h", "no_fit": "pominięty: brak fitu"}
+WARSAW = "Europe/Warsaw"
 REGIME_PL = {"t088": "podatek 12%", "t094": "podatek 6%", "t100": "bez podatku"}
 SOURCE_PL = {
     "pinnacle": "Pinnacle",
@@ -100,6 +104,25 @@ def iso(value: Any) -> str | None:
     return stamp.strftime("%Y-%m-%dT%H:%MZ")
 
 
+def pl_time(value: Any) -> str | None:
+    """Polish local time for people, e.g. ``30.09.2026, 03:05``."""
+    if value is None:
+        return None
+    try:
+        stamp = pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(stamp):
+        return None
+    stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp
+    return stamp.tz_convert(WARSAW).strftime("%d.%m.%Y, %H:%M")
+
+
+def pl_int(value: Any) -> str:
+    """An integer with non-breaking thousands spaces (``1 811 456``), so it never wraps inside a cell."""
+    return f"{int(value):,}".replace(",", "\u00a0")
+
+
 def num(value: Any, digits: int = 6) -> float | None:
     """A finite float rounded to ``digits``, else None (JSON has no NaN)."""
     try:
@@ -119,6 +142,19 @@ def text(value: Any) -> str | None:
         return None
     s = str(value)
     return s if s and s.lower() != "nan" else None
+
+
+def open_state(kickoff: str | None, now: pd.Timestamp) -> tuple[str, str]:
+    """Label of an unsettled bet: its match has started but the data hold no result yet, or it is still ahead."""
+    if kickoff and pd.Timestamp(kickoff) <= now:
+        return "brak wyniku", "no_result"
+    return "przed meczem", "open"
+
+
+def money_sum(rows: list[dict[str, Any]], field: str) -> float | None:
+    """Sum of a profit field over settled rows; None when nothing is settled (never a fake 0.0)."""
+    values = [r[field] for r in rows if r.get(field) is not None]
+    return num(sum(values), 4) if values else None
 
 
 def ro(path: Path) -> sqlite3.Connection:
@@ -249,7 +285,7 @@ def config_note(config_json: str | None) -> tuple[str, int]:
 # --------------------------------------------------------------------------- per source
 
 
-def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[str, list[dict[str, Any]]]:
+def export_source(source: Source, reg: ScannerRegister, names: Names, now: pd.Timestamp) -> dict[str, list[dict[str, Any]]]:
     out: dict[str, list[dict[str, Any]]] = {k: [] for k in ("przebiegi", "kupony", "kupony_nogi", "single", "wyniki", "eksperymenty")}
     scans = reg.read("SELECT * FROM scans ORDER BY as_of, started_at")
     if scans.empty:
@@ -265,11 +301,26 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
     names.load(ids)
 
     # scans
+    listed = reg.read("SELECT scan_id, COALESCE(regime, 't088') AS regime, COUNT(*) AS n FROM coupons WHERE is_top = 1 GROUP BY 1, 2")
+    listed_by = {(r.scan_id, r.regime): int(r.n) for r in listed.itertuples(index=False)}
+    old_value = reg.read(
+        "SELECT scan_id, COUNT(*) AS n, SUM(value_t088) AS t088, SUM(value_t094) AS t094 FROM legs WHERE is_value = 1 GROUP BY scan_id"
+    ) if {"value_t088", "value_t094"} <= set(reg.read("SELECT * FROM legs LIMIT 0").columns) else pd.DataFrame()
+    old_value_by = {r.scan_id: r for r in old_value.itertuples(index=False)} if not old_value.empty else {}
     for row in scans.itertuples(index=False):
         diag = json.loads(getattr(row, "diagnostics_json", None) or "{}")
         pipe = diag.get("pipeline") or {}
-        by_tau = pipe.get("value_by_tau") or {}
+        by_tau = dict(pipe.get("value_by_tau") or {})
+        if not by_tau:
+            # an old scanner wrote no per-tax counts; take them from the leg log when every value leg was logged
+            logged = old_value_by.get(row.scan_id)
+            if logged is not None and int(logged.n) == int(getattr(row, "n_value", -1) or -1):
+                by_tau = {"t088": logged.t088, "t094": logged.t094}
         model = pipe.get("model") or {}
+        model_code = text(model.get("status")) or ("brak danych" if not pipe else "nie użyto")
+        cfg_json = json.loads(getattr(row, "config_json", None) or "{}")
+        edge_cap = num(cfg_json.get("max_edge"))
+        kind = RUN_KIND.get(source.id) or ("powtórka (MK2)" if source.id.startswith("mk2-replay") else source.label)
         out["przebiegi"].append({
             "zrodlo_id": source.id,
             "zrodlo": source.label,
@@ -283,8 +334,16 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
             "nogi_t094": integer(by_tau.get("t094")),
             "nogi_t100": integer(by_tau.get("t100", getattr(row, "n_value", None))),
             "kupony_top": integer(getattr(row, "n_coupons_top", None)),
-            "kupony_ok_t088": integer(getattr(row, "n_coupons_passing", None)),
-            "model": text(model.get("status")) or ("brak danych" if not pipe else "nie użyto"),
+            "kombinacje_ok_t088": integer(getattr(row, "n_coupons_passing", None)),
+            "kupony_t088": listed_by.get((row.scan_id, "t088"), 0),
+            "kupony_t094": listed_by.get((row.scan_id, "t094"), 0),
+            "kupony_t100": listed_by.get((row.scan_id, "t100"), 0),
+            "limit_przewagi": f"{edge_cap:.0%}" if edge_cap is not None else None,
+            "luzne": bool(edge_cap is not None and edge_cap > 0.10 + 1e-9),
+            "rodzaj": kind,
+            "uruchomiony": pl_time(getattr(row, "started_at", None)),
+            "model": MODEL_PL.get(model_code, "brak danych (stara wersja)" if model_code == "brak danych" else model_code),
+            "model_kod": model_code,
         })
 
     configs = scans.drop_duplicates("config_id", keep="first")[["config_id", "config_json"]]
@@ -310,11 +369,13 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
         for leg in (legs.to_dict("records") if not legs.empty else []):
             n = names.get(leg.get("fixture_id"))
             outcome = text(leg.get("outcome"))
+            pending = open_state(iso(leg.get("kickoff_utc")), now)
             row = {
                 "zrodlo_id": source.id,
                 "zrodlo": source.label,
                 "config_id": cfg.config_id,
                 "noga_id": f"{source.id}:{cfg.config_id}:{leg.get('bookmaker')}:{leg.get('leg_key')}",
+                "leg_key": text(leg.get("leg_key")),
                 "as_of": iso(leg.get("as_of")),
                 "bukmacher": text(leg.get("bookmaker")),
                 "mecz": match_text(n, leg.get("fixture_id")),
@@ -331,8 +392,8 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
                 "rynek_klasa": text(leg.get("tier")),
                 "value_t088": integer(leg.get("value_t088")) or 0,
                 "value_t094": integer(leg.get("value_t094")) or 0,
-                "wynik": outcome_pl(outcome) if outcome else "otwarty",
-                "wynik_kod": outcome or "open",
+                "wynik": outcome_pl(outcome) if outcome else pending[0],
+                "wynik_kod": outcome or pending[1],
                 "clv": num(leg.get("clv_raw"), 5),
             }
             for tau in TAUS:
@@ -352,16 +413,20 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
             closing = group["closing_p_fair"].to_numpy(dtype=float) if len(group) else np.array([])
             coupon_clv = float(np.prod(group["odd"].to_numpy(dtype=float) * closing)) - 1.0 if len(group) and np.isfinite(closing).all() else None
             outcome = text(coupon.get("outcome"))
-            key = f"{source.id}:{coupon['coupon_id']}"
+            key = f"{source.id}:{cfg.config_id}:{coupon['coupon_id']}"
+            pending = open_state(iso(coupon.get("kickoff_last")), now)
+            odds_total = num(coupon.get("odds_total"), 4)
             row = {
                 "zrodlo_id": source.id,
                 "zrodlo": source.label,
                 "config_id": cfg.config_id,
                 "kupon_id": key,
+                "kupon": text(coupon.get("coupon_id")),
                 "as_of": iso(coupon.get("as_of")),
                 "bukmacher": text(coupon.get("bookmaker")),
                 "nogi": integer(coupon.get("n_legs")),
-                "kurs": num(coupon.get("odds_total"), 4),
+                "kurs": odds_total,
+                "zysk_mozliwy_t088": bool(odds_total is not None and odds_total * 0.88 > 1.0),
                 "szansa": num(coupon.get("p_hit"), 5),
                 "ev_dolne_t088": num(coupon.get("ev_net_lower_t088"), 5),
                 "ev_dolne_t094": num(coupon.get("ev_net_lower_t094"), 5),
@@ -372,8 +437,8 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
                 "start": iso(coupon.get("kickoff_first")),
                 "koniec": iso(coupon.get("kickoff_last")),
                 "mecze": " + ".join(match_text(names.get(f), f) for f in group["fixture_id"].tolist()) if len(group) else None,
-                "wynik": outcome_pl(outcome) if outcome else "otwarty",
-                "wynik_kod": outcome or "open",
+                "wynik": outcome_pl(outcome) if outcome else pending[0],
+                "wynik_kod": outcome or pending[1],
                 "clv": num(coupon_clv, 5),
             }
             for tau in TAUS:
@@ -383,7 +448,10 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
             for leg in group.to_dict("records"):
                 n = names.get(leg.get("fixture_id"))
                 lo = text(leg.get("outcome"))
+                leg_pending = open_state(iso(leg.get("kickoff_utc")), now)
                 out["kupony_nogi"].append({
+                    "zrodlo_id": source.id,
+                    "config_id": cfg.config_id,
                     "kupon_id": key,
                     "noga": f"{key}:{integer(leg.get('leg_no'))}",
                     "nr": integer(leg.get("leg_no")),
@@ -394,8 +462,8 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
                     "kurs": num(leg.get("odd"), 4),
                     "p_uczciwe": num(leg.get("p_fair"), 5),
                     "cena_z": SOURCE_PL.get(str(leg.get("fair_source")), text(leg.get("fair_source"))),
-                    "wynik": outcome_pl(lo) if lo else "otwarty",
-                    "wynik_kod": lo or "open",
+                    "wynik": outcome_pl(lo) if lo else leg_pending[0],
+                    "wynik_kod": lo or leg_pending[1],
                 })
 
         # the register's own results table (all time)
@@ -424,7 +492,7 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
         # one experiment row
         sc = [c for c in out["kupony"] if c["config_id"] == cfg.config_id]
         sg = [s for s in out["single"] if s["config_id"] == cfg.config_id]
-        decided = [c for c in sc if c["wynik_kod"] in ("win", "loss", "half_loss", "push", "void")]
+        decided = [c for c in sc if c["wynik_kod"] not in ("open", "no_result")]
         out["eksperymenty"].append({
             "eksperyment_id": f"{source.id}:{cfg.config_id}",
             "zrodlo_id": source.id,
@@ -432,7 +500,8 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
             "config_id": cfg.config_id,
             "opis": note,
             "stara_wersja": n_missing > 0,
-            "zabezpieczenia": "luźne: przewaga do 20%" if loose else "pełne: przewaga do 10%",
+            "zabezpieczenia": (f"luźne: przewaga do {max_edge:.0%}" if loose else
+                               f"pełne: przewaga do {max_edge:.0%}" if max_edge is not None else "brak limitu przewagi"),
             "luzne": loose,
             "max_przewaga": max_edge,
             "nogi_w_kuponie": ", ".join(str(int(n)) for n in (stored.get("coupon_sizes") or [])) or None,
@@ -441,18 +510,20 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
             "od": iso(cscans["as_of"].min()),
             "do": iso(cscans["as_of"].max()),
             "single": len(sg),
-            "single_rozliczone": sum(1 for s in sg if s["wynik_kod"] != "open"),
+            "single_rozliczone": sum(1 for s in sg if s["wynik_kod"] not in ("open", "no_result")),
             "kupony": len(sc),
             "kupony_ok_t088": sum(1 for c in sc if c["przechodzi_kod"] == "t088"),
-            "kupony_ok_t094": sum(1 for c in sc if c["przechodzi_kod"] == "t094"),
+            "kupony_ok_t094": sum(1 for c in sc if c["przechodzi_kod"] in ("t088", "t094")),
+            "kupony_za_niski_kurs": sum(1 for c in sc if not c["zysk_mozliwy_t088"]),
             "kupony_rozliczone": len(decided),
             "kupony_wygrane": sum(1 for c in sc if c["wynik_kod"] == "win"),
             "kupony_przegrane": sum(1 for c in sc if c["wynik_kod"] in ("loss", "half_loss")),
-            "kupony_otwarte": sum(1 for c in sc if c["wynik_kod"] == "open"),
-            "zysk_kupony_t088": num(sum(c["zysk_t088"] for c in sc if c["zysk_t088"] is not None), 4),
-            "zysk_kupony_t100": num(sum(c["zysk_t100"] for c in sc if c["zysk_t100"] is not None), 4),
-            "zysk_single_t088": num(sum(s["zysk_t088"] for s in sg if s["zysk_t088"] is not None), 4),
-            "zysk_single_t100": num(sum(s["zysk_t100"] for s in sg if s["zysk_t100"] is not None), 4),
+            "kupony_bez_wyniku": sum(1 for c in sc if c["wynik_kod"] == "no_result"),
+            "kupony_przed_meczem": sum(1 for c in sc if c["wynik_kod"] == "open"),
+            "zysk_kupony_t088": money_sum(sc, "zysk_t088"),
+            "zysk_kupony_t100": money_sum(sc, "zysk_t100"),
+            "zysk_single_t088": money_sum(sg, "zysk_t088"),
+            "zysk_single_t100": money_sum(sg, "zysk_t100"),
         })
     return out
 
@@ -460,22 +531,44 @@ def export_source(source: Source, reg: ScannerRegister, names: Names) -> dict[st
 # --------------------------------------------------------------------------- the snapshot and our folder
 
 
-def snapshot_rows(data_root: Path, out_root: Path) -> list[dict[str, Any]]:
+def snapshot_rows(data_root: Path, out_root: Path, now: pd.Timestamp) -> list[dict[str, Any]]:
+    """What the snapshot and our own folder hold, computed from the databases (read only).  Times are Polish."""
     rows: list[dict[str, Any]] = []
+    stale_after = pd.Timedelta(days=3)
 
     def add(sekcja: str, pozycja: str, wartosc: Any, stan: str = "ok", uwagi: str | None = None) -> None:
         rows.append({"dane_id": f"{sekcja}:{pozycja}", "sekcja": sekcja, "pozycja": pozycja,
                      "wartosc": None if wartosc is None else str(wartosc), "stan": stan, "uwagi": uwagi})
 
+    def fresh(stamp: Any) -> str:
+        return "ok" if stamp and now - pd.Timestamp(stamp).tz_convert("UTC") <= stale_after else "uwaga"
+
+    data_end = None
+    odds = data_root / "api-football-odds" / "odds.sqlite3"
+    if odds.exists():
+        con = ro(odds)
+        try:
+            data_end = con.execute("SELECT MAX(fetched_at) FROM observations").fetchone()[0]
+        finally:
+            con.close()
+
     imports = sorted((data_root / "_import").glob("import_*.json")) if (data_root / "_import").exists() else []
     if imports:
         rec = json.loads(imports[-1].read_text(encoding="utf-8"))
         add("Paczka od Oskara", "Plik", Path(str(rec.get("source_zip") or rec.get("source") or "")).name)
-        add("Paczka od Oskara", "Przyjęta", rec.get("imported_at_local"))
+        add("Paczka od Oskara", "Dane kończą się", pl_time(data_end), fresh(data_end),
+            "najnowsze kursy w paczce; potem zbieranie przeszło na serwer Oskara")
+        unpacked = rec.get("imported_at_local")
+        try:
+            unpacked = datetime.strptime(unpacked, "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y, %H:%M")
+        except (TypeError, ValueError):
+            pass
+        add("Paczka od Oskara", "Rozpakowana u nas", unpacked)
         if rec.get("files"):
-            add("Paczka od Oskara", "Pliki", f"{int(rec['files']):,}".replace(",", " "))
+            add("Paczka od Oskara", "Pliki", pl_int(rec["files"]))
         if rec.get("extracted_bytes"):
-            add("Paczka od Oskara", "Rozmiar", f"{rec['extracted_bytes'] / 1e9:.2f} GB".replace(".", ","))
+            size = rec["extracted_bytes"]
+            add("Paczka od Oskara", "Rozmiar", f"{size / 1e9:.2f} GB ({size / 2**30:.2f} GiB)".replace(".", ","))
         if rec.get("zip_sha256") or rec.get("source_sha256"):
             add("Paczka od Oskara", "Suma kontrolna (sha256)", (rec.get("zip_sha256") or rec.get("source_sha256"))[:16] + "…")
 
@@ -488,55 +581,72 @@ def snapshot_rows(data_root: Path, out_root: Path) -> list[dict[str, Any]]:
             built = con.execute("SELECT built_at FROM build_info").fetchone()
         finally:
             con.close()
-        age = (datetime.now(timezone.utc) - pd.Timestamp(last).to_pydatetime()).days if last else None
-        add("Historia meczów", "Mecze", f"{n:,}".replace(",", " "))
-        add("Historia meczów", "Rozgrywki", leagues, uwagi="47 lig europejskich, 26 spoza Europy, 16 pucharów")
+        add("Historia meczów", "Mecze", pl_int(n))
+        add("Historia meczów", "Rozgrywki", leagues, uwagi=f"z modelami: {len(lm.MODELLED_LEAGUE_IDS)}")
         add("Historia meczów", "Sezony", f"{s0}–{s1}")
-        add("Historia meczów", "Ostatni zakończony mecz", iso(last), "problem" if age is not None and age > 3 else "ok",
-            f"{age} dni temu; fit modeli wymaga historii nie starszej niż 3 dni" if age is not None else None)
-        add("Historia meczów", "Tabele zbudowane", iso(built[0]) if built else None)
+        add("Historia meczów", "Ostatni zakończony mecz", pl_time(last), "problem" if fresh(last) != "ok" else "ok",
+            "nasz nocny fit modeli pomija historię starszą niż 3 dni, więc modele stoją do nowszej paczki")
+        add("Historia meczów", "Tabele zbudowane", pl_time(built[0]) if built else None, fresh(built[0]) if built else "uwaga")
 
-    odds = data_root / "api-football-odds" / "odds.sqlite3"
     if odds.exists():
         con = ro(odds)
         try:
-            scans, first, last = con.execute("SELECT COUNT(*), MIN(started_at), MAX(started_at) FROM scans").fetchone()
+            runs, stored, first, last = con.execute(
+                "SELECT COUNT(*), SUM(quotes_changed > 0), MIN(started_at), MAX(started_at) FROM scans").fetchone()
+            hours = [int(h) for (h,) in con.execute("SELECT DISTINCT CAST(strftime('%H', started_at) AS INT) FROM scans WHERE quotes_changed > 0")]
             fixtures, leagues = con.execute("SELECT COUNT(*), COUNT(DISTINCT league_id) FROM fixtures").fetchone()
-            books = con.execute("SELECT COUNT(DISTINCT bookmaker_id) FROM observations").fetchone()[0]
+            modelled = con.execute(
+                f"SELECT COUNT(*) FROM fixtures WHERE league_id IN ({','.join(str(int(i)) for i in lm.MODELLED_LEAGUE_IDS)})").fetchone()[0]
+            books = con.execute("SELECT bookmaker_id, COUNT(*) FROM quotes GROUP BY bookmaker_id").fetchall()
             pinnacle = con.execute("SELECT COUNT(DISTINCT fixture_id) FROM observations WHERE bookmaker_id = 4").fetchone()[0]
             quotes = con.execute("SELECT COALESCE(MAX(rowid), 0) FROM quotes").fetchone()[0]
+            lead = pd.read_sql_query(
+                "SELECT f.fixture_id, f.kickoff_utc, MAX(o.fetched_at) AS last_seen FROM fixtures f "
+                "JOIN observations o ON o.fixture_id = f.fixture_id AND o.fetched_at < f.kickoff_utc "
+                "WHERE f.kickoff_utc <= (SELECT MAX(fetched_at) FROM observations) GROUP BY f.fixture_id", con)
         finally:
             con.close()
-        add("Kursy (archiwum Oskara)", "Pobrania", scans, uwagi=f"{iso(first)} – {iso(last)}")
-        add("Kursy (archiwum Oskara)", "Mecze z kursami", f"{fixtures:,}".replace(",", " "), uwagi=f"{leagues} rozgrywek")
-        add("Kursy (archiwum Oskara)", "Zapisane zmiany kursów", f"{quotes:,}".replace(",", " "))
-        add("Kursy (archiwum Oskara)", "Bukmacherzy", books)
+        add("Kursy (archiwum Oskara)", "Uruchomienia kolektora", runs, uwagi=f"{int(stored or 0)} zapisało kursy; {pl_time(first)} – {pl_time(last)}")
+        if hours:
+            add("Kursy (archiwum Oskara)", "Godziny pracy kolektora (UTC)", f"{min(hours)}–{max(hours)}", "problem",
+                "komputer Oskara nie chodził całą dobę: brak kursów w nocy i rano")
+        add("Kursy (archiwum Oskara)", "Mecze z kursami", pl_int(fixtures),
+            uwagi=f"{leagues} rozgrywek; w ligach z modelami {modelled}")
+        add("Kursy (archiwum Oskara)", "Zapisane zmiany kursów", pl_int(quotes))
+        real = sum(1 for _, n in books if n >= 1000)
+        add("Kursy (archiwum Oskara)", "Bukmacherzy z danymi", real, uwagi=f"{len(books)} z co najmniej jednym kursem")
         add("Kursy (archiwum Oskara)", "Mecze z Pinnacle", pinnacle, uwagi="Pinnacle wyznacza uczciwą cenę")
-        add("Kursy (archiwum Oskara)", "Godziny pracy kolektora", "ok. 15–21 UTC", "problem",
-            "komputer Oskara nie chodził całą dobę: przerwy po 18–20 h, mało kursów tuż przed meczem")
+        if len(lead):
+            gap = (pd.to_datetime(lead["kickoff_utc"], utc=True) - pd.to_datetime(lead["last_seen"], utc=True)).dt.total_seconds() / 3600
+            add("Kursy (archiwum Oskara)", "Kurs w ostatniej godzinie przed meczem", f"{(gap <= 1).mean():.0%}",
+                "uwaga" if (gap <= 1).mean() < 0.9 else "ok",
+                f"{len(lead)} meczów rozegranych w czasie zbierania; {(gap > 12).mean():.0%} miało ostatni kurs ponad 12 h przed startem")
 
-    directory = data_root / "fixture-directory" / "directory.sqlite3"
-    if directory.exists():
+    for label, directory in (("Kalendarz i wyniki (Oskar)", data_root / "fixture-directory" / "directory.sqlite3"),
+                             ("Kalendarz i wyniki (nasz)", out_root / "fixture-directory" / "directory.sqlite3")):
+        if not directory.exists():
+            continue
         con = ro(directory)
         try:
-            n, finished, fetched = con.execute(
-                "SELECT COUNT(*), SUM(status_short IN ('FT','AET','PEN')), MAX(fetched_at) FROM fixtures"
+            n, finished, fetched, k0, k1 = con.execute(
+                "SELECT COUNT(*), SUM(status_short IN ('FT','AET','PEN')), MAX(fetched_at), MIN(kickoff_utc), MAX(kickoff_utc) FROM fixtures"
             ).fetchone()
             stats = con.execute("SELECT COUNT(DISTINCT fixture_id) FROM fixture_stats").fetchone()[0]
         finally:
             con.close()
-        add("Kalendarz i wyniki", "Mecze w kalendarzu", f"{n:,}".replace(",", " "), uwagi=f"ostatnie odświeżenie {iso(fetched)}")
-        add("Kalendarz i wyniki", "Mecze z wynikiem", f"{int(finished or 0):,}".replace(",", " "))
-        add("Kalendarz i wyniki", "Mecze ze statystykami", stats, "problem" if stats < 100 else "ok",
+        add(label, "Mecze w kalendarzu", pl_int(n), fresh(fetched),
+            f"starty {pl_time(k0)} – {pl_time(k1)}; ostatnie odświeżenie {pl_time(fetched)}")
+        add(label, "Mecze z wynikiem", pl_int(int(finished or 0)))
+        add(label, "Mecze ze statystykami", stats, "problem" if stats < 100 else "ok",
             "bez statystyk nie da się rozliczyć rożnych i kartek")
 
     fits = sorted((data_root / "scanner" / "model_cache" / "fits").glob("*/manifest.json"))
     if fits:
         manifest = json.loads(fits[-1].read_text(encoding="utf-8"))
         fit_as_of = pd.Timestamp(manifest.get("fit_as_of"))
-        add("Modele", "Ostatni fit", iso(fit_as_of), "problem",
-            f"skaner używa fitu do 24 h, czyli do {iso(fit_as_of + pd.Timedelta(hours=24))}")
-        add("Modele", "Mecze w treningu", f"{int(manifest.get('n_train_matches') or 0):,}".replace(",", " "),
+        add("Modele", "Ostatni fit", pl_time(fit_as_of), fresh(fit_as_of),
+            f"skaner używa fitu najwyżej 24 h, czyli do {pl_time(fit_as_of + pd.Timedelta(hours=24))}")
+        add("Modele", "Mecze w treningu", pl_int(int(manifest.get("n_train_matches") or 0)),
             uwagi=f"{len(manifest.get('leagues') or {})} lig")
 
     own_odds = out_root / "api-football-odds" / "odds.sqlite3"
@@ -547,12 +657,78 @@ def snapshot_rows(data_root: Path, out_root: Path) -> list[dict[str, Any]]:
             fixtures = con.execute("SELECT COUNT(*) FROM fixtures").fetchone()[0]
         finally:
             con.close()
-        add("Nasze dane (MK2)", "Pobrania kursów", scans, "uwaga" if scans < 10 else "ok", f"ostatnie {iso(last)}; na kluczu Free tylko test")
+        add("Nasze dane (MK2)", "Pobrania kursów", scans, "uwaga" if scans < 10 else "ok",
+            f"ostatnie {pl_time(last)}; na kluczu Free tylko test")
         add("Nasze dane (MK2)", "Mecze z kursami", fixtures)
     own_cache = out_root / "model_cache" / "fits"
-    add("Nasze dane (MK2)", "Własny fit modeli", "jest" if any(own_cache.glob("*/manifest.json")) else "brak",
-        "ok" if any(own_cache.glob("*/manifest.json")) else "uwaga", "czeka na świeżą historię")
+    has_fit = any(own_cache.glob("*/manifest.json"))
+    add("Nasze dane (MK2)", "Własny fit modeli", "jest" if has_fit else "brak", "ok" if has_fit else "uwaga",
+        None if has_fit else "czeka na historię nie starszą niż 3 dni")
     return rows
+
+
+# --------------------------------------------------------------------------- summary of distinct bets
+
+SETTLED_FIRST = {"no_result": 1, "open": 2}
+
+
+def _best(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Of several copies of one bet (other configs or registers), the one with a result if any has it."""
+    return min(rows, key=lambda r: SETTLED_FIRST.get(r["wynik_kod"], 0))
+
+
+def summarize(source: Source | None, tables: dict[str, list[dict[str, Any]]], loose_keys: set) -> dict[str, Any]:
+    """Headline figures of one source (or of all, ``source=None``) counted over DISTINCT bets.
+
+    The same bet appears under several configs of one register and in several registers (Oskar's live and
+    offline registers share a scan, both MK2 replays share their singles), so a plain sum of the experiment rows
+    would count it more than once.  A single is one (bookmaker, leg); a coupon is one coupon id; a scan is one
+    (scan id, config).  Of the copies of one bet, a settled one wins.
+    """
+    sid = source.id if source else "razem"
+    pick = (lambda r: r["zrodlo_id"] == sid) if source else (lambda r: True)
+    scans = {(s["skan"], s["config_id"]): s for s in tables["przebiegi"] if pick(s)}
+    singles: dict[tuple, list[dict[str, Any]]] = {}
+    for s in tables["single"]:
+        if pick(s):
+            singles.setdefault((s["bukmacher"], s["leg_key"]), []).append(s)
+    coupons: dict[str, list[dict[str, Any]]] = {}
+    for c in tables["kupony"]:
+        if pick(c):
+            coupons.setdefault(c["kupon"], []).append(c)
+    one_single = [_best(v) for v in singles.values()]
+    one_coupon = [_best(v) for v in coupons.values()]
+
+    def passes(rows: list[dict[str, Any]], codes: tuple[str, ...], loose: bool | None) -> bool:
+        return any(r["przechodzi_kod"] in codes and (loose is None or ((r["zrodlo_id"], r["config_id"]) in loose_keys) == loose)
+                   for r in rows)
+
+    times = [s["as_of"] for s in scans.values() if s["as_of"]]
+    return {
+        "zrodlo_id": sid,
+        "zrodlo": source.label if source else "Wszystkie źródła",
+        "kto": source.owner if source else "Oskar + MK2",
+        "przebiegi": len(scans),
+        "przebiegi_pelne": sum(1 for k in scans if (scans[k]["zrodlo_id"], k[1]) not in loose_keys),
+        "przebiegi_luzne": sum(1 for k in scans if (scans[k]["zrodlo_id"], k[1]) in loose_keys),
+        "eksperymenty": sum(1 for e in tables["eksperymenty"] if pick(e)),
+        "konfiguracje": len({e["config_id"] for e in tables["eksperymenty"] if pick(e)}),
+        "od": min(times, default=None),
+        "do": max(times, default=None),
+        "single": len(one_single),
+        "single_rozliczone": sum(1 for s in one_single if s["wynik_kod"] not in ("open", "no_result")),
+        "single_bez_wyniku": sum(1 for s in one_single if s["wynik_kod"] == "no_result"),
+        "kupony": len(one_coupon),
+        "kupony_ok_t088_pelne": sum(1 for v in coupons.values() if passes(v, ("t088",), False)),
+        "kupony_ok_t088_luzne": sum(1 for v in coupons.values() if passes(v, ("t088",), True) and not passes(v, ("t088",), False)),
+        "kupony_ok_t094": sum(1 for v in coupons.values() if passes(v, ("t088", "t094"), None)),
+        "kupony_za_niski_kurs": sum(1 for c in one_coupon if not c["zysk_mozliwy_t088"]),
+        "kupony_rozliczone": sum(1 for c in one_coupon if c["wynik_kod"] not in ("open", "no_result")),
+        "kupony_wygrane": sum(1 for c in one_coupon if c["wynik_kod"] == "win"),
+        "kupony_przegrane": sum(1 for c in one_coupon if c["wynik_kod"] in ("loss", "half_loss")),
+        "kupony_bez_wyniku": sum(1 for c in one_coupon if c["wynik_kod"] == "no_result"),
+        "kupony_przed_meczem": sum(1 for c in one_coupon if c["wynik_kod"] == "open"),
+    }
 
 
 # --------------------------------------------------------------------------- main
@@ -569,6 +745,7 @@ def main(argv: list[str] | None = None) -> int:
     dest = Path(args.dest) if args.dest else out_root / "dashboard"
     dest.mkdir(parents=True, exist_ok=True)
 
+    now = pd.Timestamp.now(tz="UTC")
     sources = discover(data_root, out_root)
     names = Names(
         [out_root / "fixture-directory" / "directory.sqlite3", data_root / "fixture-directory" / "directory.sqlite3"],
@@ -578,40 +755,14 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="mk2-dash-") as tmp:
         for source in sources:
             reg = open_copy(source, Path(tmp))
-            part = export_source(source, reg, names)
+            part = export_source(source, reg, names, now)
             for key, rows in part.items():
                 tables[key].extend(rows)
             print(f"{source.id}: scans {len(part['przebiegi'])}, configs {len(part['eksperymenty'])}, "
                   f"singles {len(part['single'])}, coupons {len(part['kupony'])}")
 
     loose_keys = {(e["zrodlo_id"], e["config_id"]) for e in tables["eksperymenty"] if e["luzne"]}
-    summary = []
-    for source in [*sources, None]:
-        sid = source.id if source else "razem"
-        ex = [e for e in tables["eksperymenty"] if source is None or e["zrodlo_id"] == sid]
-        sc = [s for s in tables["przebiegi"] if source is None or s["zrodlo_id"] == sid]
-        summary.append({
-            "zrodlo_id": sid,
-            "zrodlo": source.label if source else "Wszystkie źródła",
-            "kto": source.owner if source else "Oskar + MK2",
-            "przebiegi": len(sc),
-            "eksperymenty": len(ex),
-            "od": min((s["as_of"] for s in sc if s["as_of"]), default=None),
-            "do": max((s["as_of"] for s in sc if s["as_of"]), default=None),
-            "single": sum(e["single"] for e in ex),
-            "single_rozliczone": sum(e["single_rozliczone"] for e in ex),
-            "kupony": sum(e["kupony"] for e in ex),
-            "kupony_ok_t088": sum(e["kupony_ok_t088"] for e in ex),
-            "kupony_ok_t088_pelne": sum(e["kupony_ok_t088"] for e in ex if not e["luzne"]),
-            "kupony_ok_t088_luzne": sum(e["kupony_ok_t088"] for e in ex if e["luzne"]),
-            "kupony_rozliczone": sum(e["kupony_rozliczone"] for e in ex),
-            "kupony_wygrane": sum(e["kupony_wygrane"] for e in ex),
-            "kupony_przegrane": sum(e["kupony_przegrane"] for e in ex),
-            "kupony_otwarte": sum(e["kupony_otwarte"] for e in ex),
-            "przebiegi_z_kuponem_t088": sum(1 for s in sc if (s["kupony_ok_t088"] or 0) > 0),
-            "przebiegi_pelne": sum(1 for s in sc if (s["zrodlo_id"], s["config_id"]) not in loose_keys),
-            "przebiegi_luzne": sum(1 for s in sc if (s["zrodlo_id"], s["config_id"]) in loose_keys),
-        })
+    summary = [summarize(source, tables, loose_keys) for source in [*sources, None]]
     status = json.loads(Path(args.status).read_text(encoding="utf-8"))
     plan = [{k: v for k, v in item.items()} | {"status_pl": {
         "gotowe": "gotowe", "w_toku": "w toku", "brakuje": "brakuje", "decyzja": "do decyzji", "problem": "problem"}.get(item["status"], item["status"])}
@@ -619,7 +770,7 @@ def main(argv: list[str] | None = None) -> int:
     datasets = {
         **tables,
         "podsumowanie": summary,
-        "dane": snapshot_rows(data_root, out_root),
+        "dane": snapshot_rows(data_root, out_root, now),
         "plan": plan,
     }
     manifest = {"generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "status_updated": status.get("updated"),

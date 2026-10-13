@@ -43,6 +43,11 @@ Najważniejsze ograniczenia:
 - Statystyk meczów jest za mało, by rozliczać rożne i kartki.
 - 5 meczów z 30.09–1.10 jest w surowych plikach, ale nie w tabeli historii; brak
   J1 2026/27; football-data bez sezonu 2026/27 dla głównych lig (brak u źródła).
+- Nocny fit w folderze MK2 bierze plik hiperparametrów z paczki; bez niego
+  `live_models` wróciłby do wyborów z baz badawczych (`predictions\*.sqlite`),
+  różnych w 5 ustawieniach. Dlatego te bazy na razie zostają w paczce.
+- `KATALOG-DANYCH.md` w repo opisuje inny zbiór danych (katalog z 5.09, inna
+  maszyna); ten dokument go zastępuje dla danych MK2.
 
 ## 3. Nowa paczka od Oskara
 
@@ -59,12 +64,24 @@ tymczasowego, sprawdza rozmiary i sumy CRC, odkłada zastępowane pliki do
 spoza paczki i odmawia, gdy baza jest otwarta. Zapis importu:
 `Model-Buk-Data\_import\import_<czas>.json`. Indeks `-shm` jest pomijany.
 
+Zabezpieczenia (paczka z serwera Oskara może być uboższa od obecnej: kursy
+trzymane 7 dni, historia bez tabel zawodników, mniej fitów):
+
+- import odmawia, gdy w którejś zmienionej bazie ubyłoby ponad 1% wierszy
+  którejś tabeli, i wypisuje, co by zniknęło; `--allow-shrink` importuje mimo to
+  (zastąpione pliki trafiają do kopii). Przed takim importem warto zarchiwizować
+  obecne kursy (`api-football-odds`), fit `scanner\model_cache\fits\20260930`
+  z boosterami i plikiem hiperparametrów oraz rejestry Oskara;
+- odmawia, gdy zip ma niepusty `-wal` (paczka spakowana w trakcie zapisu);
+- plik o tym samym rozmiarze i czasie przesuniętym dokładnie o godzinę (zmiana
+  czasu 25.10) jest porównywany sumą CRC, a nie kopiowany od nowa.
+
 ## 4. Skaner na tych danych
 
 `scripts/mk2/scan_mk2.py` uruchamia skaner Oskara z zapisem do folderu MK2:
 
 ```
-.venv\Scripts\python scripts\mk2\scan_mk2.py --as-of 2026-09-30T18:00:00Z                       # powtórka, ustawienia Oskara
+.venv\Scripts\python scripts\mk2\scan_mk2.py --as-of 2026-09-30T18:00:00Z                       # powtórka, ustawienia domyślne
 .venv\Scripts\python scripts\mk2\scan_mk2.py --as-of 2026-09-30T18:00:00Z --profile config\mk2\profile_band_2leg.json
 .venv\Scripts\python scripts\mk2\compare_replays.py <MK2>\scanner\<folder>\scanner.sqlite        # tabela porównawcza
 ```
@@ -74,16 +91,27 @@ odległych o ponad 48 h):
 
 | Okno (UTC) | Modele |
 |---|---|
-| 29.09 15:00 – ok. 30.09 00:00 | brak (fit jest późniejszy) |
-| 30.09 16:10 – 23:05 | tak |
-| 1.10 16:12 – ok. 21:00 | nie (fit starszy niż 24 h) |
+| 29.09 15:00 – ok. 30.09 02:00 | brak (fit jest późniejszy) |
+| 30.09 16:10 – 23:05 | tak, wszystkie mecze |
+| 30.09 23:05 – 1.10 ok. 02:00 | tak, ale tylko mecze odległe o ponad 48 h |
+| 1.10 16:20 – ok. 23:20 | nie (fit starszy niż 24 h) |
+
+Granice wyznaczyła symulacja co 10 minut, zgodna z naszymi powtórkami co do
+jednego meczu. Dwie rzeczy w powtórkach nie są „z tamtej chwili”: status meczu
+skaner bierze z kalendarza z 1.10 17:19 (13–14 meczów, później przełożonych,
+wypada z prognoz), a pomiar odbiegających rodzajów zakładów rejestr trzyma przez
+24 h, więc wynik zależy od kolejności przebiegów. Porównywane konfiguracje
+puszczamy więc w osobnych rejestrach, w tych samych momentach i w tej samej
+kolejności. Dodatkowe okno z modelami dałby fit „wstecz” do osobnego folderu
+(`fit_live_models.py --cache-dir ... fit --as-of 2026-09-29T15:00Z`, bez API, ok.
+1 min), ale byłaby to rekonstrukcja, której system na żywo nie miał.
 
 Rejestr przyjmuje jeden przebieg na moment decyzji, dlatego każda konfiguracja
 ma swój folder (domyślnie `replay-<config_id>`).
 
 ### Wyniki powtórek (30.09 16:30, 18:00, 20:30, 22:30, 1.10 17:30, rozliczenie 1.10 19:40)
 
-| | Ustawienia Oskara | 2 nogi, kurs łączny ≤ 2,00 |
+| | Ustawienia domyślne (Oskar, 1.10: limity kursu 2,00 / 3,00) | 2 nogi, kurs łączny ≤ 2,00 |
 |---|---:|---:|
 | Nogi z wartością bez podatku (na przebieg) | 84 / 60 / 51 / 51 / 91 | to samo |
 | Nogi z wartością przy podatku 12% | 0 | 0 |
@@ -93,6 +121,11 @@ ma swój folder (domyślnie `replay-<config_id>`).
 | Mediana przewagi wiarygodnych nóg | 4,2% | 4,2% |
 | Nogi z przewagą ≥ 6,6% (próg zera kuponu z 2 nóg) | 16% | 16% |
 | … na dolnej granicy przedziału | 0% | 0% |
+
+Skąd bierze się wartość: tylko ok. 5,5% nóg z wartością w oknie Oskara to ligi
+objęte modelami (73 ligi), a ok. 30% to rynki płynne. Reszta to puchary,
+rozgrywki młodzieżowe i kobiece, niższe ligi, gdzie uczciwa cena jest najmniej
+pewna. Nawet świeże modele dotknęłyby więc niewielkiej części listy.
 
 Wniosek: na tych danych skaner nie znajduje kuponu, który by się opłacał przy
 podatku 12%. Ograniczenie kuponu do 2 nóg i kursu 2,00 tego nie zmienia; daje

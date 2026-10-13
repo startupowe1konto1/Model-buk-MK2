@@ -13,7 +13,8 @@ A replay (``--as-of``) reads everything from the snapshot.  A live run (``--live
 fixture directory that *we* keep current (``<out-root>\\api-football-odds``, ``<out-root>\\fixture-directory``,
 filled by ``run_job.ps1 -Job odds_collector`` and by the scanner's own calendar refresh), and the history and
 pre-match archive from the snapshot.  The model cache is ``<out-root>\\model_cache`` once our nightly fit has written
-a fit there, else the snapshot's.
+a fit there that is newer than the
+snapshot's (as of the decision time), else the snapshot's.
 
 Value definition: ``ScanConfig`` defaults (Oskar's live experiment) unless ``--profile`` (a JSON object of
 ``ScanConfig`` fields) and/or ``--set field=value`` change it.  Every change gives another ``config_id``, so it is
@@ -45,6 +46,8 @@ import traceback
 from dataclasses import fields
 from datetime import datetime, timezone
 from pathlib import Path
+
+import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 APP = HERE.parent.parent
@@ -84,6 +87,20 @@ def config_overrides(profile: str | None, assignments: list[str]) -> dict:
     return overrides
 
 
+def newest_fit(cache_dir: Path, until: pd.Timestamp) -> pd.Timestamp:
+    """``fit_as_of`` of the newest complete fit in a model cache made at or before ``until`` (minimum if none)."""
+    best = pd.Timestamp.min.tz_localize("UTC")
+    for manifest in cache_dir.glob("fits/*/manifest.json"):
+        try:
+            stamp = pd.Timestamp(json.loads(manifest.read_text(encoding="utf-8"))["fit_as_of"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+        if best < stamp <= until:
+            best = stamp
+    return best
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     when = parser.add_mutually_exclusive_group()
@@ -117,12 +134,15 @@ def build_run(args: argparse.Namespace) -> tuple[ScanConfig, RunSettings, str]:
     config = ScanConfig(**config_overrides(args.profile, args.set))
     name = args.name or (f"replay-{config.config_id}" if args.as_of else "live" if args.live else "now")
     own_cache = out_root / "model_cache"
+    snapshot_cache = data_root / "scanner" / "model_cache"
     if args.model_cache:
         model_cache = Path(args.model_cache)
-    elif any(own_cache.glob("fits/*/manifest.json")):
-        model_cache = own_cache
     else:
-        model_cache = None  # the snapshot's scanner\model_cache
+        # the cache with the newest fit usable at the decision time: ours once our nightly fit runs, the
+        # snapshot's when a newer snapshot brings a fresher fit than ours
+        until = pd.Timestamp(args.as_of) if args.as_of else pd.Timestamp.now(tz="UTC")
+        until = until.tz_localize("UTC") if until.tzinfo is None else until.tz_convert("UTC")
+        model_cache = own_cache if newest_fit(own_cache, until) > newest_fit(snapshot_cache, until) else None
     settings = RunSettings(
         data_root=data_root,
         odds_db=out_root / "api-football-odds" / "odds.sqlite3" if args.live else None,

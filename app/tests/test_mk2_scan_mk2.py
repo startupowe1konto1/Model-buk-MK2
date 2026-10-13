@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -60,10 +61,23 @@ def test_live_keeps_its_own_odds_and_calendar(tmp_path):
         assert path.is_relative_to(out)
 
 
-def test_own_model_cache_wins_once_it_has_a_fit(tmp_path):
-    out = tmp_path / "Model-Buk-Data-MK2"
-    manifest = out / "model_cache" / "fits" / "20261013" / "manifest.json"
+def write_fit(cache: Path, day: str, fit_as_of: str) -> None:
+    manifest = cache / "fits" / day / "manifest.json"
     manifest.parent.mkdir(parents=True)
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"fit_as_of": fit_as_of}), encoding="utf-8")
+
+
+def test_the_newest_usable_fit_wins(tmp_path):
+    data, out = tmp_path / "Model-Buk-Data", tmp_path / "Model-Buk-Data-MK2"
+    write_fit(data / "scanner" / "model_cache", "20260930", "2026-09-30T16:01:42Z")
+    write_fit(out / "model_cache", "20261013", "2026-10-13T03:00:00Z")
+    # live now: our fit is newer than the snapshot's
     _, settings, _, _, _ = run_for(tmp_path, "--live")
     assert Path(settings.model_cache_dir) == out / "model_cache"
+    # a replay before our fit existed uses the snapshot's fit
+    _, settings, _, _, _ = run_for(tmp_path, "--as-of", "2026-09-30T18:00:00Z")
+    assert Path(settings.model_cache_dir) == data / "scanner" / "model_cache"
+    # a newer snapshot brings a fresher fit than ours: it wins
+    write_fit(data / "scanner" / "model_cache", "20261020", "2026-10-20T03:00:00Z")
+    _, settings, _, _, _ = run_for(tmp_path, "--as-of", "2026-10-20T12:00:00Z")
+    assert Path(settings.model_cache_dir) == data / "scanner" / "model_cache"

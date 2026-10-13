@@ -192,11 +192,13 @@ Wnioski:
    uruchamia u nas tylko: kolektor kursów co 2 h (`--days-ahead 1
    --max-requests 60`, ≤ 720/dzień), kursy zamknięcia co 15 min
    (`--max-requests 15`) i skaner co 30 min (1–3 zapytania na kalendarz,
-   do 40 na rozliczenia). Kolektora przedmeczowego, odświeżania sezonu,
-   pobierania historii i nocnego fitu modeli u nas nie uruchamiamy: te dane
-   utrzymuje instancja Oskara, a tabele (`history.sqlite`, `model_cache`)
-   bierzemy od niego paczką danych (13.10: pełny `Model-Buk-Data`, przyjmowany przez
-   `scripts/mk2/import_data.py`; `seed.tar.gz` jest w niej zawarty).
+   do 40 na rozliczenia), a o 3:00 nocny fit modeli (bez API, do
+   `Model-Buk-Data-MK2\model_cache`, z hiperparametrami z paczki; pomijany, gdy
+   najnowszy mecz w historii ma więcej niż 3 dni). Kolektora przedmeczowego,
+   odświeżania sezonu i pobierania historii u nas nie uruchamiamy: historię
+   bierzemy z paczek od Oskara (13.10: pełny `Model-Buk-Data`, przyjmowany przez
+   `scripts/mk2/import_data.py`; `seed.tar.gz` jest w niej zawarty). Gdyby trzeba
+   było odświeżyć ją samemu, to tylko do kopii w folderze MK2, nigdy do paczki.
    Profil `Full` (własny klucz Pro) włącza wszystkie zadania jak u Oskara.
 4. Sieć: Avast podmienia certyfikaty TLS; venv ma włączony `truststore`
    (§0). Bez tego każdy skrypt kończy się `CERTIFICATE_VERIFY_FAILED`.

@@ -69,7 +69,7 @@
 <div class="mk" id="mk">
   <header class="mk-head" id="naglowek">
     <h1>Model Buk MK2</h1>
-    <p class="mk-takeaway" id="wniosek">W <b data-source="podsumowanie" data-field="przebiegi_pelne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> przebiegach skanera z pełnymi zabezpieczeniami przy podatku 12% przeszło <b data-source="podsumowanie" data-field="kupony_ok_t088_pelne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> kuponów. Wszystkie <b data-source="podsumowanie" data-field="kupony_ok_t088_luzne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> kupony z 12% pochodzą z <b data-source="podsumowanie" data-field="przebiegi_luzne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> wczesnych przebiegów Oskara z luźnym limitem przewagi (20%), który potem uznał za źródło błędów. Wartość pojawia się tylko bez podatku.</p>
+    <p class="mk-takeaway" id="wniosek">W <b data-source="podsumowanie" data-field="przebiegi_pelne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> przebiegach skanera z pełnymi zabezpieczeniami (Oskara i naszych powtórkach) przy podatku 12% przeszło <b data-source="podsumowanie" data-field="kupony_ok_t088_pelne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> kuponów. Wszystkie <b data-source="podsumowanie" data-field="kupony_ok_t088_luzne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> kupony przechodzące przy 12% pochodzą z wczesnych przebiegów Oskara z luźnym limitem przewagi 20% (takich przebiegów było <b data-source="podsumowanie" data-field="przebiegi_luzne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b>); później sam uznał te przewagi za błędy danych. Wartość pojawia się tylko bez podatku.</p>
   </header>
 
   <div class="mk-bar">
@@ -98,19 +98,24 @@
         <span class="mk-sub">oraz <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_ok_t088_luzne" data-where="zrodlo_id=razem">—</b> z luźnym limitem przewagi</span>
       </div>
       <div class="mk-card" id="kpi-kupony">
-        <span class="mk-label">Zaproponowane kupony</span>
+        <span class="mk-label">Wskazane kupony (bez powtórzeń)</span>
         <span class="mk-big dash-skeleton" data-source="podsumowanie" data-field="kupony" data-where="zrodlo_id=razem">—</span>
-        <span class="mk-sub">otwarte <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_otwarte" data-where="zrodlo_id=razem">—</b></span>
+        <span class="mk-sub">bez wyniku w danych <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_bez_wyniku" data-where="zrodlo_id=razem">—</b>, przed meczem <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_przed_meczem" data-where="zrodlo_id=razem">—</b></span>
       </div>
       <div class="mk-card" id="kpi-wynik">
         <span class="mk-label">Rozliczone kupony: wygrane / przegrane</span>
         <span class="mk-big"><span class="dash-skeleton" data-source="podsumowanie" data-field="kupony_wygrane" data-where="zrodlo_id=razem">—</span> / <span class="dash-skeleton" data-source="podsumowanie" data-field="kupony_przegrane" data-where="zrodlo_id=razem">—</span></span>
-        <span class="mk-sub">rozliczonych <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_rozliczone" data-where="zrodlo_id=razem">—</b></span>
+        <span class="mk-sub">rozliczonych <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_rozliczone" data-where="zrodlo_id=razem">—</b>; przegrana liczy się od pierwszej przegranej nogi, wygrana po wszystkich</span>
       </div>
       <div class="mk-card" id="kpi-single">
-        <span class="mk-label">Single: nogi z wartością bez podatku</span>
+        <span class="mk-label">Nogi z wartością bez podatku (bez powtórzeń)</span>
         <span class="mk-big dash-skeleton" data-source="podsumowanie" data-field="single" data-where="zrodlo_id=razem">—</span>
         <span class="mk-sub">rozliczonych <b class="dash-skeleton" data-source="podsumowanie" data-field="single_rozliczone" data-where="zrodlo_id=razem">—</b></span>
+      </div>
+      <div class="mk-card" id="kpi-kurs">
+        <span class="mk-label">Kupony z kursem poniżej 1,14</span>
+        <span class="mk-big dash-skeleton" data-source="podsumowanie" data-field="kupony_za_niski_kurs" data-where="zrodlo_id=razem">—</span>
+        <span class="mk-sub">przy podatku 12% nie dadzą zysku nawet po trafieniu</span>
       </div>
       <div class="mk-card" id="kpi-przebiegi">
         <span class="mk-label">Przebiegi skanera</span>
@@ -121,8 +126,8 @@
 
     <div class="mk-grid">
       <div class="mk-card" id="wykres-zysk">
-        <h2>Wynik na papierze: kupony</h2>
-        <p class="mk-note">Suma zysku przy stawce 1 na każdy rozliczony kupon, przy podatku 12% i bez podatku. Małe próby (kilkanaście–kilkadziesiąt kuponów): to opis, nie dowód.</p>
+        <h2>Wynik na papierze: kupony, gdyby postawić każdy</h2>
+        <p class="mk-note">Suma przy stawce 1 na każdy rozliczony kupon eksperymentu. Skaner wybrał je bez podatku; seria z podatkiem 12% pokazuje, co dałyby w Polsce. Przegrana liczy się od pierwszej przegranej nogi, wygrana dopiero po rozliczeniu wszystkich, więc przy nogach bez wyniku obraz jest zaniżony. Małe próby: to opis, nie dowód.</p>
         <div class="mk-chart" id="ch-zysk" data-source="eksperymenty"></div>
       </div>
       <div class="mk-card" id="wykres-przewaga">
@@ -160,7 +165,8 @@
               <option value="">wszystkie</option>
               <option value="win">wygrane</option>
               <option value="loss">przegrane</option>
-              <option value="open">otwarte</option>
+              <option value="no_result">bez wyniku w danych</option>
+              <option value="open">przed meczem</option>
             </select>
           </label>
           <label for="f-podatek">Przechodzi przy
@@ -174,7 +180,7 @@
           <input class="mk-ctrl" id="q-kupony" type="search" placeholder="Szukaj meczu, bukmachera…" aria-label="Szukaj w kuponach">
         </div>
       </div>
-      <p class="mk-note">Każdy kupon raz, z pierwszego przebiegu, w którym skaner go wskazał. Zysk przy stawce 1. Kliknij wiersz, żeby zobaczyć nogi.</p>
+      <p class="mk-note">Każdy kupon raz na eksperyment, z pierwszego przebiegu, w którym skaner go wskazał: zarówno przechodzące przy podatku, jak i opłacalne tylko bez podatku (kolumna „Przechodzi przy”). Zysk przy stawce 1, gdyby postawić: z podatkiem 12% i bez. Kurs na czerwono: poniżej 1,14, przy 12% nie da zysku nawet po trafieniu. „Bez wyniku w danych” to mecze rozegrane po 1.10, których wyników paczka jeszcze nie ma. Kliknij wiersz, żeby zobaczyć nogi.</p>
       <span class="mk-count" id="n-kupony"></span>
       <div class="mk-wrap">
         <table class="mk-table" id="t-kupony" data-source="kupony" data-row-key="kupon_id">
@@ -189,7 +195,7 @@
             <th data-field="ev_dolne_t088">EV dolne, 12%</th>
             <th data-field="przechodzi">Przechodzi przy</th>
             <th data-field="wynik">Wynik</th>
-            <th data-field="zysk_t088">Zysk, 12%</th>
+            <th data-field="zysk_t088">Zysk z podatkiem 12%</th>
             <th data-field="zysk_t100">Zysk bez podatku</th>
           </tr></thead>
           <tbody></tbody>
@@ -239,13 +245,14 @@
               <option value="">wszystkie</option>
               <option value="win">wygrane</option>
               <option value="loss">przegrane</option>
-              <option value="open">otwarte</option>
+              <option value="no_result">bez wyniku w danych</option>
+              <option value="open">przed meczem</option>
             </select>
           </label>
           <input class="mk-ctrl" id="q-single" type="search" placeholder="Szukaj meczu, ligi, zakładu…" aria-label="Szukaj w singlach">
         </div>
       </div>
-      <p class="mk-note">Pierwsza obserwacja każdej nogi z wartością (kurs powyżej uczciwej ceny z pewnością 95%) w danym eksperymencie. Przy podatku 12% żadna nie przeszłaby jako singiel z pełnymi zabezpieczeniami.</p>
+      <p class="mk-note">Pierwsza obserwacja każdej nogi z wartością (kurs powyżej uczciwej ceny z pewnością 95%, liczone bez podatku) w danym eksperymencie. Ta sama noga u kilku bukmacherów to kilka wierszy. Przy podatku 12% żadna nie przeszłaby jako singiel z pełnymi zabezpieczeniami; kolumna „Zysk z podatkiem 12%” mówi, co dałaby, gdyby ją postawić.</p>
       <span class="mk-count" id="n-single"></span>
       <div class="mk-wrap">
         <table class="mk-table" id="t-single" data-source="single" data-row-key="noga_id">
@@ -261,7 +268,7 @@
             <th data-field="przewaga">Przewaga</th>
             <th data-field="cena_z">Cena z</th>
             <th data-field="wynik">Wynik</th>
-            <th data-field="zysk_t088">Zysk, 12%</th>
+            <th data-field="zysk_t088">Zysk z podatkiem 12%</th>
             <th data-field="clv">CLV</th>
           </tr></thead>
           <tbody></tbody>
@@ -279,19 +286,22 @@
     </div>
     <div class="mk-card">
       <h2>Wszystkie przebiegi</h2>
-      <p class="mk-note">„Model” mówi, czy skaner miał ważne prognozy własnych modeli; bez nich uczciwą cenę bierze tylko z rynku.</p>
+      <p class="mk-note">„Czas decyzji” to moment, za który skaner liczył; przy powtórkach jest symulowany, a kiedy naprawdę je uruchomiono, mówi „Uruchomiony”. Nogi liczą pary bukmacher–zakład, więc ta sama noga wraca w kolejnych przebiegach. „Kupony” to kupony wskazane w tym przebiegu, w podziale na podatek, przy którym przechodzą. „Model”: czy skaner miał ważne prognozy własnych modeli; bez nich uczciwą cenę bierze tylko z rynku.</p>
       <div class="mk-wrap">
         <table class="mk-table" id="t-przebiegi" data-source="przebiegi" data-row-key="scan_id">
           <thead><tr>
             <th data-field="as_of">Czas decyzji</th>
+            <th data-field="rodzaj">Rodzaj</th>
             <th data-field="zrodlo">Źródło</th>
-            <th data-field="config_id">Konfiguracja</th>
+            <th data-field="uruchomiony">Uruchomiony</th>
+            <th data-field="limit_przewagi">Limit przewagi</th>
             <th data-field="mecze">Mecze</th>
             <th data-field="nogi_t100">Nogi bez podatku</th>
             <th data-field="nogi_t094">Nogi, 6%</th>
             <th data-field="nogi_t088">Nogi, 12%</th>
-            <th data-field="kupony_top">Kupony</th>
-            <th data-field="kupony_ok_t088">Kupony, 12%</th>
+            <th data-field="kupony_t088">Kupony przy 12%</th>
+            <th data-field="kupony_t094">Kupony przy 6%</th>
+            <th data-field="kupony_t100">Kupony tylko bez podatku</th>
             <th data-field="model">Model</th>
           </tr></thead>
           <tbody></tbody>
@@ -304,7 +314,7 @@
   <section class="mk-page" id="eksperymenty" role="tabpanel" aria-labelledby="tab-eksperymenty" hidden>
     <div class="mk-card">
       <h2>Eksperymenty</h2>
-      <p class="mk-note">Eksperyment to rejestr plus konfiguracja skanera; każda zmiana progów daje nowy identyfikator i liczy się od zera. Kliknij wiersz, żeby zobaczyć wyniki według skanera.</p>
+      <p class="mk-note">Eksperyment to rejestr plus konfiguracja skanera; każda zmiana progów daje nowy identyfikator i liczy się od zera. Ten sam zakład bywa w kilku eksperymentach (rejestr offline powtarza przebiegi z rejestru na żywo, obie nasze powtórki mają te same nogi), dlatego sumy wierszy są większe niż liczby bez powtórzeń w Przeglądzie. Kliknij wiersz, żeby zobaczyć wyniki według skanera.</p>
       <div class="mk-wrap">
         <table class="mk-table" id="t-eksperymenty" data-source="eksperymenty" data-row-key="eksperyment_id">
           <thead><tr>
@@ -315,11 +325,12 @@
             <th data-field="przebiegi">Przebiegi</th>
             <th data-field="single">Single</th>
             <th data-field="kupony">Kupony</th>
-            <th data-field="kupony_ok_t088">Kupony, 12%</th>
+            <th data-field="kupony_ok_t088">Kupony przy 12%</th>
+            <th data-field="kupony_ok_t094">Kupony przy 6%</th>
             <th data-field="kupony_wygrane">Wygrane</th>
             <th data-field="kupony_przegrane">Przegrane</th>
-            <th data-field="kupony_otwarte">Otwarte</th>
-            <th data-field="zysk_kupony_t088">Zysk kuponów, 12%</th>
+            <th data-field="kupony_bez_wyniku">Bez wyniku</th>
+            <th data-field="zysk_kupony_t088">Zysk kuponów z podatkiem 12%</th>
             <th data-field="zysk_kupony_t100">Zysk bez podatku</th>
             <th data-field="opis">Czym się różni</th>
           </tr></thead>
@@ -329,7 +340,7 @@
     </div>
     <div class="mk-card" id="wyniki-karta">
       <h2 id="wyniki-tytul">Wyniki według skanera</h2>
-      <p class="mk-note">Tabela, którą skaner liczy sam: zakłady wartościowe przy danym podatku, rozliczone, trafienia, zysk na stawkę i CLV. Uwaga: CLV z tych danych jest zawyżone, bo w większości pomiarów kurs zamknięcia to kurs z chwili decyzji (kursów nie zbierano do startu meczu).</p>
+      <p class="mk-note">Tabela, którą skaner liczy sam: zakłady wartościowe przy danym podatku, rozliczone, trafienia, zysk na stawkę i CLV. Uwaga: CLV z tych danych jest zawyżone, bo w większości pomiarów kurs zamknięcia to kurs z chwili decyzji (kursów nie zbierano do startu meczu). Starsze konfiguracje nie dzielą rynków na płynne i słabe, więc nie mają tu wierszy.</p>
       <div class="mk-wrap">
         <table class="mk-table" id="t-wyniki" data-source="wyniki" data-row-key="wynik_id">
           <thead><tr>
@@ -424,7 +435,7 @@
   MK.text = (v) => (dash_(v) || v === "" ? "—" : String(v));
   MK.sign = (v) => (dash_(v) ? "" : v > 0 ? "mk-ok" : v < 0 ? "mk-bad" : "");
 
-  MK.outcomeClass = (code) => ({ win: "mk-ok", half_win: "mk-ok", loss: "mk-bad", half_loss: "mk-bad", push: "mk-muted", void: "mk-muted", open: "mk-muted" }[code] || "");
+  MK.outcomeClass = (code) => ({ win: "mk-ok", half_win: "mk-ok", loss: "mk-bad", half_loss: "mk-bad", push: "mk-muted", void: "mk-muted", open: "mk-warn", no_result: "mk-muted" }[code] || "");
   MK.statusClass = (s) => ({ gotowe: "mk-ok", ok: "mk-ok", w_toku: "mk-warn", uwaga: "mk-warn", brakuje: "mk-bad", problem: "mk-bad", decyzja: "mk-warn" }[s] || "mk-muted");
 
   MK.rows = (id) => { const r = dash.data(id); return r.status === "ok" && Array.isArray(r.data) ? r.data : null; };
@@ -565,7 +576,7 @@
       const p = document.createElement("p"); p.className = "mk-note"; p.textContent = "Brak rozliczonych kuponów w wybranym źródle."; box.append(p); return;
     }
     const W = Math.max(280, box.clientWidth || 320);
-    const series = [{ k: "zysk_kupony_t088", n: "podatek 12%", c: dash.colors[0] }, { k: "zysk_kupony_t100", n: "bez podatku", c: dash.colors[1] }];
+    const series = [{ k: "zysk_kupony_t088", n: "z podatkiem 12%", c: dash.colors[0] }, { k: "zysk_kupony_t100", n: "bez podatku", c: dash.colors[1] }];
     const label = (r) => r.zrodlo.replace(/^MK2 · |^Oskar · /, "") + " · " + r.config_id.slice(0, 5);
     const svg = d3.select(box).append("svg").attr("width", "100%");
     const lw = Math.min(W * 0.48, d3.max(items, (r) => textWidth(svg, label(r))) + 8);
@@ -665,7 +676,7 @@
       .attr("x", (r) => x(r.scan_id) + (x.bandwidth() - bw) / 2).attr("width", bw)
       .attr("y", (r) => y(r.nogi_t100 || 0)).attr("height", (r) => y(0) - y(r.nogi_t100 || 0)).attr("rx", Math.min(4, bw / 2))
       .attr("fill", "var(--cds-chart-muted)")
-      .on("mousemove", (ev, r) => tip.show(ev, [MK.when(r.as_of) + " · " + r.zrodlo, "nogi bez podatku: " + MK.int(r.nogi_t100), "nogi przy 12%: " + MK.int(r.nogi_t088), "kupony: " + MK.int(r.kupony_top) + ", przy 12%: " + MK.int(r.kupony_ok_t088), "model: " + MK.text(r.model)]))
+      .on("mousemove", (ev, r) => tip.show(ev, [MK.when(r.as_of) + " · " + r.zrodlo, "nogi bez podatku: " + MK.int(r.nogi_t100), "nogi przy 12%: " + MK.int(r.nogi_t088), "kupony przy 12%: " + MK.int(r.kupony_t088) + ", przy 6%: " + MK.int(r.kupony_t094) + ", tylko bez podatku: " + MK.int(r.kupony_t100), "model: " + MK.text(r.model), MK.text(r.rodzaj)]))
       .on("mouseleave", () => tip.hide());
     svg.append("g").selectAll("rect").data(items.filter((r) => (r.nogi_t088 || 0) > 0)).join("rect")
       .attr("x", (r) => x(r.scan_id) + (x.bandwidth() - bw) / 2 + bw * 0.25).attr("width", bw * 0.5)
@@ -767,6 +778,7 @@
     if (!all) { $("#t-kupony").tBodies[0].replaceChildren(); return; }
     let rows = bySource(all);
     if (p.wynik === "loss") rows = rows.filter((r) => r.wynik_kod === "loss" || r.wynik_kod === "half_loss");
+    else if (p.wynik === "no_result") rows = rows.filter((r) => r.wynik_kod === "no_result");
     else if (p.wynik === "win") rows = rows.filter((r) => r.wynik_kod === "win" || r.wynik_kod === "half_win");
     else if (p.wynik) rows = rows.filter((r) => r.wynik_kod === p.wynik);
     if (p.podatek) rows = rows.filter((r) => r.przechodzi_kod === p.podatek);
@@ -777,7 +789,7 @@
       { f: "bukmacher", nw: true },
       { f: "mecze", wide: true },
       { f: "nogi", num: true, fmt: MK.int },
-      { f: "kurs", num: true, fmt: (v) => MK.dec(v) },
+      { f: "kurs", num: true, fmt: (v) => MK.dec(v), cls: (v, r) => (r.zysk_mozliwy_t088 ? "" : "mk-bad") },
       { f: "szansa", num: true, fmt: (v) => MK.pct(v, 0) },
       { f: "ev_dolne_t088", num: true, fmt: (v) => MK.spct(v), cls: MK.sign },
       { f: "przechodzi", chip: true, cls: (v, r) => (r.przechodzi_kod === "t088" ? "mk-ok" : r.przechodzi_kod === "t094" ? "mk-warn" : "mk-muted") },
@@ -829,6 +841,7 @@
     if (!all) { $("#t-single").tBodies[0].replaceChildren(); return; }
     let rows = bySource(all);
     if (p.swynik === "loss") rows = rows.filter((r) => r.wynik_kod === "loss" || r.wynik_kod === "half_loss");
+    else if (p.swynik === "no_result") rows = rows.filter((r) => r.wynik_kod === "no_result");
     else if (p.swynik === "win") rows = rows.filter((r) => r.wynik_kod === "win" || r.wynik_kod === "half_win");
     else if (p.swynik) rows = rows.filter((r) => r.wynik_kod === p.swynik);
     rows = MK.search(rows, q.single, ["mecz", "liga", "zaklad", "bukmacher", "zrodlo"]);
@@ -857,15 +870,18 @@
     if (!all) return;
     MK.table($("#t-przebiegi"), bySource(all), [
       { f: "as_of", fmt: MK.when, nw: true },
+      { f: "rodzaj", chip: true, cls: (v) => (/powtórka/.test(v || "") ? "mk-muted" : "mk-ok") },
       { f: "zrodlo" },
-      { f: "config_id", nw: true },
+      { f: "uruchomiony", nw: true },
+      { f: "limit_przewagi", num: true, cls: (v, r) => (r.luzne ? "mk-warn" : "") },
       { f: "mecze", num: true, fmt: MK.int },
       { f: "nogi_t100", num: true, fmt: MK.int },
       { f: "nogi_t094", num: true, fmt: MK.int },
       { f: "nogi_t088", num: true, fmt: MK.int, cls: (v) => (v > 0 ? "mk-ok" : "") },
-      { f: "kupony_top", num: true, fmt: MK.int },
-      { f: "kupony_ok_t088", num: true, fmt: MK.int, cls: (v) => (v > 0 ? "mk-ok" : "") },
-      { f: "model", chip: true, cls: (v) => (v === "ok" ? "mk-ok" : "mk-muted") },
+      { f: "kupony_t088", num: true, fmt: MK.int, cls: (v) => (v > 0 ? "mk-ok" : "") },
+      { f: "kupony_t094", num: true, fmt: MK.int },
+      { f: "kupony_t100", num: true, fmt: MK.int },
+      { f: "model", chip: true, cls: (v, r) => (r.model_kod === "ok" ? "mk-ok" : "mk-muted") },
     ], "scan_id", { redraw: render, sort: { f: "as_of", dir: "desc" } });
   }
 
@@ -881,9 +897,10 @@
         { f: "single", num: true, fmt: MK.int },
         { f: "kupony", num: true, fmt: MK.int },
         { f: "kupony_ok_t088", num: true, fmt: MK.int, cls: (v) => (v > 0 ? "mk-ok" : "") },
+        { f: "kupony_ok_t094", num: true, fmt: MK.int },
         { f: "kupony_wygrane", num: true, fmt: MK.int },
         { f: "kupony_przegrane", num: true, fmt: MK.int },
-        { f: "kupony_otwarte", num: true, fmt: MK.int },
+        { f: "kupony_bez_wyniku", num: true, fmt: MK.int },
         { f: "zysk_kupony_t088", num: true, fmt: MK.money, cls: MK.sign },
         { f: "zysk_kupony_t100", num: true, fmt: MK.money, cls: MK.sign },
         { f: "opis", wide: true },
