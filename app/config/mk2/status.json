@@ -15,7 +15,7 @@
    "obszar": "Dane",
    "status": "gotowe",
    "rzecz": "Paczka danych Oskara z 12.10 rozpakowana i sprawdzona",
-   "szczegoly": "Documents\\Model-Buk-Data: 18 729 plików, 7,25 GB, zgodność z zipem plik po pliku; wszystkie bazy przechodzą test spójności. Używamy jej tylko do odczytu.",
+   "szczegoly": "Osobny folder z paczką: 18 729 plików, 7,25 GB, zgodność z zipem plik po pliku; wszystkie bazy przechodzą test spójności. Używamy jej tylko do odczytu.",
    "kto": "MK2"
   },
   {
@@ -23,7 +23,7 @@
    "obszar": "Dane",
    "status": "gotowe",
    "rzecz": "Przyjmowanie kolejnych paczek (import_data.py)",
-   "szczegoly": "Pokazuje różnice, podmienia tylko zmienione pliki, robi kopię zastąpionych, nie kasuje naszych plików, odmawia przy otwartej bazie. Testy: 3.",
+   "szczegoly": "Pokazuje różnice, podmienia tylko zmienione pliki, robi kopię zastąpionych, nie kasuje naszych plików, odmawia przy otwartej bazie. Testy: 6.",
    "kto": "MK2"
   },
   {
@@ -31,7 +31,7 @@
    "obszar": "Dane",
    "status": "gotowe",
    "rzecz": "Nasze wyniki osobno od danych Oskara",
-   "szczegoly": "Rejestr skanera, nasze kursy, kalendarz, fit modeli i logi w Documents\\Model-Buk-Data-MK2; nowa paczka ich nie nadpisze.",
+   "szczegoly": "Rejestr skanera, nasze kursy, kalendarz, fit modeli i logi są w osobnym folderze MK2; nowa paczka ich nie nadpisze.",
    "kto": "MK2"
   },
   {
@@ -54,8 +54,8 @@
    "id": "panel",
    "obszar": "Panel",
    "status": "gotowe",
-   "rzecz": "Ten panel",
-   "szczegoly": "Kupony, single, przebiegi, eksperymenty, dane, plan. Odświeżany eksportem z rejestrów (export_dashboard.py).",
+   "rzecz": "Ta aplikacja",
+   "szczegoly": "Kupony, single, przebiegi, eksperymenty, dane i plan z eksportu rejestrów (export_dashboard.py). Twoje typy, notatki, stany planu, ustawienia strategii i prośby zapisują się we wspólnej bazie aplikacji.",
    "kto": "MK2"
   },
   {
@@ -63,7 +63,7 @@
    "obszar": "Kod",
    "status": "gotowe",
    "rzecz": "Testy przechodzą",
-   "szczegoly": "1666 zaliczonych, 1 pominięty (w tym 7 nowych testów MK2).",
+   "szczegoly": "1672 zaliczone, 1 pominięty (w tym 13 testów MK2: import, skaner MK2, eksport do aplikacji).",
    "kto": "MK2"
   },
   {
@@ -90,7 +90,7 @@
    "rzecz": "Wypchnięcie mk/praca do Twojego repo Model-buk-MK2",
    "szczegoly": "Automatyczna kontrola sesji zablokowała mi push; jedna komenda po Twojej stronie.",
    "kto": "Ty",
-   "jak": "git -C \"$HOME\\Documents\\Model-Buk-Merged-work\" push -u origin mk/praca"
+   "jak": "git push -u origin mk/praca (w folderze kopii roboczej; dokładną komendę podaje Claude w rozmowie)"
   },
   {
    "id": "zadania",
@@ -193,8 +193,8 @@
    "id": "d-udostepnij",
    "obszar": "Panel",
    "status": "decyzja",
-   "rzecz": "Komu pokazać panel",
-   "szczegoly": "Panel jest prywatny; udostępnia się go z menu Udostępnij na stronie.",
+   "rzecz": "Komu pokazać aplikację",
+   "szczegoly": "Aplikacja jest prywatna; udostępnia się ją z menu Udostępnij na stronie. Kto ma prawo zmian, może zapisywać typy, notatki i prośby.",
    "kto": "Ty"
   }
  ]

@@ -782,6 +782,11 @@ def main(argv: list[str] | None = None) -> int:
         manifest["files"][name] = {"rows": len(rows), "bytes": path.stat().st_size,
                                    "sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest()}
     (dest / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
+    # what the published app may show: no local paths, only times and the sources' names
+    data_end = next((r["wartosc"] for r in datasets["dane"] if r["pozycja"] == "Dane kończą się"), None)
+    meta = {"eksport": pl_time(now), "eksport_utc": manifest["generated_at"], "plan_z_dnia": status.get("updated"),
+            "dane_do": data_end, "zrodla": [{"id": s.id, "nazwa": s.label, "kto": s.owner} for s in sources]}
+    (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     for name, info in manifest["files"].items():
         print(f"  {name}.json: {info['rows']} rows, {info['bytes'] / 1024:.0f} KB")
     print(f"written to {dest}")
