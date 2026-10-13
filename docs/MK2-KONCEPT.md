@@ -11,6 +11,12 @@ czytamy: jego zmiany dociągamy `git fetch upstream`, a wysyłanie na pilota
 
 ## 0. Stan na 4.10.2026 (co zrobione, co ustalone)
 
+> **13.10.2026:** dostaliśmy pełną paczkę danych Oskara (stan na 1.10 17:42 UTC) i
+> mamy panel z kuponami, wynikami i planem. Szczegóły danych, okna powtórek, wyniki
+> porównania strategii i odświeżanie panelu: [MK2-DANE.md](MK2-DANE.md). Aktualna lista
+> zadań jest w `app/config/mk2/status.json` (zakładka Plan w panelu); punkty niżej
+> opisują stan z 4.10, chyba że oznaczono inaczej.
+
 - Gałąź `mk/praca` zawiera **całą pracę Oskara z 28.09–1.10**: była na
   GitHubie na gałęzi `feature/api-football-history` (41 commitów ponad
   `main`), nie na `main`. Dołączona fast-forwardem, bez konfliktów. Jest w
@@ -149,7 +155,7 @@ kuponach, jeśli mediana CLV ≤ 0.
 | Kursy zamknięcia, kolektor przedmeczowy, katalog meczów | jest: `collect_closing_odds.py`, `run_prematch_collector.ps1`, `ingestion/fixture_directory.py` | wymaga planu Pro |
 | Uczciwa cena z Pinnacle, klasy rynków, wykluczanie rodzajów zakładów, macierz wyników, podział na połowy | **jest**: `scanner/fair.py`, `tiers.py`, `bet_types.py`, `halves.py` | dołączone z gałęzi Oskara 4.10 |
 | Generator kuponów, rejestr, rozliczenia, CLV, strona HTML | **jest**: `scanner/coupons.py`, `register.py`, `settlement.py`, `report_html.py`; `scripts/run_scanner.py` | progi w `scanner/config.py` (`ScanConfig`, `RunSettings`) |
-| Historia meczów do fitowania modeli (`api-football/tables/history.sqlite`, 134 tys. meczów) | **brak u nas** | `download_history.py` na planie Pro (kilka tys. zapytań) albo paczka `seed.tar.gz` od Oskara (`deploy/railway/build_slim_dataset.py`); bez niej skaner liczy tylko uczciwą cenę z rynku, bez modeli |
+| Historia meczów do fitowania modeli (`api-football/tables/history.sqlite`) | **jest od 13.10** (paczka Oskara): 221 644 mecze, 89 rozgrywek, ostatni mecz 30.09 | za stara na fit (blokada 3 dni); odświeży ją nowa paczka albo `refresh_current_season.py` na kluczu Pro. `seed.tar.gz` niepotrzebny: jest w całości w paczce |
 | Historia 16 lig v0.5, EPL, rożne, Understat (CSV) | jest w `app/data/` (poza gitem) | z `Downloads\V7\data` |
 | Profil strategii 1,30–2,00, generator kuponów v0.8, rozliczenia v0.9 | w Twoim repo `mkonieczny1212/Model-buk` (`strategy.py`, `settlement.py`, `web/`) | do przeniesienia jako filtr pasma na `ScanConfig`, nie jako osobny skaner |
 | Kursy polskich bukmacherów | **brak u obu** | feed ma 9 zagranicznych; polskie wymagają odds‑api.io (£49–99/mies.) — decyzja po 4 tygodniach pomiaru |
@@ -189,7 +195,8 @@ Wnioski:
    do 40 na rozliczenia). Kolektora przedmeczowego, odświeżania sezonu,
    pobierania historii i nocnego fitu modeli u nas nie uruchamiamy: te dane
    utrzymuje instancja Oskara, a tabele (`history.sqlite`, `model_cache`)
-   bierzemy od niego paczką `seed.tar.gz` (`deploy/railway/build_slim_dataset.py`).
+   bierzemy od niego paczką danych (13.10: pełny `Model-Buk-Data`, przyjmowany przez
+   `scripts/mk2/import_data.py`; `seed.tar.gz` jest w niej zawarty).
    Profil `Full` (własny klucz Pro) włącza wszystkie zadania jak u Oskara.
 4. Sieć: Avast podmienia certyfikaty TLS; venv ma włączony `truststore`
    (§0). Bez tego każdy skrypt kończy się `CERTIFICATE_VERIFY_FAILED`.
@@ -200,8 +207,8 @@ Wnioski:
 |---|---|---|---|
 | 0 | gałąź `mk/praca`, blokada pusha do repo Oskara, dane z V7, venv, testy, gałąź Oskara dołączona | zielone testy na czystym klonie | 4.10: zrobione, testy w toku |
 | 1 | klucz ze wspólnego konta (`setx`), `register_tasks.ps1` (profil Shared: kolektor kursów co 2 h, kursy zamknięcia, skaner) | po 24 h archiwum ma kursy ≥ 8 bukmacherów dla meczów dziś+jutro, `scanner.log` ma wpisy co 30 min | skrypty gotowe i przetestowane; czeka na klucz i rejestrację zadań |
-| 2 | historia meczów i fit modeli: paczka `seed.tar.gz` od Oskara rozpakowana do `Model-Buk-Data` (nie pobieramy historii na wspólnym kluczu) | skaner raportuje `model=` zamiast `model=no_fit` | do umówienia z Oskarem |
-| 3 | pierwszy przebieg skanera Oskara u nas (`run_scanner.py`), odczyt `latest.html` i rejestru; zrozumienie, które progi odpowiadają za „0 kuponów przy τ 0,88” | przebieg zapisany z `config_id`, strona pokazuje wynik | można zacząć przed krokiem 2 w trybie bez modeli |
+| 2 | historia meczów i fit modeli: paczka od Oskara w `Model-Buk-Data` (nie pobieramy historii na wspólnym kluczu) | skaner raportuje `model=ok` zamiast `fit_stale` | 13.10: paczka przyjęta, ale historia kończy się 30.09, więc fit stoi do nowszej paczki |
+| 3 | pierwszy przebieg skanera Oskara u nas (`run_scanner.py`), odczyt `latest.html` i rejestru; zrozumienie, które progi odpowiadają za „0 kuponów przy τ 0,88” | przebieg zapisany z `config_id`, strona pokazuje wynik | 13.10: zrobione: powtórki 30.09–1.10 z modelami (`scan_mk2.py`), rozliczone; 0 kuponów przy 12% w obu konfiguracjach (MK2-DANE.md §4) |
 | 4 | nasz profil: filtr pasma 1,30–2,00 na kurs łączny i rozmiar kuponu 2 jako pola `ScanConfig` (nowy `config_id`), półka B dla rynków bez Pinnacle; testy graniczne 1,30/2,00 i podatku | testy zielone, przebieg z nowym `config_id` w rejestrze | |
 | 5 | raport 7/30 dni z rejestru: mediana CLV, pobite zamknięcia, zysk po podatku, osobno A/B i single/kupony | po tygodniu raport liczy się sam | |
 | 6 | po 4 tygodniach: decyzja o feedzie polskich kursów; po 8 tygodniach: raport promocji | | |
@@ -225,8 +232,8 @@ i tylko jeśli półka B pokaże, że model coś wnosi względem konsensusu.
 ## 9. Decyzje po Twojej stronie
 
 1. ~~Klucz API-Football z planu Pro~~ — rozstrzygnięte 4.10: wspólne konto
-   (§6 pkt 2–3). Do zrobienia: `setx`, powiadomić Oskara, poprosić o
-   `seed.tar.gz`.
+   (§6 pkt 2–3). Do zrobienia: `setx`, powiadomić Oskara, poprosić o nowszą paczkę
+   danych (po 1.10; zbieranie przeszło na jego serwer).
 2. Lista lig: top 10 (które dokładnie?) + LM/LE/LKE, czy — jak Oskar —
    wszystkie rozgrywki z kursami (zob. §10 pkt 3).
 3. Bukmacher docelowy do pomiaru: na razie Bet365/Betano z feedu jako

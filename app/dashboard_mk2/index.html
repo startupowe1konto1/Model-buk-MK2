@@ -1,0 +1,958 @@
+<style>
+.mk { font-family: var(--font-anthropic-sans); color: var(--color-fg); display: grid; gap: var(--cds-gap-lg); min-width: 0; }
+.mk h1, .mk h2, .mk h3, .mk p { margin: 0; }
+.mk-head { display: grid; gap: var(--cds-gap-xs); }
+.mk-head h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); text-wrap: balance; }
+.mk-takeaway { color: var(--color-fg-muted); max-width: 72ch; line-height: 1.5; }
+.mk-takeaway b { font-weight: 600; color: var(--color-fg); }
+.mk-bar { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; justify-content: space-between; }
+.mk-tabs { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); }
+.mk-tab { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg-muted); background: transparent; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); cursor: pointer; }
+.mk-tab:hover { color: var(--color-fg); }
+.mk-tab[aria-selected="true"] { color: var(--color-fg); background: var(--color-panel); border-color: var(--color-fg-muted); }
+.mk-tab:focus-visible, .mk-th:focus-visible, .mk-ctrl:focus-visible, .mk-clear:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+.mk-filters { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; }
+.mk-filters label { display: inline-flex; gap: var(--cds-gap-xs); align-items: center; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.mk-ctrl { font: inherit; font-size: var(--cds-font-size-caption); color: var(--color-fg); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); max-width: 100%; }
+.mk-page { display: grid; gap: var(--cds-gap-md); min-width: 0; }
+.mk-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--cds-gap-md); }
+.mk-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); min-width: 0; display: grid; gap: var(--cds-gap-xs); align-content: start; }
+.mk-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); text-wrap: balance; }
+.mk-label { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.mk-big { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.mk-sub { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.mk-sub b { font-weight: 600; color: var(--color-fg); }
+.mk-note { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); line-height: 1.45; max-width: 80ch; }
+.mk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--cds-gap-md); }
+.mk-tablebar { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; justify-content: space-between; }
+.mk-count { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.mk-wrap { max-height: 34rem; overflow: auto; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); min-width: 0; }
+.mk-wrap.mk-short { max-height: 22rem; }
+.mk-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.mk-table th { position: sticky; top: 0; z-index: 1; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+.mk-th { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; display: inline-flex; gap: 0.25em; align-items: center; }
+.mk-th::after { content: ""; width: 0.6em; }
+.mk-table th[aria-sort="ascending"] .mk-th::after { content: "↑"; }
+.mk-table th[aria-sort="descending"] .mk-th::after { content: "↓"; }
+.mk-table td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-top: 1px solid var(--color-border-line); vertical-align: top; }
+.mk-table .r { text-align: right; white-space: nowrap; }
+.mk-table .nw { white-space: nowrap; }
+.mk-table .wide { min-width: 16rem; }
+.mk-table tr.mk-click { cursor: pointer; }
+.mk-table tr.mk-click:hover td { color: var(--color-fg); }
+.mk-table tr[aria-selected="true"] td { box-shadow: inset 0 1px 0 var(--color-fg-muted), inset 0 -1px 0 var(--color-fg-muted); }
+.mk-chip { display: inline-block; padding: 0 0.5em; border-radius: 999px; border: 1px solid currentColor; font-size: var(--cds-font-size-caption); white-space: nowrap; line-height: 1.5; }
+.mk-ok { color: var(--color-ok); }
+.mk-warn { color: var(--color-warn); }
+.mk-bad { color: var(--color-bad); }
+.mk-muted { color: var(--color-fg-muted); }
+.mk-chart { position: relative; min-height: 15rem; min-width: 0; }
+.mk-chart svg { display: block; }
+.mk-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg); white-space: nowrap; z-index: 2; }
+.mk-tip .t { color: var(--cds-text-secondary); }
+.mk-fail { display: flex; align-items: center; justify-content: center; gap: var(--cds-gap-xs); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: inherit; }
+.mk-fail::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--color-bad); }
+.mk-detail { display: grid; gap: var(--cds-gap-sm); }
+.mk-detail-head { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: baseline; justify-content: space-between; }
+.mk-clear { font: inherit; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); background: none; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 0 var(--cds-pad-sm); cursor: pointer; }
+.mk-facts { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm) var(--cds-gap-lg); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.mk-facts b { font-weight: 600; color: var(--color-fg); font-variant-numeric: tabular-nums; }
+.mk-cmd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--cds-font-size-caption); overflow-wrap: anywhere; }
+.mk [data-dash-source-state="empty"] { color: transparent; }
+.mk [data-dash-source-state="refreshing"] { opacity: 0.5; transition: opacity var(--cds-dur-slow); }
+@media (prefers-reduced-motion: no-preference) {
+  .mk-fade { animation: mk-in var(--cds-dur-slow) var(--cds-ease-out); }
+  @keyframes mk-in { from { opacity: 0.4; } to { opacity: 1; } }
+}
+</style>
+
+<div class="mk" id="mk">
+  <header class="mk-head" id="naglowek">
+    <h1>Model Buk MK2</h1>
+    <p class="mk-takeaway" id="wniosek">W <b data-source="podsumowanie" data-field="przebiegi_pelne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> przebiegach skanera z pełnymi zabezpieczeniami przy podatku 12% przeszło <b data-source="podsumowanie" data-field="kupony_ok_t088_pelne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> kuponów. Wszystkie <b data-source="podsumowanie" data-field="kupony_ok_t088_luzne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> kupony z 12% pochodzą z <b data-source="podsumowanie" data-field="przebiegi_luzne" data-where="zrodlo_id=razem" class="dash-skeleton">—</b> wczesnych przebiegów Oskara z luźnym limitem przewagi (20%), który potem uznał za źródło błędów. Wartość pojawia się tylko bez podatku.</p>
+  </header>
+
+  <div class="mk-bar">
+    <nav class="mk-tabs" role="tablist" aria-label="Zakładki">
+      <button class="mk-tab" role="tab" id="tab-przeglad" data-page="przeglad" aria-selected="true">Przegląd</button>
+      <button class="mk-tab" role="tab" id="tab-kupony" data-page="kupony" aria-selected="false">Kupony</button>
+      <button class="mk-tab" role="tab" id="tab-single" data-page="single" aria-selected="false">Single</button>
+      <button class="mk-tab" role="tab" id="tab-przebiegi" data-page="przebiegi" aria-selected="false">Przebiegi</button>
+      <button class="mk-tab" role="tab" id="tab-eksperymenty" data-page="eksperymenty" aria-selected="false">Eksperymenty</button>
+      <button class="mk-tab" role="tab" id="tab-dane" data-page="dane" aria-selected="false">Dane</button>
+      <button class="mk-tab" role="tab" id="tab-plan" data-page="plan" aria-selected="false">Plan</button>
+    </nav>
+    <div class="mk-filters">
+      <label for="f-zrodlo">Źródło
+        <select class="mk-ctrl" id="f-zrodlo" data-source="podsumowanie"></select>
+      </label>
+    </div>
+  </div>
+
+  <!-- ===================== PRZEGLĄD ===================== -->
+  <section class="mk-page" id="przeglad" role="tabpanel" aria-labelledby="tab-przeglad">
+    <div class="mk-kpis" id="kpi">
+      <div class="mk-card" id="kpi-12">
+        <span class="mk-label">Kupony przy podatku 12%, pełne zabezpieczenia</span>
+        <span class="mk-big dash-skeleton" data-source="podsumowanie" data-field="kupony_ok_t088_pelne" data-where="zrodlo_id=razem">—</span>
+        <span class="mk-sub">oraz <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_ok_t088_luzne" data-where="zrodlo_id=razem">—</b> z luźnym limitem przewagi</span>
+      </div>
+      <div class="mk-card" id="kpi-kupony">
+        <span class="mk-label">Zaproponowane kupony</span>
+        <span class="mk-big dash-skeleton" data-source="podsumowanie" data-field="kupony" data-where="zrodlo_id=razem">—</span>
+        <span class="mk-sub">otwarte <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_otwarte" data-where="zrodlo_id=razem">—</b></span>
+      </div>
+      <div class="mk-card" id="kpi-wynik">
+        <span class="mk-label">Rozliczone kupony: wygrane / przegrane</span>
+        <span class="mk-big"><span class="dash-skeleton" data-source="podsumowanie" data-field="kupony_wygrane" data-where="zrodlo_id=razem">—</span> / <span class="dash-skeleton" data-source="podsumowanie" data-field="kupony_przegrane" data-where="zrodlo_id=razem">—</span></span>
+        <span class="mk-sub">rozliczonych <b class="dash-skeleton" data-source="podsumowanie" data-field="kupony_rozliczone" data-where="zrodlo_id=razem">—</b></span>
+      </div>
+      <div class="mk-card" id="kpi-single">
+        <span class="mk-label">Single: nogi z wartością bez podatku</span>
+        <span class="mk-big dash-skeleton" data-source="podsumowanie" data-field="single" data-where="zrodlo_id=razem">—</span>
+        <span class="mk-sub">rozliczonych <b class="dash-skeleton" data-source="podsumowanie" data-field="single_rozliczone" data-where="zrodlo_id=razem">—</b></span>
+      </div>
+      <div class="mk-card" id="kpi-przebiegi">
+        <span class="mk-label">Przebiegi skanera</span>
+        <span class="mk-big dash-skeleton" data-source="podsumowanie" data-field="przebiegi" data-where="zrodlo_id=razem">—</span>
+        <span class="mk-sub"><span class="dash-skeleton" data-source="podsumowanie" data-field="od" data-where="zrodlo_id=razem" id="kpi-od">—</span> – <span class="dash-skeleton" data-source="podsumowanie" data-field="do" data-where="zrodlo_id=razem" id="kpi-do">—</span></span>
+      </div>
+    </div>
+
+    <div class="mk-grid">
+      <div class="mk-card" id="wykres-zysk">
+        <h2>Wynik na papierze: kupony</h2>
+        <p class="mk-note">Suma zysku przy stawce 1 na każdy rozliczony kupon, przy podatku 12% i bez podatku. Małe próby (kilkanaście–kilkadziesiąt kuponów): to opis, nie dowód.</p>
+        <div class="mk-chart" id="ch-zysk" data-source="eksperymenty"></div>
+      </div>
+      <div class="mk-card" id="wykres-przewaga">
+        <h2>Przewaga nóg z wartością</h2>
+        <p class="mk-note">O ile kurs bukmachera przebija uczciwą cenę. Kupon z 2 nóg wychodzi na zero przy podatku 12% od 6,6% na nogę, singiel od 13,6%, a skaner odrzuca przewagi powyżej 10% jako błąd danych.</p>
+        <div class="mk-chart" id="ch-przewaga" data-source="single"></div>
+      </div>
+    </div>
+
+    <div class="mk-card" id="kroki">
+      <h2>Co blokuje dalsze prace</h2>
+      <p class="mk-note">Rzeczy po Twojej stronie i u Oskara. Pełna lista w zakładce Plan.</p>
+      <div class="mk-wrap mk-short">
+        <table class="mk-table" id="t-kroki" data-source="plan" data-row-key="id">
+          <thead><tr>
+            <th data-field="status_pl">Stan</th>
+            <th data-field="rzecz">Co</th>
+            <th data-field="kto">Kto</th>
+            <th data-field="jak">Jak</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== KUPONY ===================== -->
+  <section class="mk-page" id="kupony" role="tabpanel" aria-labelledby="tab-kupony" hidden>
+    <div class="mk-card">
+      <div class="mk-tablebar">
+        <h2>Zaproponowane kupony</h2>
+        <div class="mk-filters">
+          <label for="f-wynik">Wynik
+            <select class="mk-ctrl" id="f-wynik">
+              <option value="">wszystkie</option>
+              <option value="win">wygrane</option>
+              <option value="loss">przegrane</option>
+              <option value="open">otwarte</option>
+            </select>
+          </label>
+          <label for="f-podatek">Przechodzi przy
+            <select class="mk-ctrl" id="f-podatek">
+              <option value="">każdym podatku</option>
+              <option value="t088">podatku 12%</option>
+              <option value="t094">podatku 6%</option>
+              <option value="t100">tylko bez podatku</option>
+            </select>
+          </label>
+          <input class="mk-ctrl" id="q-kupony" type="search" placeholder="Szukaj meczu, bukmachera…" aria-label="Szukaj w kuponach">
+        </div>
+      </div>
+      <p class="mk-note">Każdy kupon raz, z pierwszego przebiegu, w którym skaner go wskazał. Zysk przy stawce 1. Kliknij wiersz, żeby zobaczyć nogi.</p>
+      <span class="mk-count" id="n-kupony"></span>
+      <div class="mk-wrap">
+        <table class="mk-table" id="t-kupony" data-source="kupony" data-row-key="kupon_id">
+          <thead><tr>
+            <th data-field="as_of">Wskazany</th>
+            <th data-field="zrodlo">Źródło</th>
+            <th data-field="bukmacher">Bukmacher</th>
+            <th data-field="mecze">Mecze</th>
+            <th data-field="nogi">Nogi</th>
+            <th data-field="kurs">Kurs</th>
+            <th data-field="szansa">Szansa</th>
+            <th data-field="ev_dolne_t088">EV dolne, 12%</th>
+            <th data-field="przechodzi">Przechodzi przy</th>
+            <th data-field="wynik">Wynik</th>
+            <th data-field="zysk_t088">Zysk, 12%</th>
+            <th data-field="zysk_t100">Zysk bez podatku</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="mk-card mk-detail" id="szczegoly" hidden>
+      <div class="mk-detail-head">
+        <h2 id="szczegoly-tytul">Nogi kuponu</h2>
+        <button class="mk-clear" id="szczegoly-zamknij">Zamknij ×</button>
+      </div>
+      <div class="mk-facts" id="szczegoly-fakty">
+        <span>Kurs <b id="d-kurs" data-f="kurs">—</b></span>
+        <span>Szansa trafienia <b id="d-szansa" data-f="szansa">—</b></span>
+        <span>EV dolne przy 12% <b id="d-ev" data-f="ev_dolne_t088">—</b></span>
+        <span>Wynik <b id="d-wynik" data-f="wynik">—</b></span>
+        <span>CLV <b id="d-clv" data-f="clv">—</b></span>
+      </div>
+      <div class="mk-wrap mk-short">
+        <table class="mk-table" id="t-nogi" data-source="kupony_nogi" data-row-key="noga">
+          <thead><tr>
+            <th data-field="nr">Nr</th>
+            <th data-field="mecz">Mecz</th>
+            <th data-field="liga">Liga</th>
+            <th data-field="start">Start</th>
+            <th data-field="zaklad">Zakład</th>
+            <th data-field="kurs">Kurs</th>
+            <th data-field="p_uczciwe">Szansa uczciwa</th>
+            <th data-field="cena_z">Cena z</th>
+            <th data-field="wynik">Wynik</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SINGLE ===================== -->
+  <section class="mk-page" id="single" role="tabpanel" aria-labelledby="tab-single" hidden>
+    <div class="mk-card">
+      <div class="mk-tablebar">
+        <h2>Single: nogi z wartością</h2>
+        <div class="mk-filters">
+          <label for="f-swynik">Wynik
+            <select class="mk-ctrl" id="f-swynik">
+              <option value="">wszystkie</option>
+              <option value="win">wygrane</option>
+              <option value="loss">przegrane</option>
+              <option value="open">otwarte</option>
+            </select>
+          </label>
+          <input class="mk-ctrl" id="q-single" type="search" placeholder="Szukaj meczu, ligi, zakładu…" aria-label="Szukaj w singlach">
+        </div>
+      </div>
+      <p class="mk-note">Pierwsza obserwacja każdej nogi z wartością (kurs powyżej uczciwej ceny z pewnością 95%) w danym eksperymencie. Przy podatku 12% żadna nie przeszłaby jako singiel z pełnymi zabezpieczeniami.</p>
+      <span class="mk-count" id="n-single"></span>
+      <div class="mk-wrap">
+        <table class="mk-table" id="t-single" data-source="single" data-row-key="noga_id">
+          <thead><tr>
+            <th data-field="as_of">Wskazana</th>
+            <th data-field="zrodlo">Źródło</th>
+            <th data-field="bukmacher">Bukmacher</th>
+            <th data-field="mecz">Mecz</th>
+            <th data-field="liga">Liga</th>
+            <th data-field="zaklad">Zakład</th>
+            <th data-field="kurs">Kurs</th>
+            <th data-field="kurs_uczciwy">Kurs uczciwy</th>
+            <th data-field="przewaga">Przewaga</th>
+            <th data-field="cena_z">Cena z</th>
+            <th data-field="wynik">Wynik</th>
+            <th data-field="zysk_t088">Zysk, 12%</th>
+            <th data-field="clv">CLV</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PRZEBIEGI ===================== -->
+  <section class="mk-page" id="przebiegi" role="tabpanel" aria-labelledby="tab-przebiegi" hidden>
+    <div class="mk-card" id="wykres-przebiegi">
+      <h2>Nogi z wartością w kolejnych przebiegach</h2>
+      <p class="mk-note">Słupek szary: bez podatku. Słupek kolorowy: przy podatku 12% (tylko gdy coś było). Czas polski.</p>
+      <div class="mk-chart" id="ch-przebiegi" data-source="przebiegi"></div>
+    </div>
+    <div class="mk-card">
+      <h2>Wszystkie przebiegi</h2>
+      <p class="mk-note">„Model” mówi, czy skaner miał ważne prognozy własnych modeli; bez nich uczciwą cenę bierze tylko z rynku.</p>
+      <div class="mk-wrap">
+        <table class="mk-table" id="t-przebiegi" data-source="przebiegi" data-row-key="scan_id">
+          <thead><tr>
+            <th data-field="as_of">Czas decyzji</th>
+            <th data-field="zrodlo">Źródło</th>
+            <th data-field="config_id">Konfiguracja</th>
+            <th data-field="mecze">Mecze</th>
+            <th data-field="nogi_t100">Nogi bez podatku</th>
+            <th data-field="nogi_t094">Nogi, 6%</th>
+            <th data-field="nogi_t088">Nogi, 12%</th>
+            <th data-field="kupony_top">Kupony</th>
+            <th data-field="kupony_ok_t088">Kupony, 12%</th>
+            <th data-field="model">Model</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== EKSPERYMENTY ===================== -->
+  <section class="mk-page" id="eksperymenty" role="tabpanel" aria-labelledby="tab-eksperymenty" hidden>
+    <div class="mk-card">
+      <h2>Eksperymenty</h2>
+      <p class="mk-note">Eksperyment to rejestr plus konfiguracja skanera; każda zmiana progów daje nowy identyfikator i liczy się od zera. Kliknij wiersz, żeby zobaczyć wyniki według skanera.</p>
+      <div class="mk-wrap">
+        <table class="mk-table" id="t-eksperymenty" data-source="eksperymenty" data-row-key="eksperyment_id">
+          <thead><tr>
+            <th data-field="zrodlo">Źródło</th>
+            <th data-field="config_id">Konfiguracja</th>
+            <th data-field="zabezpieczenia">Zabezpieczenia</th>
+            <th data-field="nogi_w_kuponie">Nogi w kuponie</th>
+            <th data-field="przebiegi">Przebiegi</th>
+            <th data-field="single">Single</th>
+            <th data-field="kupony">Kupony</th>
+            <th data-field="kupony_ok_t088">Kupony, 12%</th>
+            <th data-field="kupony_wygrane">Wygrane</th>
+            <th data-field="kupony_przegrane">Przegrane</th>
+            <th data-field="kupony_otwarte">Otwarte</th>
+            <th data-field="zysk_kupony_t088">Zysk kuponów, 12%</th>
+            <th data-field="zysk_kupony_t100">Zysk bez podatku</th>
+            <th data-field="opis">Czym się różni</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mk-card" id="wyniki-karta">
+      <h2 id="wyniki-tytul">Wyniki według skanera</h2>
+      <p class="mk-note">Tabela, którą skaner liczy sam: zakłady wartościowe przy danym podatku, rozliczone, trafienia, zysk na stawkę i CLV. Uwaga: CLV z tych danych jest zawyżone, bo w większości pomiarów kurs zamknięcia to kurs z chwili decyzji (kursów nie zbierano do startu meczu).</p>
+      <div class="mk-wrap">
+        <table class="mk-table" id="t-wyniki" data-source="wyniki" data-row-key="wynik_id">
+          <thead><tr>
+            <th data-field="zrodlo">Źródło</th>
+            <th data-field="config_id">Konfiguracja</th>
+            <th data-field="rodzaj">Rodzaj</th>
+            <th data-field="rynki">Rynki</th>
+            <th data-field="podatek">Podatek</th>
+            <th data-field="zaklady">Zakłady</th>
+            <th data-field="rozliczone">Rozliczone</th>
+            <th data-field="trafienia">Trafienia</th>
+            <th data-field="zysk_na_stawke">Zysk na stawkę</th>
+            <th data-field="clv_mediana">CLV mediana</th>
+            <th data-field="pobite_zamkniecia">Pobite zamknięcia</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DANE ===================== -->
+  <section class="mk-page" id="dane" role="tabpanel" aria-labelledby="tab-dane" hidden>
+    <div class="mk-card">
+      <h2>Co mamy w danych</h2>
+      <p class="mk-note">Paczka od Oskara (tylko do odczytu) i nasz folder MK2. Czerwone pozycje to braki, które ograniczają skaner.</p>
+      <div class="mk-wrap">
+        <table class="mk-table" id="t-dane" data-source="dane" data-row-key="dane_id">
+          <thead><tr>
+            <th data-field="sekcja">Obszar</th>
+            <th data-field="pozycja">Co</th>
+            <th data-field="wartosc">Wartość</th>
+            <th data-field="stan">Stan</th>
+            <th data-field="uwagi">Uwagi</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PLAN ===================== -->
+  <section class="mk-page" id="plan" role="tabpanel" aria-labelledby="tab-plan" hidden>
+    <div class="mk-card">
+      <div class="mk-tablebar">
+        <h2>Plan i stan prac</h2>
+        <div class="mk-filters">
+          <label for="f-status">Stan
+            <select class="mk-ctrl" id="f-status">
+              <option value="">wszystkie</option>
+              <option value="gotowe">gotowe</option>
+              <option value="w_toku">w toku</option>
+              <option value="brakuje">brakuje</option>
+              <option value="problem">problem</option>
+              <option value="decyzja">do decyzji</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="mk-wrap">
+        <table class="mk-table" id="t-plan" data-source="plan" data-row-key="id">
+          <thead><tr>
+            <th data-field="status_pl">Stan</th>
+            <th data-field="obszar">Obszar</th>
+            <th data-field="rzecz">Co</th>
+            <th data-field="szczegoly">Szczegóły</th>
+            <th data-field="kto">Kto</th>
+            <th data-field="jak">Jak</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const MK = (window.MK = {});
+  const loc = d3.formatLocale({ decimal: ",", thousands: " ", grouping: [3], currency: ["", " zł"] });
+  const dash_ = (v) => v === null || v === undefined || (typeof v === "number" && !Number.isFinite(v));
+  MK.int = (v) => (dash_(v) ? "—" : loc.format(",d")(v));
+  MK.dec = (v, d = 2) => (dash_(v) ? "—" : loc.format(",." + d + "f")(v));
+  MK.pct = (v, d = 1) => (dash_(v) ? "—" : loc.format("." + d + "%")(v));
+  MK.spct = (v, d = 1) => (dash_(v) ? "—" : loc.format("+." + d + "%")(v));
+  MK.money = (v) => (dash_(v) ? "—" : loc.format("+,.2f")(v));
+  const whenFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const dayFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", day: "2-digit", month: "2-digit", year: "numeric" });
+  MK.date = (iso) => (iso ? new Date(iso) : null);
+  MK.when = (iso) => { const d = MK.date(iso); return d && !isNaN(d) ? whenFmt.format(d) : "—"; };
+  MK.day = (iso) => { const d = MK.date(iso); return d && !isNaN(d) ? dayFmt.format(d) : "—"; };
+  MK.text = (v) => (dash_(v) || v === "" ? "—" : String(v));
+  MK.sign = (v) => (dash_(v) ? "" : v > 0 ? "mk-ok" : v < 0 ? "mk-bad" : "");
+
+  MK.outcomeClass = (code) => ({ win: "mk-ok", half_win: "mk-ok", loss: "mk-bad", half_loss: "mk-bad", push: "mk-muted", void: "mk-muted", open: "mk-muted" }[code] || "");
+  MK.statusClass = (s) => ({ gotowe: "mk-ok", ok: "mk-ok", w_toku: "mk-warn", uwaga: "mk-warn", brakuje: "mk-bad", problem: "mk-bad", decyzja: "mk-warn" }[s] || "mk-muted");
+
+  MK.rows = (id) => { const r = dash.data(id); return r.status === "ok" && Array.isArray(r.data) ? r.data : null; };
+  MK.status = (id) => dash.data(id).status;
+
+  MK.fail = function (el, id) {
+    const st = MK.status(id);
+    el.replaceChildren();
+    if (st === "error" || st === "connect" || st === "declined") {
+      const f = document.createElement("div");
+      f.className = "mk-fail";
+      f.textContent = "Nie udało się wczytać";
+      el.append(f);
+      el.classList.remove("dash-skeleton");
+      return true;
+    }
+    if (st !== "ok") { el.classList.add("dash-skeleton"); return true; }
+    el.classList.remove("dash-skeleton");
+    return false;
+  };
+
+  // ---------------------------------------------------------------- sortable table
+  // cols: [{f: field, fmt: (v, row) => text, cls: (v, row) => class, num: true}]
+  const sorts = {};
+  MK.table = function (table, rows, cols, keyField, opts) {
+    opts = opts || {};
+    const id = table.id;
+    const sort = sorts[id] || opts.sort || null;
+    let list = rows.slice();
+    if (sort) {
+      const dir = sort.dir === "asc" ? 1 : -1;
+      list.sort((a, b) => {
+        const x = a[sort.f], y = b[sort.f];
+        if (dash_(x) && dash_(y)) return 0;
+        if (dash_(x)) return 1;
+        if (dash_(y)) return -1;
+        if (typeof x === "number" && typeof y === "number") return (x - y) * dir;
+        return String(x).localeCompare(String(y), "pl") * dir;
+      });
+    }
+    const ths = table.tHead.rows[0].cells;
+    for (const th of ths) {
+      const f = th.dataset.field;
+      if (!th.querySelector(".mk-th")) {
+        const b = document.createElement("button");
+        b.className = "mk-th";
+        b.type = "button";
+        b.textContent = th.textContent;
+        th.replaceChildren(b);
+        b.addEventListener("click", () => {
+          const cur = sorts[id];
+          sorts[id] = { f, dir: cur && cur.f === f && cur.dir === "desc" ? "asc" : "desc" };
+          if (opts.redraw) opts.redraw();
+        });
+      }
+      th.setAttribute("aria-sort", sort && sort.f === f ? (sort.dir === "asc" ? "ascending" : "descending") : "none");
+      const col = cols.find((c) => c.f === f);
+      if (col && col.num) th.classList.add("r");
+    }
+    const body = table.tBodies[0];
+    const frag = document.createDocumentFragment();
+    for (const row of list) {
+      const tr = document.createElement("tr");
+      tr.dataset.key = String(row[keyField]);
+      if (opts.click) { tr.className = "mk-click"; tr.tabIndex = 0; }
+      if (opts.selected && opts.selected === row[keyField]) tr.setAttribute("aria-selected", "true");
+      for (const c of cols) {
+        const td = document.createElement("td");
+        const v = row[c.f];
+        const text = c.fmt ? c.fmt(v, row) : MK.text(v);
+        const cls = c.cls ? c.cls(v, row) : "";
+        if (c.chip) {
+          const s = document.createElement("span");
+          s.className = "mk-chip " + cls;
+          s.textContent = text;
+          td.append(s);
+        } else {
+          td.textContent = text;
+          if (cls) td.classList.add(cls);
+        }
+        if (c.num) td.classList.add("r");
+        if (c.nw) td.classList.add("nw");
+        if (c.wide) td.classList.add("wide");
+        if (c.mono) td.classList.add("mk-cmd");
+        tr.append(td);
+      }
+      frag.append(tr);
+    }
+    body.replaceChildren(frag);
+    return list.length;
+  };
+
+  MK.search = (rows, q, fields) => {
+    q = (q || "").trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => fields.some((f) => r[f] !== null && r[f] !== undefined && String(r[f]).toLowerCase().includes(q)));
+  };
+
+  // ---------------------------------------------------------------- tooltip
+  MK.tip = function (box) {
+    let t = box.querySelector(".mk-tip");
+    if (!t) { t = document.createElement("div"); t.className = "mk-tip"; t.hidden = true; box.append(t); }
+    return {
+      show(ev, lines) {
+        t.replaceChildren();
+        lines.forEach((l, i) => { const d = document.createElement("div"); if (i === 0) d.className = "t"; d.textContent = l; t.append(d); });
+        t.hidden = false;
+        const r = box.getBoundingClientRect();
+        let x = ev.clientX - r.left + 12, y = ev.clientY - r.top + 12;
+        const w = t.offsetWidth, h = t.offsetHeight;
+        if (x + w > r.width) x = Math.max(0, ev.clientX - r.left - w - 12);
+        if (y + h > r.height) y = Math.max(0, ev.clientY - r.top - h - 12);
+        t.style.left = x + "px"; t.style.top = y + "px";
+      },
+      hide() { t.hidden = true; },
+    };
+  };
+
+  function textWidth(svg, text, cls) {
+    const t = svg.append("text").attr("class", cls || "").attr("font-size", "0.75rem").text(text);
+    const w = t.node().getComputedTextLength();
+    t.remove();
+    return w;
+  }
+
+  function axisStyle(g) {
+    g.attr("font-size", null).attr("font-family", null);
+    g.selectAll("text").attr("fill", "var(--color-fg-muted)").style("font-size", "0.75rem");
+    g.selectAll("line").attr("stroke", "var(--cds-chart-grid)");
+    g.select(".domain").attr("stroke", "var(--cds-chart-axis)");
+  }
+
+  // ---------------------------------------------------------------- chart: paper profit per experiment
+  MK.profitChart = function (box, rows) {
+    box.querySelectorAll("svg").forEach((n) => n.remove());
+    const items = rows.filter((r) => r.kupony_rozliczone > 0);
+    if (!items.length) {
+      const p = document.createElement("p"); p.className = "mk-note"; p.textContent = "Brak rozliczonych kuponów w wybranym źródle."; box.append(p); return;
+    }
+    const W = Math.max(280, box.clientWidth || 320);
+    const series = [{ k: "zysk_kupony_t088", n: "podatek 12%", c: dash.colors[0] }, { k: "zysk_kupony_t100", n: "bez podatku", c: dash.colors[1] }];
+    const label = (r) => r.zrodlo.replace(/^MK2 · |^Oskar · /, "") + " · " + r.config_id.slice(0, 5);
+    const svg = d3.select(box).append("svg").attr("width", "100%");
+    const lw = Math.min(W * 0.48, d3.max(items, (r) => textWidth(svg, label(r))) + 8);
+    const rowH = 30, top = 22, bottom = 26;
+    const H = top + bottom + items.length * rowH;
+    svg.attr("viewBox", `0 0 ${W} ${H}`).attr("height", H);
+    const vals = items.flatMap((r) => series.map((s) => r[s.k] || 0));
+    const ext = d3.extent([0, ...vals]);
+    const pad = (ext[1] - ext[0]) * 0.08 || 1;
+    const x = d3.scaleLinear([ext[0] - pad, ext[1] + pad], [lw, W - 12]).nice();
+    const y = d3.scaleBand(items.map((r, i) => i), [top, H - bottom]).padding(0.25);
+    const y2 = d3.scaleBand(series.map((s) => s.k), [0, y.bandwidth()]).padding(0.15);
+    const gx = svg.append("g").attr("transform", `translate(0,${H - bottom})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - lw) / 70))).tickFormat((v) => loc.format(",.0f")(v)).tickSize(-(H - top - bottom)));
+    axisStyle(gx);
+    svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", top - 4).attr("y2", H - bottom).attr("stroke", "var(--cds-chart-reference)").attr("stroke-width", 1);
+    svg.append("g").selectAll("text").data(items).join("text")
+      .attr("x", lw - 8).attr("y", (r, i) => y(i) + y.bandwidth() / 2).attr("dy", "0.35em").attr("text-anchor", "end")
+      .attr("fill", "var(--color-fg)").style("font-size", "0.75rem").text(label);
+    const tip = MK.tip(box);
+    const g = svg.append("g");
+    items.forEach((r, i) => {
+      series.forEach((s) => {
+        const v = r[s.k] || 0;
+        g.append("rect")
+          .attr("x", Math.min(x(0), x(v))).attr("width", Math.max(1, Math.abs(x(v) - x(0))))
+          .attr("y", y(i) + y2(s.k)).attr("height", y2.bandwidth()).attr("rx", 3)
+          .attr("fill", s.c)
+          .on("mousemove", (ev) => tip.show(ev, [r.zrodlo + " · " + r.config_id, s.n + ": " + MK.money(v) + " j.", "rozliczonych kuponów: " + MK.int(r.kupony_rozliczone)]))
+          .on("mouseleave", () => tip.hide());
+      });
+    });
+    const lg = svg.append("g").attr("transform", `translate(${lw},12)`);
+    let off = 0;
+    series.forEach((s) => {
+      lg.append("rect").attr("x", off).attr("y", -8).attr("width", 10).attr("height", 10).attr("rx", 2).attr("fill", s.c);
+      const t = lg.append("text").attr("x", off + 14).attr("y", 1).attr("fill", "var(--color-fg-muted)").style("font-size", "0.75rem").text(s.n);
+      off += 14 + t.node().getComputedTextLength() + 16;
+    });
+  };
+
+  // ---------------------------------------------------------------- chart: edge histogram
+  MK.edgeChart = function (box, rows) {
+    box.querySelectorAll("svg").forEach((n) => n.remove());
+    const vals = rows.map((r) => r.przewaga).filter((v) => typeof v === "number" && Number.isFinite(v));
+    if (!vals.length) { const p = document.createElement("p"); p.className = "mk-note"; p.textContent = "Brak nóg z wartością w wybranym źródle."; box.append(p); return; }
+    const W = Math.max(280, box.clientWidth || 320), H = 260, m = { t: 26, r: 12, b: 30, l: 40 };
+    const maxX = Math.min(0.2, Math.max(0.15, d3.max(vals)));
+    const x = d3.scaleLinear([0, maxX], [m.l, W - m.r]);
+    const bins = d3.bin().domain([0, maxX]).thresholds(d3.range(0, maxX + 1e-9, 0.005))(vals.map((v) => Math.min(Math.max(v, 0), maxX - 1e-9)));
+    const y = d3.scaleLinear([0, d3.max(bins, (b) => b.length) || 1], [H - m.b, m.t]).nice();
+    const svg = d3.select(box).append("svg").attr("width", "100%").attr("viewBox", `0 0 ${W} ${H}`).attr("height", H);
+    const gy = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat((v) => loc.format(",d")(v)).tickSize(-(W - m.l - m.r)));
+    axisStyle(gy);
+    const gx = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(3, Math.floor(W / 80))).tickFormat((v) => loc.format(".0%")(v)));
+    axisStyle(gx);
+    const tip = MK.tip(box);
+    svg.append("g").selectAll("rect").data(bins).join("rect")
+      .attr("x", (b) => x(b.x0) + 1).attr("width", (b) => Math.max(0, x(b.x1) - x(b.x0) - 2))
+      .attr("y", (b) => y(b.length)).attr("height", (b) => y(0) - y(b.length)).attr("rx", 2)
+      .attr("fill", (b) => (b.x0 >= 0.066 ? dash.colors[0] : "var(--cds-chart-muted)"))
+      .on("mousemove", (ev, b) => tip.show(ev, ["przewaga " + loc.format(".1%")(b.x0) + "–" + loc.format(".1%")(b.x1), "nóg: " + MK.int(b.length)]))
+      .on("mouseleave", () => tip.hide());
+    const refs = [{ v: 0.066, t: "kupon 2 nogi: zero" }, { v: 0.092, t: "EV +5%" }, { v: 0.10, t: "limit 10%" }, { v: 0.136, t: "singiel: zero" }].filter((r) => r.v < maxX);
+    const placed = [];
+    refs.forEach((r, i) => {
+      const xx = x(r.v);
+      svg.append("line").attr("x1", xx).attr("x2", xx).attr("y1", m.t - 2).attr("y2", H - m.b).attr("stroke", r.v === 0.10 ? "var(--cds-chart-status-critical)" : "var(--cds-chart-reference)").attr("stroke-dasharray", "4 3");
+      const w = textWidth(svg, r.t);
+      let row = 0;
+      while (placed.some((p) => p.row === row && Math.abs(p.x - xx) < (p.w + w) / 2 + 6)) row++;
+      placed.push({ x: xx, w, row });
+      const anchorX = Math.min(Math.max(xx, m.l + w / 2), W - m.r - w / 2);
+      svg.append("text").attr("x", anchorX).attr("y", 11 - row * 12).attr("text-anchor", "middle").attr("fill", "var(--color-fg-muted)").style("font-size", "0.75rem").text(r.t);
+    });
+    const need = placed.length ? d3.max(placed, (p) => p.row) : 0;
+    if (need > 0) { svg.attr("viewBox", `0 ${-need * 12} ${W} ${H + need * 12}`).attr("height", H + need * 12); }
+  };
+
+  // ---------------------------------------------------------------- chart: value legs per scan
+  MK.scanChart = function (box, rows) {
+    box.querySelectorAll("svg").forEach((n) => n.remove());
+    const items = rows.filter((r) => r.as_of).slice().sort((a, b) => (a.as_of < b.as_of ? -1 : a.as_of > b.as_of ? 1 : a.zrodlo_id.localeCompare(b.zrodlo_id)));
+    if (!items.length) { const p = document.createElement("p"); p.className = "mk-note"; p.textContent = "Brak przebiegów w wybranym źródle."; box.append(p); return; }
+    const W = Math.max(280, box.clientWidth || 320), H = 260, m = { t: 12, r: 12, b: 44, l: 40 };
+    const x = d3.scaleBand(items.map((r) => r.scan_id), [m.l, W - m.r]).padding(0.2);
+    const y = d3.scaleLinear([0, d3.max(items, (r) => Math.max(r.nogi_t100 || 0, r.nogi_t088 || 0)) || 1], [H - m.b, m.t]).nice();
+    const svg = d3.select(box).append("svg").attr("width", "100%").attr("viewBox", `0 0 ${W} ${H}`).attr("height", H);
+    const gy = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat((v) => loc.format(",d")(v)).tickSize(-(W - m.l - m.r)));
+    axisStyle(gy);
+    const every = Math.max(1, Math.ceil(items.length / Math.max(1, Math.floor((W - m.l) / 72))));
+    const gx = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(items.filter((r, i) => i % every === 0).map((r) => r.scan_id)).tickFormat((id) => MK.when((items.find((r) => r.scan_id === id) || {}).as_of)));
+    axisStyle(gx);
+    gx.selectAll("text").attr("transform", "rotate(-25)").attr("text-anchor", "end").attr("dx", "-0.3em").attr("dy", "0.6em");
+    const tip = MK.tip(box);
+    const bw = Math.min(28, x.bandwidth());
+    svg.append("g").selectAll("rect").data(items).join("rect")
+      .attr("x", (r) => x(r.scan_id) + (x.bandwidth() - bw) / 2).attr("width", bw)
+      .attr("y", (r) => y(r.nogi_t100 || 0)).attr("height", (r) => y(0) - y(r.nogi_t100 || 0)).attr("rx", Math.min(4, bw / 2))
+      .attr("fill", "var(--cds-chart-muted)")
+      .on("mousemove", (ev, r) => tip.show(ev, [MK.when(r.as_of) + " · " + r.zrodlo, "nogi bez podatku: " + MK.int(r.nogi_t100), "nogi przy 12%: " + MK.int(r.nogi_t088), "kupony: " + MK.int(r.kupony_top) + ", przy 12%: " + MK.int(r.kupony_ok_t088), "model: " + MK.text(r.model)]))
+      .on("mouseleave", () => tip.hide());
+    svg.append("g").selectAll("rect").data(items.filter((r) => (r.nogi_t088 || 0) > 0)).join("rect")
+      .attr("x", (r) => x(r.scan_id) + (x.bandwidth() - bw) / 2 + bw * 0.25).attr("width", bw * 0.5)
+      .attr("y", (r) => y(r.nogi_t088)).attr("height", (r) => y(0) - y(r.nogi_t088)).attr("rx", 2)
+      .attr("fill", dash.colors[0]).attr("pointer-events", "none");
+  };
+})();
+</script>
+
+<script>
+(function () {
+  const MK = window.MK;
+  const PAGES = ["przeglad", "kupony", "single", "przebiegi", "eksperymenty", "dane", "plan"];
+  let page = "przeglad";
+  const q = { kupony: "", single: "" };
+  let selectedExp = null;
+
+  const $ = (s) => document.querySelector(s);
+  const zrodloSel = $("#f-zrodlo");
+  const params = () => dash.params() || {};
+
+  function show(p, fromUser) {
+    if (!PAGES.includes(p)) p = "przeglad";
+    page = p;
+    PAGES.forEach((id) => {
+      const sec = document.getElementById(id);
+      sec.hidden = id !== p;
+      const tab = document.getElementById("tab-" + id);
+      tab.setAttribute("aria-selected", id === p ? "true" : "false");
+    });
+    if (fromUser) dash.setLink(p);
+    render();
+  }
+  document.querySelectorAll(".mk-tab").forEach((b) => b.addEventListener("click", () => show(b.dataset.page, true)));
+
+  zrodloSel.addEventListener("change", () => dash.setParams({ zrodlo: zrodloSel.value || null, kupon: null }));
+  $("#f-wynik").addEventListener("change", (e) => dash.setParams({ wynik: e.target.value || null }));
+  $("#f-podatek").addEventListener("change", (e) => dash.setParams({ podatek: e.target.value || null }));
+  $("#f-swynik").addEventListener("change", (e) => dash.setParams({ swynik: e.target.value || null }));
+  $("#f-status").addEventListener("change", (e) => dash.setParams({ status: e.target.value || null }));
+  $("#q-kupony").addEventListener("input", (e) => { q.kupony = e.target.value; render(); });
+  $("#q-single").addEventListener("input", (e) => { q.single = e.target.value; render(); });
+  $("#szczegoly-zamknij").addEventListener("click", () => dash.setParams({ kupon: null }));
+  $("#t-kupony").addEventListener("click", (ev) => { const tr = ev.target.closest("tr[data-key]"); if (tr) dash.setParams({ kupon: tr.dataset.key }); });
+  $("#t-kupony").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { const tr = ev.target.closest("tr[data-key]"); if (tr) dash.setParams({ kupon: tr.dataset.key }); } });
+  $("#t-eksperymenty").addEventListener("click", (ev) => { const tr = ev.target.closest("tr[data-key]"); if (tr) { selectedExp = selectedExp === tr.dataset.key ? null : tr.dataset.key; render(); } });
+
+  const bySource = (rows) => { const z = params().zrodlo; return z ? rows.filter((r) => r.zrodlo_id === z) : rows; };
+  const srcKey = () => params().zrodlo || "razem";
+
+  function marks() {
+    const where = "zrodlo_id=" + encodeURIComponent(srcKey());
+    document.querySelectorAll('#kpi [data-source="podsumowanie"]').forEach((el) => el.setAttribute("data-where", where));
+  }
+
+  function fillSummary() {
+    const rows = MK.rows("podsumowanie");
+    const all = document.querySelectorAll('[data-source="podsumowanie"][data-field]');
+    if (!rows) { all.forEach((el) => { if (el.tagName !== "SELECT") { el.textContent = "—"; if (MK.status("podsumowanie") === "error") el.classList.remove("dash-skeleton"); } }); return; }
+    // source picker
+    const cur = params().zrodlo || "";
+    zrodloSel.replaceChildren(new Option("Wszystkie źródła", ""), ...rows.filter((r) => r.zrodlo_id !== "razem").map((r) => new Option(r.zrodlo, r.zrodlo_id)));
+    zrodloSel.value = cur;
+    all.forEach((el) => {
+      if (el.tagName === "SELECT") return;
+      const where = new URLSearchParams(el.getAttribute("data-where") || "");
+      const row = rows.find((r) => r.zrodlo_id === where.get("zrodlo_id"));
+      const f = el.dataset.field;
+      const v = row ? row[f] : null;
+      el.textContent = f === "od" || f === "do" ? MK.day(v) : MK.int(v);
+      el.classList.remove("dash-skeleton");
+    });
+  }
+
+  function renderOverview() {
+    const ex = MK.rows("eksperymenty");
+    const box = $("#ch-zysk");
+    if (!MK.fail(box, "eksperymenty")) MK.profitChart(box, bySource(ex));
+    const sg = MK.rows("single");
+    const box2 = $("#ch-przewaga");
+    if (!MK.fail(box2, "single")) MK.edgeChart(box2, bySource(sg));
+    const plan = MK.rows("plan");
+    if (plan) {
+      const rows = plan.filter((r) => (r.status === "brakuje" || r.status === "decyzja") && /Ty|Oskar/.test(r.kto || ""));
+      MK.table($("#t-kroki"), rows, [
+        { f: "status_pl", chip: true, cls: (v, r) => MK.statusClass(r.status) },
+        { f: "rzecz", wide: true },
+        { f: "kto", nw: true },
+        { f: "jak", mono: true },
+      ], "id", { redraw: render });
+    }
+  }
+
+  function renderCoupons() {
+    const all = MK.rows("kupony");
+    const p = params();
+    $("#f-wynik").value = p.wynik || "";
+    $("#f-podatek").value = p.podatek || "";
+    if (!all) { $("#t-kupony").tBodies[0].replaceChildren(); return; }
+    let rows = bySource(all);
+    if (p.wynik === "loss") rows = rows.filter((r) => r.wynik_kod === "loss" || r.wynik_kod === "half_loss");
+    else if (p.wynik === "win") rows = rows.filter((r) => r.wynik_kod === "win" || r.wynik_kod === "half_win");
+    else if (p.wynik) rows = rows.filter((r) => r.wynik_kod === p.wynik);
+    if (p.podatek) rows = rows.filter((r) => r.przechodzi_kod === p.podatek);
+    rows = MK.search(rows, q.kupony, ["mecze", "bukmacher", "zrodlo", "wynik"]);
+    const n = MK.table($("#t-kupony"), rows, [
+      { f: "as_of", fmt: MK.when, nw: true },
+      { f: "zrodlo" },
+      { f: "bukmacher", nw: true },
+      { f: "mecze", wide: true },
+      { f: "nogi", num: true, fmt: MK.int },
+      { f: "kurs", num: true, fmt: (v) => MK.dec(v) },
+      { f: "szansa", num: true, fmt: (v) => MK.pct(v, 0) },
+      { f: "ev_dolne_t088", num: true, fmt: (v) => MK.spct(v), cls: MK.sign },
+      { f: "przechodzi", chip: true, cls: (v, r) => (r.przechodzi_kod === "t088" ? "mk-ok" : r.przechodzi_kod === "t094" ? "mk-warn" : "mk-muted") },
+      { f: "wynik", chip: true, cls: (v, r) => MK.outcomeClass(r.wynik_kod) },
+      { f: "zysk_t088", num: true, fmt: MK.money, cls: MK.sign },
+      { f: "zysk_t100", num: true, fmt: MK.money, cls: MK.sign },
+    ], "kupon_id", { click: true, selected: p.kupon, redraw: render, sort: { f: "as_of", dir: "desc" } });
+    $("#n-kupony").textContent = "Wiersze: " + MK.int(n);
+    renderDetail(all);
+  }
+
+  function renderDetail(all) {
+    const p = params();
+    const card = $("#szczegoly");
+    const row = p.kupon ? all.find((r) => r.kupon_id === p.kupon) : null;
+    card.hidden = !row;
+    const facts = document.querySelectorAll("#szczegoly-fakty [data-f]");
+    if (!row) {
+      facts.forEach((el) => { el.removeAttribute("data-source"); el.removeAttribute("data-field"); el.removeAttribute("data-where"); });
+      return;
+    }
+    const where = "kupon_id=" + encodeURIComponent(row.kupon_id);
+    facts.forEach((el) => { el.setAttribute("data-source", "kupony"); el.setAttribute("data-field", el.dataset.f); el.setAttribute("data-where", where); });
+    $("#szczegoly-tytul").textContent = "Nogi kuponu · " + MK.text(row.bukmacher) + " · " + MK.when(row.as_of);
+    $("#d-kurs").textContent = MK.dec(row.kurs);
+    $("#d-szansa").textContent = MK.pct(row.szansa, 0);
+    $("#d-ev").textContent = MK.spct(row.ev_dolne_t088);
+    $("#d-wynik").textContent = MK.text(row.wynik);
+    $("#d-clv").textContent = MK.spct(row.clv);
+    const legs = MK.rows("kupony_nogi");
+    if (!legs) return;
+    MK.table($("#t-nogi"), legs.filter((l) => l.kupon_id === row.kupon_id), [
+      { f: "nr", num: true, fmt: MK.int },
+      { f: "mecz", wide: true },
+      { f: "liga" },
+      { f: "start", fmt: MK.when, nw: true },
+      { f: "zaklad", wide: true },
+      { f: "kurs", num: true, fmt: (v) => MK.dec(v) },
+      { f: "p_uczciwe", num: true, fmt: (v) => MK.pct(v, 1) },
+      { f: "cena_z" },
+      { f: "wynik", chip: true, cls: (v, r) => MK.outcomeClass(r.wynik_kod) },
+    ], "noga", { redraw: render, sort: { f: "nr", dir: "asc" } });
+  }
+
+  function renderSingles() {
+    const all = MK.rows("single");
+    const p = params();
+    $("#f-swynik").value = p.swynik || "";
+    if (!all) { $("#t-single").tBodies[0].replaceChildren(); return; }
+    let rows = bySource(all);
+    if (p.swynik === "loss") rows = rows.filter((r) => r.wynik_kod === "loss" || r.wynik_kod === "half_loss");
+    else if (p.swynik === "win") rows = rows.filter((r) => r.wynik_kod === "win" || r.wynik_kod === "half_win");
+    else if (p.swynik) rows = rows.filter((r) => r.wynik_kod === p.swynik);
+    rows = MK.search(rows, q.single, ["mecz", "liga", "zaklad", "bukmacher", "zrodlo"]);
+    const n = MK.table($("#t-single"), rows, [
+      { f: "as_of", fmt: MK.when, nw: true },
+      { f: "zrodlo" },
+      { f: "bukmacher", nw: true },
+      { f: "mecz", wide: true },
+      { f: "liga" },
+      { f: "zaklad", wide: true },
+      { f: "kurs", num: true, fmt: (v) => MK.dec(v) },
+      { f: "kurs_uczciwy", num: true, fmt: (v) => MK.dec(v) },
+      { f: "przewaga", num: true, fmt: (v) => MK.spct(v), cls: (v) => (v >= 0.066 ? "mk-ok" : "") },
+      { f: "cena_z" },
+      { f: "wynik", chip: true, cls: (v, r) => MK.outcomeClass(r.wynik_kod) },
+      { f: "zysk_t088", num: true, fmt: MK.money, cls: MK.sign },
+      { f: "clv", num: true, fmt: (v) => MK.spct(v), cls: MK.sign },
+    ], "noga_id", { redraw: render, sort: { f: "as_of", dir: "desc" } });
+    $("#n-single").textContent = "Wiersze: " + MK.int(n);
+  }
+
+  function renderScans() {
+    const all = MK.rows("przebiegi");
+    const box = $("#ch-przebiegi");
+    if (!MK.fail(box, "przebiegi")) MK.scanChart(box, bySource(all));
+    if (!all) return;
+    MK.table($("#t-przebiegi"), bySource(all), [
+      { f: "as_of", fmt: MK.when, nw: true },
+      { f: "zrodlo" },
+      { f: "config_id", nw: true },
+      { f: "mecze", num: true, fmt: MK.int },
+      { f: "nogi_t100", num: true, fmt: MK.int },
+      { f: "nogi_t094", num: true, fmt: MK.int },
+      { f: "nogi_t088", num: true, fmt: MK.int, cls: (v) => (v > 0 ? "mk-ok" : "") },
+      { f: "kupony_top", num: true, fmt: MK.int },
+      { f: "kupony_ok_t088", num: true, fmt: MK.int, cls: (v) => (v > 0 ? "mk-ok" : "") },
+      { f: "model", chip: true, cls: (v) => (v === "ok" ? "mk-ok" : "mk-muted") },
+    ], "scan_id", { redraw: render, sort: { f: "as_of", dir: "desc" } });
+  }
+
+  function renderExperiments() {
+    const ex = MK.rows("eksperymenty");
+    if (ex) {
+      MK.table($("#t-eksperymenty"), bySource(ex), [
+        { f: "zrodlo" },
+        { f: "config_id", nw: true },
+        { f: "zabezpieczenia", chip: true, cls: (v, r) => (r.luzne ? "mk-warn" : "mk-ok") },
+        { f: "nogi_w_kuponie", nw: true },
+        { f: "przebiegi", num: true, fmt: MK.int },
+        { f: "single", num: true, fmt: MK.int },
+        { f: "kupony", num: true, fmt: MK.int },
+        { f: "kupony_ok_t088", num: true, fmt: MK.int, cls: (v) => (v > 0 ? "mk-ok" : "") },
+        { f: "kupony_wygrane", num: true, fmt: MK.int },
+        { f: "kupony_przegrane", num: true, fmt: MK.int },
+        { f: "kupony_otwarte", num: true, fmt: MK.int },
+        { f: "zysk_kupony_t088", num: true, fmt: MK.money, cls: MK.sign },
+        { f: "zysk_kupony_t100", num: true, fmt: MK.money, cls: MK.sign },
+        { f: "opis", wide: true },
+      ], "eksperyment_id", { click: true, selected: selectedExp, redraw: render });
+    }
+    const wy = MK.rows("wyniki");
+    if (!wy) return;
+    let rows = bySource(wy);
+    if (selectedExp) rows = rows.filter((r) => r.zrodlo_id + ":" + r.config_id === selectedExp);
+    $("#wyniki-tytul").textContent = selectedExp ? "Wyniki według skanera · " + selectedExp.split(":").slice(-1)[0] : "Wyniki według skanera";
+    rows = rows.filter((r) => (r.zaklady || 0) > 0);
+    MK.table($("#t-wyniki"), rows, [
+      { f: "zrodlo" },
+      { f: "config_id", nw: true },
+      { f: "rodzaj" },
+      { f: "rynki" },
+      { f: "podatek", nw: true },
+      { f: "zaklady", num: true, fmt: MK.int },
+      { f: "rozliczone", num: true, fmt: MK.int },
+      { f: "trafienia", num: true, fmt: (v) => MK.pct(v, 0) },
+      { f: "zysk_na_stawke", num: true, fmt: (v) => MK.spct(v), cls: MK.sign },
+      { f: "clv_mediana", num: true, fmt: (v) => MK.spct(v) },
+      { f: "pobite_zamkniecia", num: true, fmt: (v) => MK.pct(v, 0) },
+    ], "wynik_id", { redraw: render });
+  }
+
+  function renderData() {
+    const rows = MK.rows("dane");
+    if (!rows) return;
+    MK.table($("#t-dane"), rows, [
+      { f: "sekcja", nw: true },
+      { f: "pozycja" },
+      { f: "wartosc", nw: true },
+      { f: "stan", chip: true, cls: (v) => MK.statusClass(v) },
+      { f: "uwagi", wide: true },
+    ], "dane_id", { redraw: render });
+  }
+
+  function renderPlan() {
+    const rows = MK.rows("plan");
+    const p = params();
+    $("#f-status").value = p.status || "";
+    if (!rows) return;
+    const order = { brakuje: 0, problem: 1, decyzja: 2, w_toku: 3, gotowe: 4 };
+    const list = (p.status ? rows.filter((r) => r.status === p.status) : rows).slice().sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    MK.table($("#t-plan"), list, [
+      { f: "status_pl", chip: true, cls: (v, r) => MK.statusClass(r.status) },
+      { f: "obszar", nw: true },
+      { f: "rzecz", wide: true },
+      { f: "szczegoly", wide: true },
+      { f: "kto", nw: true },
+      { f: "jak", mono: true },
+    ], "id", { redraw: render });
+  }
+
+  function render() {
+    marks();
+    fillSummary();
+    if (page === "przeglad") renderOverview();
+    if (page === "kupony") renderCoupons();
+    if (page === "single") renderSingles();
+    if (page === "przebiegi") renderScans();
+    if (page === "eksperymenty") renderExperiments();
+    if (page === "dane") renderData();
+    if (page === "plan") renderPlan();
+  }
+
+  dash.onData(render);
+  const start = location.hash.slice(1);
+  if (PAGES.includes(start)) show(start, false);
+})();
+</script>

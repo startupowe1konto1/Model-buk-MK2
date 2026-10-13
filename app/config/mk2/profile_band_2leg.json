@@ -1,0 +1,6 @@
+{
+  "_comment": "MK2 strategy (docs/MK2-KONCEPT.md section 2): coupons of exactly 2 legs with total odds at most 2.00, legs at most 2.00. The 1.30 lower bound of the band is not a ScanConfig field yet, so coupons below 1.30 are still possible (rare: both legs about 1.14).",
+  "coupon_sizes": [2],
+  "max_leg_odds": 2.0,
+  "max_coupon_odds": 2.0
+}
