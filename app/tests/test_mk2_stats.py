@@ -115,7 +115,27 @@ def test_candidates_ignore_outlier_prices_and_flag_tail_lines():
     assert r["kurs"] == 1.92 and r["bukmacher"] == "B"
     tail = next(x for x in rows if x["fixture_id"] == 0 and x["line"] == a["mecze"][0]["linie"][2]["line"]
                 and x["side"] == "over")
-    assert (0.30 <= tail["p_rynek"] <= 0.80) == tail["do_typow"]
+    assert (0.30 <= tail["p_rynek"] <= 0.80 and tail["kurs"] <= sp.MAX_PICK_ODDS) == tail["do_typow"]
+
+
+def test_candidates_follow_the_users_rules():
+    """Only "over" bets, only X.5 lines, and a pick priced at most about 1.8."""
+    a = analysis_with_market(1.0)
+    m = a["mecze"][0]
+    m["linie"] += [{**m["linie"][1], "line": 9.0}, {**m["linie"][1], "line": 9.25}]  # whole and quarter lines
+    rows = sp.candidates(a, {("shots", "home"): 1.0})
+    assert rows and all(r["side"] == "over" and sp.is_half_line(r["line"]) for r in rows)
+    assert all(not r["do_typow"] for r in rows if r["kurs"] > sp.MAX_PICK_ODDS)
+    assert any(r["do_typow"] for r in rows)
+
+
+def test_descriptions_say_at_least_n_in_polish():
+    m = {"gospodarz": "Aston Villa", "gosc": "Fenerbahçe"}
+    assert sp.describe(m, "shots", "home", "over", 13.5) == "Aston Villa: co najmniej 14 strzałów"
+    assert sp.describe(m, "corners", "total", "over", 9.5) == "W meczu: co najmniej 10 rzutów rożnych"
+    assert sp.describe(m, "sot", "away", "over", 3.5) == "Fenerbahçe: co najmniej 4 celne strzały"
+    assert sp.describe(m, "corners", "away", "over", 0.5) == "Fenerbahçe: co najmniej 1 rzut rożny"
+    assert sp.plural(22, "shots") == "strzały" and sp.plural(12, "shots") == "strzałów"
 
 
 def test_coupons_take_legs_from_different_matches_within_the_odds_band():

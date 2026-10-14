@@ -38,6 +38,35 @@ MAX_PRICE_OVER_MEDIAN = 1.08  # a price far above the other bookmakers' is more 
 MAX_EDGE = 0.15
 # Teams with fewer matches with statistics in the last year are mostly guesses from their league.
 MIN_TEAM_MATCHES = 10
+# The user's rules (2026-10-14): only "over" bets, only on X.5 lines (never quarter or whole lines),
+# and a single pick priced at most about 1.8.
+ONLY_OVER = True
+HALF_LINES_ONLY = True
+MAX_PICK_ODDS = 1.85
+RULES = "v2"
+
+# Polish forms for 1, for 2-4 (not 12-14) and for the rest
+FORMS = {
+    "shots": ("strzał", "strzały", "strzałów"), "sot": ("celny strzał", "celne strzały", "celnych strzałów"),
+    "corners": ("rzut rożny", "rzuty rożne", "rzutów rożnych"), "fouls": ("faul", "faule", "fauli"),
+    "cards": ("kartka", "kartki", "kartek"), "yellow": ("żółta kartka", "żółte kartki", "żółtych kartek"),
+    "offsides": ("spalony", "spalone", "spalonych"),
+}
+
+
+def plural(n: int, stat: str) -> str:
+    one, few, many = FORMS[stat]
+    if n == 1:
+        return one
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return few
+    return many
+
+
+def is_half_line(line: float) -> bool:
+    return abs(line - int(line) - 0.5) < 1e-9
+
+
 SCOPE_PL = {"home": "gospodarz", "away": "gość", "total": "łącznie"}
 
 
@@ -77,7 +106,10 @@ def candidates(analysis: dict, factors: dict) -> list[dict]:
             k = factors.get((l["stat"], l["scope"]), 1.0)
             mu = m["srednie"][l["stat"]][l["scope"]] * k
             p_over, p_push, p_under = sm.nb_over(mu, alpha_for(analysis["model"], l["stat"], l["scope"]), l["line"])
-            for side, p, q in (("over", p_over, q_over), ("under", p_under, 1 - q_over)):
+            if HALF_LINES_ONLY and not is_half_line(l["line"]):
+                continue
+            sides = (("over", p_over, q_over),) if ONLY_OVER else (("over", p_over, q_over), ("under", p_under, 1 - q_over))
+            for side, p, q in sides:
                 prices = l.get(f"kursy_{side}") or {}
                 if not prices:
                     continue
@@ -90,10 +122,12 @@ def candidates(analysis: dict, factors: dict) -> list[dict]:
                     "fixture_id": m["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}",
                     "stat": l["stat"], "scope": l["scope"], "line": l["line"], "side": side,
                     "opis": describe(m, l["stat"], l["scope"], side, l["line"]),
+                    "zaklad": f"{'powyżej' if side == 'over' else 'poniżej'} {l['line']:.1f}".replace(".", ","),
+                    "zasady": RULES,
                     "p_model": round(p, 4), "p_model_surowe": round(l[f"p_{side}"], 4), "p_rynek": round(q, 4),
                     "kurs": odd, "bukmacher": bm_best, "kurs_mediana": round(median, 2),
                     "do_typow": l["stat"] in PICK_STATS and MARKET_BAND[0] <= q <= MARKET_BAND[1]
-                                and m.get("min_n", MIN_TEAM_MATCHES) >= MIN_TEAM_MATCHES,
+                                and m.get("min_n", MIN_TEAM_MATCHES) >= MIN_TEAM_MATCHES and odd <= MAX_PICK_ODDS,
                     "kurs_uczciwy": round(1 / p, 2) if p > 0 else None,
                     "kurs_min_z_podatkiem": round(1 / (p * TAX), 2) if p > 0 else None,
                     "ev": round(ev, 4), "ev_podatek": round(p * odd * TAX + p_push * TAX - 1, 4),
@@ -103,12 +137,17 @@ def candidates(analysis: dict, factors: dict) -> list[dict]:
 
 
 def describe(m: dict, stat: str, scope: str, side: str, line: float) -> str:
-    who = {"home": m["gospodarz"], "away": m["gosc"], "total": "łącznie"}[scope]
+    """'Aston Villa: co najmniej 14 strzałów' for an over X.5 bet; the bookmaker's wording otherwise."""
+    who = {"home": m["gospodarz"], "away": m["gosc"], "total": "W meczu"}[scope]
+    if side == "over" and is_half_line(line):
+        k = int(line + 0.5)
+        return f"{who}: co najmniej {k} {plural(k, stat)}"
     word = "powyżej" if side == "over" else "poniżej"
     return f"{who}: {sm.STAT_PL[stat]} {word} {str(line).replace('.', ',')}"
 
 
-LEG_KEYS = ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "kurs", "bukmacher", "p_model", "p_rynek")
+LEG_KEYS = ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "zaklad", "kurs", "bukmacher", "p_model",
+            "p_rynek")
 
 
 def coupons(picks: list[dict], legs: int, lo: float = 1.8, hi: float = 2.5, top: int = 5) -> list[dict]:

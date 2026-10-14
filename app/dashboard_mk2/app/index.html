@@ -95,6 +95,16 @@ th[aria-sort="descending"] .th::after { content: " ↓"; }
 .pick .ti { font: 600 1.1rem var(--display); }
 .pick .mt { color: var(--muted); font-size: 0.9rem; }
 .pick .legs { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }
+/* a pick in three labelled blocks: what to bet, the bookmaker's price, the model's chance */
+.pk3 { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.blk { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: grid; gap: 2px; align-content: start; min-width: 0; }
+.blk .k { font: 600 0.72rem var(--body); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.blk .v { font: 700 1.4rem/1.15 var(--display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.blk .s { font-size: 0.84rem; color: var(--muted); overflow-wrap: anywhere; }
+.blk.typ { border-color: var(--pitch); background: var(--pitch-soft); }
+.pk3.sm .v { font-size: 1.12rem; }
+.legn { font: 600 0.8rem var(--body); color: var(--muted); letter-spacing: 0.04em; }
+@media (max-width: 560px) { .pk3 { grid-template-columns: 1fr 1fr; } .blk.typ { grid-column: 1 / -1; } }
 details.why summary { cursor: pointer; color: var(--pitch); font-weight: 600; font-size: 0.9rem; }
 details.why p { margin: 6px 0 0; font-size: 0.92rem; max-width: 80ch; }
 /* matches */
@@ -156,6 +166,16 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       <div class="row between"><h2>Typy dnia</h2><span class="fresh" id="td-info"></span></div>
       <div class="chips" id="td-days" role="group" aria-label="Dzień"></div>
       <div class="sum" id="td-sum"></div>
+      <details class="why"><summary>Zasady typów i co znaczy „powyżej 9,5”</summary>
+        <ul class="list note">
+          <li>Typ to zawsze zdarzenie „co najmniej …”, np. „co najmniej 10 rzutów rożnych”. U bukmachera ten sam zakład nazywa się „powyżej 9,5”: liczba z połówką (tzw. linia) to tylko próg, więc „powyżej 9,5” wygrywa, gdy padnie 10 albo więcej. Nie dajemy typów „poniżej” ani linii bez połówki (np. 9 czy 9,25).</li>
+          <li>Kurs pojedynczego typu: do ok. 1,8 (najwyżej 1,85).</li>
+          <li>Typ musi się opłacać także po podatku 12%: szansa wg modelu × kurs × 0,88 musi dać więcej niż 1. Przy kursie 1,8 potrzeba szansy co najmniej 63%.</li>
+          <li>Tylko strzały, celne strzały i rzuty rożne. Model może różnić się od bukmacherów o 4–15 punktów procentowych (większa różnica to częściej błąd modelu niż okazja). Obie drużyny muszą mieć co najmniej 10 meczów w danych.</li>
+          <li>Kupon dnia: 2 zdarzenia z różnych meczów (3 tylko wtedy, gdy żaden kupon z 2 nie spełni zasad), łączny kurs 1,8–2,5, opłacalny po podatku.</li>
+          <li>„Kurs u bukmachera” to najlepszy kurs z serwisu kursowego (Bet365, Betano, 1xBet i inni). U Twojego bukmachera kurs może być inny: graj tylko, gdy jest co najmniej taki jak „opłaca się od kursu”.</li>
+        </ul>
+      </details>
     </div>
     <div class="page" id="td-picks"></div>
     <div class="page" id="td-kupon"></div>
@@ -209,20 +229,20 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       <div class="calc">
         <label class="label" for="c-stat">Statystyka <select class="ctrl" id="c-stat"></select></label>
         <label class="label" for="c-scope">Kto <select class="ctrl" id="c-scope"></select></label>
-        <label class="label" for="c-line">Linia <input class="in num" id="c-line" type="number" step="0.5" min="0.5"></label>
+        <label class="label" for="c-line">Co najmniej <input class="in num" id="c-line" type="number" step="1" min="1"></label>
       </div>
       <div class="calc-out" id="c-out"></div>
     </div>
     <div class="card">
       <h2>Pewniejsze progi</h2>
-      <p class="note">Najwyższy próg, który według modelu padnie z szansą co najmniej 70% (albo 55%). Min. kurs: od takiego kursu zakład opłaca się po podatku 12%.</p>
+      <p class="note">Najwyższy próg, który według modelu padnie z szansą co najmniej 70% (albo 55%). „Opłaca się od kursu”: od takiego kursu zakład zarabia po podatku 12%.</p>
       <div class="wrap short"><table class="tbl" id="mz-progi"></table></div>
     </div>
     <div class="cols" id="mz-teams"></div>
     <div class="card">
       <details class="box" id="mz-kursy-box"><summary>Kursy bukmacherów na statystyki</summary>
-        <p class="note">Linie z serwisu kursowego (Bet365, Betano, 1xBet, Pinnacle i inni). „Rynek” to szansa wynikająca z kursów po zdjęciu marży. Zysk liczony z podatkiem 12% przy najlepszym kursie.</p>
-        <div class="row"><label class="check" for="mz-all"><input id="mz-all" type="checkbox"> wszystkie linie</label><span class="fresh" id="mz-lines"></span></div>
+        <p class="note">Kursy z serwisu kursowego (Bet365, Betano, 1xBet, Pinnacle i inni), tylko zakłady „co najmniej” (u bukmachera „powyżej X,5”). „Bukmacherzy” to szansa wynikająca z ich kursów po zdjęciu marży. Zysk liczony z podatkiem 12% przy najlepszym kursie.</p>
+        <div class="row"><label class="check" for="mz-all"><input id="mz-all" type="checkbox"> wszystkie progi</label><span class="fresh" id="mz-lines"></span></div>
         <div class="wrap"><table class="tbl" id="mz-kursy"></table></div>
       </details>
     </div>
@@ -242,10 +262,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
         <label for="sz-kto">Kto
           <select class="ctrl" id="sz-kto"><option value="home">gospodarz</option><option value="away">gość</option><option value="any">dowolna drużyna</option><option value="total">łącznie w meczu</option></select>
         </label>
-        <label for="sz-typ">Zdarzenie
-          <select class="ctrl" id="sz-typ"><option value="min">co najmniej</option><option value="max">co najwyżej</option></select>
-        </label>
-        <label for="sz-k">Próg (puste: najwyższy możliwy)<input class="in num" id="sz-k" type="number" min="0" step="1"></label>
+        <label for="sz-k">Co najmniej (puste: najwyższy możliwy próg)<input class="in num" id="sz-k" type="number" min="1" step="1"></label>
         <label for="sz-p">Minimalna szansa (%)<input class="in num" id="sz-p" type="number" min="1" max="99" step="1" value="70"></label>
         <label class="check" for="sz-kursy"><input id="sz-kursy" type="checkbox"> tylko mecze z kursami</label>
       </div>
@@ -265,7 +282,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
         <label for="zk-rodzaj">Rodzaj
           <select class="ctrl" id="zk-rodzaj"><option>Singiel</option><option>Kupon 2</option><option>Kupon 3</option><option>Kupon 4+</option></select>
         </label>
-        <label for="zk-opis" style="grid-column: 1 / -1">Zakład (przy kuponie wszystkie nogi)<textarea class="ta" id="zk-opis" placeholder="np. Aston Villa: strzały powyżej 13,5"></textarea></label>
+        <label for="zk-opis" style="grid-column: 1 / -1">Zakład (przy kuponie wszystkie nogi)<textarea class="ta" id="zk-opis" placeholder="np. Aston Villa: co najmniej 14 strzałów (powyżej 13,5)"></textarea></label>
         <label for="zk-buk">Bukmacher<input class="in" id="zk-buk" type="text" placeholder="np. STS, Betclic, Superbet"></label>
         <label for="zk-kurs">Kurs<input class="in num" id="zk-kurs" type="number" min="1.01" step="0.01"></label>
         <label for="zk-stawka">Stawka (zł)<input class="in num" id="zk-stawka" type="number" min="1" step="1" value="10"></label>
@@ -320,7 +337,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       <ul class="list">
         <li>Dane: statystyki meczów (strzały, celne, rożne, faule, kartki) z ostatnich sezonów 15 najlepszych lig wg rankingu UEFA, 7 lig dodatkowych i trzech pucharów, uzupełniane codziennie z API-Football. Kursy też z API-Football.</li>
         <li>Model liczy dla każdej drużyny, ile „robi” danej statystyki i na ile pozwala rywalom, z uwzględnieniem poziomu ligi, gospodarza, pucharu i świeżości meczów (starsze ważą mniej).</li>
-        <li>Typy dnia: linie, przy których model najbardziej różni się od bukmacherów, ale nie skrajnie. Każdy typ ma opis „Dlaczego”, a po meczu jest rozliczany z prawdziwą statystyką.</li>
+        <li>Typy dnia: zdarzenia „co najmniej …” z kursem do ok. 1,8, przy których model daje wyraźnie większą szansę niż bukmacherzy (ale nie skrajnie większą) i które opłacają się po podatku. Każdy typ ma opis „Dlaczego”, a po meczu jest rozliczany z prawdziwą statystyką.</li>
         <li>Aktualizacja: kilka razy dziennie (wyniki, kursy, prognozy, typy).</li>
       </ul>
     </div>
@@ -334,7 +351,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
   const S = {
     data: {}, page: "typy", sorts: {}, td: null, mecz: null, calc: null, allLines: false,
     mz: { day: "", liga: "main", q: "" },
-    sz: { liga: "main", stat: "shots", kto: "home", typ: "min", dni: 3, kursy: false },
+    sz: { liga: "main", stat: "shots", kto: "home", dni: 3, kursy: false },
     zkEdit: null, zkDraft: null, downloads: null, drafts: {},
     db: null, user: null, me: null, canWrite: false, names: {},
     ov: { plan: {}, prosby: [], zaklady: [] },
@@ -372,10 +389,32 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     return new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d, 12)));
   }
   const STAT = { shots: "Strzały", sot: "Celne strzały", corners: "Rożne", fouls: "Faule", cards: "Kartki", yellow: "Żółte kartki", offsides: "Spalone" };
-  const NOUN = { shots: "strzałów", sot: "celnych strzałów", corners: "rożnych", fouls: "fauli", cards: "kartek", yellow: "żółtych kartek", offsides: "spalonych" };
   const MAIN = ["shots", "sot", "corners", "fouls", "cards"];
   const PICKABLE = new Set(["shots", "sot", "corners"]);
   const TAX = 0.88;
+  const MAX_PICK_ODDS = 1.85;
+  // Polish forms for 1, for 2-4 (not 12-14) and for the rest
+  const FORMS = { shots: ["strzał", "strzały", "strzałów"], sot: ["celny strzał", "celne strzały", "celnych strzałów"],
+    corners: ["rzut rożny", "rzuty rożne", "rzutów rożnych"], fouls: ["faul", "faule", "fauli"], cards: ["kartka", "kartki", "kartek"],
+    yellow: ["żółta kartka", "żółte kartki", "żółtych kartek"], offsides: ["spalony", "spalone", "spalonych"] };
+  function plural(n, stat) {
+    const f = FORMS[stat] || ["", "", ""];
+    if (n === 1) return f[0];
+    return [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? f[1] : f[2];
+  }
+  const atLeastText = (k, stat) => "co najmniej " + k + " " + plural(k, stat);
+  // "Aston Villa: co najmniej 14 strzałów" -> ["Aston Villa", "co najmniej 14 strzałów"]
+  function splitOpis(opis) {
+    const s = opis || "", i = s.indexOf(": ");
+    return i < 0 ? ["", s] : [s.slice(0, i), s.slice(i + 2)];
+  }
+  const whoText = (who) => (who === "W meczu" ? "Cały mecz (obie drużyny razem)" : who);
+  // the same bet in the bookmaker's words: "Aston Villa – strzały powyżej 13,5"
+  function bookieText(p) {
+    const teams = (p.mecz || "").split(" – ");
+    const who = p.scope === "home" ? teams[0] + " – " : p.scope === "away" ? (teams[1] || "") + " – " : "";
+    return who + (STAT[p.stat] || "").toLowerCase() + " " + (p.zaklad || ((p.side === "over" ? "powyżej " : "poniżej ") + line(p.line)));
+  }
   const st = (k) => S.data["st_" + k];
   const meta = () => st("meta") || {};
   const matches = () => st("mecze") || [];
@@ -399,7 +438,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     if ((meta().puchary || []).includes(ligaId) && m.alpha_puchary !== undefined) return scope === "total" ? m.alpha_total_puchary : m.alpha_puchary;
     return scope === "total" ? m.alpha_total : m.alpha;
   }
-  const meanOf = (m, stat, scope) => { const v = m.m[stat]; if (!v) return null; return scope === "home" ? v[0] : scope === "away" ? v[1] : v[0] + v[1]; };
+  const meanOf = (m, stat, scope) => { const v = m.m[stat]; if (!v) return null; return scope === "home" ? v[0] : scope === "away" ? v[1] : v.length > 2 ? v[2] : v[0] + v[1]; };
   function nbTail(mu, alpha, ln) {
     const a = Math.max(alpha || 0, 1e-6), r = 1 / a, p = r / (r + mu);
     let pmf = Math.exp(r * Math.log(p)), under = 0, push = 0;
@@ -410,14 +449,12 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     return { over: Math.max(0, 1 - under - push), push, under };
   }
   const atLeast = (mu, alpha, k) => (k <= 0 ? 1 : nbTail(mu, alpha, k - 0.5).over);
-  const atMost = (mu, alpha, k) => nbTail(mu, alpha, k + 0.5).under;
   function threshold(mu, alpha, level) {
     let best = null;
     for (let k = 1; k < 80; k++) { const p = atLeast(mu, alpha, k); if (p >= level) best = { k, p }; else break; }
     return best;
   }
   const minOdds = (p) => (p > 0 ? 1 / (p * TAX) : null);
-  const fairOdds = (p) => (p > 0 ? 1 / p : null);
 
   // ================================================================== data
   const FILES = ["st_meta", "st_typy", "st_wyniki", "st_mecze", "st_druzyny", "st_rozliczenia", "st_plan"];
@@ -624,32 +661,52 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       if (r.kupon && r.kupon.wynik) { const c = el("span"); c.append("Kupon dnia: "); c.append(resultChip(r.kupon.wynik)); sum.append(c); }
       if (tw.rozliczone < tw.n) sum.append(el("span", "c-muted", "pozostałe czekają na statystyki"));
     } else if (S.td < t) sum.append(el("span", "c-muted", "Czekam na statystyki tych meczów; rozliczenie pojawi się po najbliższej aktualizacji."));
-    else sum.append(el("span", "c-muted", "Typy zapisuję przed meczami, a po meczu pokazuję, co siadło. Graj tylko, gdy kurs u Twojego bukmachera jest co najmniej równy minimalnemu."));
+    else sum.append(el("span", "c-muted", "Typy zapisuję przed meczami, a po meczu pokazuję, co siadło. Graj tylko, gdy kurs u Twojego bukmachera jest co najmniej taki jak „opłaca się od kursu”."));
+    if (r && r.stare_zasady) sum.append(el("span", "c-warn", "Te typy powstały według starych zasad (były też zakłady „poniżej” i kursy powyżej 1,8), więc ich wynik liczę osobno."));
     $("#td-info").textContent = d.top && d.top.length ? "typy: " + d.top.length : "";
     const box = $("#td-picks");
     box.replaceChildren();
-    if (!d.top.length) box.append(el("div", "card", "Na ten dzień model nie znalazł linii wyraźnie lepszych od rynku."));
+    if (!d.top.length) box.append(el("div", "card", "Na ten dzień żaden zakład nie spełnia zasad (co najmniej …, kurs do ok. 1,8, zysk po podatku, wyraźna przewaga nad bukmacherami)."));
     d.top.forEach((p, i) => box.append(pickCard(p, i + 1)));
     const kb = $("#td-kupon");
     kb.replaceChildren(couponCard(d.kupon, d.kupony || []));
     renderResults(wy);
   }
+  // the three blocks every pick and coupon leg shows: what to bet, the bookmaker's price, the model's chance
+  function pickBlocks(p, small, label) {
+    const [who, what] = splitOpis(p.opis);
+    const g = el("div", "pk3" + (small ? " sm" : ""));
+    const b1 = el("div", "blk typ");
+    b1.append(el("span", "k", label || "Typ"));
+    if (who) b1.append(el("span", "s", whoText(who)));
+    b1.append(el("span", "v", what), el("span", "s", "u bukmachera: " + bookieText(p)));
+    const b2 = el("div", "blk");
+    b2.append(el("span", "k", "Kurs u bukmachera"), el("span", "v", dec(p.kurs)), el("span", "s", p.bukmacher || ""));
+    const b3 = el("div", "blk");
+    b3.append(el("span", "k", "Szansa wg modelu"), el("span", "v", pct(p.p_model)), el("span", "s", "bukmacherzy: " + pct(p.p_rynek)));
+    g.append(b1, b2, b3);
+    return g;
+  }
+  function payFrom(box, p) {
+    const s = el("span");
+    s.append("Opłaca się od kursu ", el("b", "c-win", dec(minOdds(p))), " (po podatku 12%)");
+    box.append(s);
+  }
   function pickCard(p, n) {
     const m = matchById(p.fixture_id);
     const settled = p.wynik === "wygrana" ? " won" : p.wynik === "przegrana" ? " lost" : "";
     const c = el("article", "pick" + settled);
-    const hd = el("div", "hd");
-    hd.append(el("span", "ti", (n ? n + ". " : "") + p.opis));
-    if ("wynik" in p) hd.append(resultChip(p.wynik, p.wartosc));
-    c.append(hd);
     const start = (m && m.start) || p.start;
-    c.append(el("div", "mt", p.mecz + (start ? " · " + day(start) + ", " + hm(start) : "") + (m ? " · " + ligaName(m.liga_id) : "")));
+    const hd = el("div", "hd");
+    hd.append(el("span", "mt", (n ? n + ". " : "") + p.mecz + (start ? " · " + day(start) + ", " + hm(start) : "") + (m ? " · " + ligaName(m.liga_id) : "")));
+    const tags = el("span", "row");
+    if (p.zasady === "v1") tags.append(el("span", "chip c-muted", "stare zasady"));
+    if ("wynik" in p) tags.append(resultChip(p.wynik, p.wartosc));
+    hd.append(tags);
+    c.append(hd, pickBlocks(p));
     const f = el("div", "facts");
-    if (!empty(p.oczekiwane)) fact(f, "Model oczekuje", d1(p.oczekiwane) + " (linia " + line(p.line) + ")");
-    fact(f, "Szansa: model", pct(p.p_model));
-    fact(f, "rynek", pct(p.p_rynek));
-    fact(f, "Kurs", dec(p.kurs) + " (" + p.bukmacher + ")");
-    fact(f, "Graj od kursu", dec(p.kurs_min_z_podatkiem || minOdds(p.p_model)), "c-win");
+    if (!empty(p.oczekiwane)) fact(f, "Model oczekuje średnio", d1(p.oczekiwane));
+    payFrom(f, p.p_model);
     c.append(f);
     const w = whyBox(p.why);
     if (w) c.append(w);
@@ -657,41 +714,55 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const add = el("button", "btn ghost sm", "Dodaj do zakładów");
     add.type = "button";
     add.addEventListener("click", () => draftBet({ mecz: p.mecz, rozgr: m ? ligaName(m.liga_id) : "", data: start ? dayKey(start) : S.td,
-      opis: p.opis, kurs: p.kurs, szansa: p.p_model, nogi: [{ fixture_id: p.fixture_id, stat: p.stat, scope: p.scope, line: p.line, side: p.side }] }));
+      opis: legText(p), kurs: p.kurs, szansa: p.p_model, nogi: [{ fixture_id: p.fixture_id, stat: p.stat, scope: p.scope, line: p.line, side: p.side }] }));
     row.append(add);
     if (m) { const o = el("button", "btn ghost sm", "Analiza meczu"); o.type = "button"; o.addEventListener("click", () => openMatch(m.id)); row.append(o); }
     c.append(row);
     return c;
   }
+  // one line for the ledger: "Aston Villa: co najmniej 14 strzałów (powyżej 13,5)"
+  const legText = (l) => l.opis + " (" + (l.zaklad || ((l.side === "over" ? "powyżej " : "poniżej ") + line(l.line))) + ")";
   function couponCard(k, alts) {
     const card = el("div", "card");
     card.append(el("h2", null, "Kupon dnia ok. 2,0"));
-    if (!k) { card.append(el("p", "note", "Na ten dzień nie ma kuponu z dwóch zdarzeń o łącznym kursie 1,8–2,5, który model uważa za opłacalny.")); return card; }
+    if (!k) { card.append(el("p", "note", "Na ten dzień nie ma kuponu (2 zdarzenia, wyjątkowo 3; łączny kurs 1,8–2,5), który opłaca się po podatku.")); return card; }
+    const legs = k.legs || [];
     const c = el("article", "pick" + (k.wynik === "wygrana" ? " won" : k.wynik === "przegrana" ? " lost" : ""));
     const hd = el("div", "hd");
-    hd.append(el("span", "ti", "Kurs " + dec(k.kurs) + " · szansa wg modelu " + pct(k.p_model)));
-    if ("wynik" in k) hd.append(resultChip(k.wynik));
+    hd.append(el("span", "mt", legs.length + " zdarzenia z różnych meczów"));
+    const tags = el("span", "row");
+    if (k.zasady === "v1") tags.append(el("span", "chip c-muted", "stare zasady"));
+    if ("wynik" in k) tags.append(resultChip(k.wynik));
+    hd.append(tags);
     c.append(hd);
-    const ul = el("ul", "legs");
-    (k.legs || []).forEach((l) => {
-      const li = el("li");
-      li.append(el("b", null, l.opis), " · " + (l.mecz || "") + " · kurs " + dec(l.kurs) + " (" + l.bukmacher + "), model " + pct(l.p_model) + " ");
-      if ("wynik" in l) li.append(resultChip(l.wynik, l.wartosc));
-      ul.append(li);
+    legs.forEach((l, i) => {
+      const m = matchById(l.fixture_id);
+      const row = el("div", "row between");
+      row.append(el("span", "legn", "Zdarzenie " + (i + 1) + " · " + (l.mecz || "") + (m ? " · " + day(m.start) + ", " + hm(m.start) : "")));
+      if ("wynik" in l) row.append(resultChip(l.wynik, l.wartosc));
+      c.append(row, pickBlocks(l, true));
     });
-    c.append(ul);
+    const pm = k.p_rynek !== undefined ? k.p_rynek : legs.reduce((a, l) => a * (l.p_rynek || 1), 1);
+    c.append(el("span", "legn", "Cały kupon"));
+    const g = el("div", "pk3");
+    const b1 = el("div", "blk typ");
+    b1.append(el("span", "k", "Typ"), el("span", "v", "Kupon z " + legs.length + " zdarzeń"), el("span", "s", "wygrywa, gdy wejdą wszystkie"));
+    const b2 = el("div", "blk");
+    b2.append(el("span", "k", "Kurs łączny"), el("span", "v", dec(k.kurs)), el("span", "s", "iloczyn kursów zdarzeń"));
+    const b3 = el("div", "blk");
+    b3.append(el("span", "k", "Szansa wg modelu"), el("span", "v", pct(k.p_model)), el("span", "s", "bukmacherzy: " + pct(pm)));
+    g.append(b1, b2, b3);
+    c.append(g);
     const f = el("div", "facts");
-    const pm = k.p_rynek !== undefined ? k.p_rynek : (k.legs || []).reduce((a, l) => a * (l.p_rynek || 1), 1);
-    fact(f, "Szansa wg rynku", pct(pm));
-    fact(f, "Zysk z podatkiem (oczekiwany)", spct(k.ev_podatek), sign(k.ev_podatek));
-    fact(f, "Graj od łącznego kursu", dec(minOdds(k.p_model)), "c-win");
+    fact(f, "Oczekiwany zysk z podatkiem", spct(k.ev_podatek), sign(k.ev_podatek));
+    payFrom(f, k.p_model);
     c.append(f);
     const w = whyBox(k.why, "Dlaczego ten kupon?");
     if (w) c.append(w);
     const add = el("button", "btn ghost sm", "Dodaj do zakładów");
     add.type = "button";
-    add.addEventListener("click", () => draftBet({ rodzaj: "Kupon " + (k.legs || []).length, opis: (k.legs || []).map((l) => l.opis + " (" + (l.mecz || "") + ")").join("\n"),
-      kurs: k.kurs, szansa: k.p_model, data: S.td, nogi: (k.legs || []).map((l) => ({ fixture_id: l.fixture_id, stat: l.stat, scope: l.scope, line: l.line, side: l.side })) }));
+    add.addEventListener("click", () => draftBet({ rodzaj: "Kupon " + legs.length, opis: legs.map((l) => legText(l) + " · " + (l.mecz || "")).join("\n"),
+      kurs: k.kurs, szansa: k.p_model, data: S.td, nogi: legs.map((l) => ({ fixture_id: l.fixture_id, stat: l.stat, scope: l.scope, line: l.line, side: l.side })) }));
     c.append(add);
     card.append(c);
     const others = (alts || []).filter((a) => Math.abs(a.kurs - k.kurs) > 1e-9 || a.p_model !== k.p_model).slice(0, 2);
@@ -699,7 +770,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       const d = el("details", "why");
       d.append(el("summary", null, "Inne kupony ok. 2,0 na ten dzień"));
       const ul2 = el("ul", "legs");
-      others.forEach((a) => ul2.append(el("li", null, (a.legs || []).map((l) => l.opis + " (" + (l.mecz || "") + ")").join(" + ") + " · kurs " + dec(a.kurs) + ", szansa " + pct(a.p_model) + ", zysk z podatkiem " + spct(a.ev_podatek))));
+      others.forEach((a) => ul2.append(el("li", null, (a.legs || []).map((l) => l.opis + " (" + (l.mecz || "") + ", kurs " + dec(l.kurs) + ")").join(" + ") + " · kurs łączny " + dec(a.kurs) + ", szansa wg modelu " + pct(a.p_model) + ", zysk z podatkiem " + spct(a.ev_podatek))));
       d.append(ul2);
       card.append(d);
     }
@@ -714,9 +785,16 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const b = el("span"); b.append("zysk na stawkę 1: ", el("b", sign(t.zysk), money(t.zysk)), ", z podatkiem ", el("b", sign(t.zysk_podatek), money(t.zysk_podatek)));
     const c = el("span"); c.append("Kupony dnia: ", el("b", null, k.trafione + " z " + k.rozliczone), ", zysk ", el("b", sign(k.zysk_podatek), money(k.zysk_podatek)), " z podatkiem");
     s.append(a, b, c);
-    const rows = (wy.dni || []).filter((d) => d.dzien <= todayKey()).map((d) => ({ key: d.dzien, dzien: d.dzien, typy: d.typy_wynik, kupon: d.kupon }));
+    const old = wy.stare_zasady;
+    if (old && (old.typy.n || old.kupony.n)) {
+      const o = el("span", "c-muted");
+      o.append("Osobno, typy według starych zasad (do 14.10): " + (old.typy.rozliczone ? old.typy.trafione + " z " + old.typy.rozliczone + " siadło, zysk z podatkiem " + money(old.typy.zysk_podatek) : "czekają na wynik")
+        + (old.kupony.rozliczone ? "; kupon: " + (old.kupony.trafione ? "siadł" : "nie siadł") : ""));
+      s.append(o);
+    }
+    const rows = (wy.dni || []).filter((d) => d.dzien <= todayKey()).map((d) => ({ key: d.dzien, dzien: d.dzien, typy: d.typy_wynik, kupon: d.kupon, stare: d.stare_zasady }));
     table($("#wy-dni"), rows, [
-      { f: "dzien", h: "Dzień", nw: true, fmt: (v) => dayLabel(v) },
+      { f: "dzien", h: "Dzień", nw: true, render: (td, r) => { td.textContent = dayLabel(r.dzien) + " "; if (r.stare) td.append(el("span", "c-muted", "(stare zasady)")); } },
       { f: "typy", h: "Typy: siadło", nosort: true, fmt: (v) => (v.rozliczone ? v.trafione + " z " + v.rozliczone : "czeka") },
       { f: "typy", h: "Zysk (stawka 1)", nosort: true, num: true, fmt: (v) => (v.rozliczone ? money(v.zysk) : "—"), cls: (v) => sign(v.zysk) },
       { f: "typy", h: "Z podatkiem", nosort: true, num: true, fmt: (v) => (v.rozliczone ? money(v.zysk_podatek) : "—"), cls: (v) => sign(v.zysk_podatek) },
@@ -817,7 +895,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       const bar = el("div", "bar"), h = el("span", "h"), a = el("span", "a"), tot = v[0] + v[1] || 1;
       h.style.width = (100 * v[0] / tot).toFixed(1) + "%"; a.style.width = (100 * v[1] / tot).toFixed(1) + "%";
       bar.append(h, a);
-      c.append(val, bar, el("span", "s", "łącznie " + d1(v[0] + v[1])));
+      c.append(val, bar, el("span", "s", "łącznie " + d1(meanOf(m, s, "total"))));
       cards.append(c);
     });
     // picks of this match: logged picks first, then other candidates of its day
@@ -838,41 +916,41 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     renderKursy(m);
   }
   function renderCalc(m) {
-    const ss = $("#c-stat"), sc = $("#c-scope"), ln = $("#c-line");
-    if (!S.calc || S.calc.id !== m.id) { S.calc = { id: m.id, stat: "shots", scope: "home", line: null }; ss.replaceChildren(...MAIN.map((s) => new Option(STAT[s], s))); }
+    const ss = $("#c-stat"), sc = $("#c-scope"), kin = $("#c-line");
+    if (!S.calc || S.calc.id !== m.id) { S.calc = { id: m.id, stat: "shots", scope: "home", k: null }; ss.replaceChildren(...MAIN.map((s) => new Option(STAT[s], s))); }
     sc.replaceChildren(new Option(m.gosp, "home"), new Option(m.gosc, "away"), new Option("łącznie w meczu", "total"));
     ss.value = S.calc.stat; sc.value = S.calc.scope;
-    const mu = meanOf(m, S.calc.stat, S.calc.scope);
-    if (S.calc.line === null) S.calc.line = Math.floor(mu) + 0.5;
-    if (document.activeElement !== ln) ln.value = S.calc.line;
-    const t = nbTail(mu, alphaOf(S.calc.stat, S.calc.scope, m.liga_id), S.calc.line);
-    const offer = (m.kursy || []).find((k) => k[0] === S.calc.stat && k[1] === S.calc.scope && k[2] === S.calc.line);
+    const stat = S.calc.stat, mu = meanOf(m, stat, S.calc.scope), a = alphaOf(stat, S.calc.scope, m.liga_id);
+    if (S.calc.k === null) { const th = threshold(mu, a, 0.6); S.calc.k = th ? th.k : Math.max(1, Math.round(mu)); }
+    if (document.activeElement !== kin) kin.value = S.calc.k;
+    const k = S.calc.k, p = atLeast(mu, a, k), ln = k - 0.5;
+    const offer = (m.kursy || []).find((x) => x[0] === stat && x[1] === S.calc.scope && x[2] === ln);
     const out = $("#c-out");
     out.replaceChildren();
-    const who = S.calc.scope === "total" ? "W meczu" : (S.calc.scope === "home" ? m.gosp : m.gosc);
-    const box = (title, p, odd, bm) => {
-      const c = el("div", "stat");
-      c.append(el("span", "l", title), el("span", "big", pct(p)));
-      c.append(el("span", "s", "kurs uczciwy " + dec(fairOdds(p)) + " · graj od kursu " + dec(minOdds(p))));
-      if (odd) { const s = el("span", "s"); const ev = p * odd * TAX + t.push * TAX - 1; s.append("w serwisie " + dec(odd) + " (" + bm + "), zysk z podatkiem ", el("b", sign(ev), spct(ev))); c.append(s); }
-      return c;
-    };
-    out.append(box(who + ": " + STAT[S.calc.stat].toLowerCase() + " powyżej " + line(S.calc.line), t.over, offer && offer[3], offer && offer[4]));
-    out.append(box(who + ": " + STAT[S.calc.stat].toLowerCase() + " poniżej " + line(S.calc.line), t.under, offer && offer[5], offer && offer[6]));
+    const who = S.calc.scope === "total" ? "Cały mecz" : (S.calc.scope === "home" ? m.gosp : m.gosc);
+    const c = el("div", "stat");
+    c.append(el("span", "l", who + ": " + atLeastText(k, stat)), el("span", "big", pct(p)));
+    c.append(el("span", "s", "u bukmachera: " + STAT[stat].toLowerCase() + " powyżej " + line(ln)));
+    c.append(el("span", "s", "opłaca się od kursu " + dec(minOdds(p)) + " (po podatku 12%)"));
+    if (offer && offer[3]) {
+      const s = el("span", "s"), ev = p * offer[3] * TAX - 1;
+      s.append("kurs u bukmachera " + dec(offer[3]) + " (" + offer[4] + "), zysk z podatkiem ", el("b", sign(ev), spct(ev)));
+      c.append(s);
+    } else c.append(el("span", "s", "brak kursu na ten próg w serwisie kursowym"));
+    out.append(c);
     const info = el("div", "stat");
     info.append(el("span", "l", "Średnio wg modelu"), el("span", "big", d1(mu)));
-    if (t.push > 0) info.append(el("span", "s", "dokładnie " + line(S.calc.line) + ": " + pct(t.push) + " (zwrot)"));
-    const add = el("button", "btn ghost sm", "Dodaj „powyżej” do zakładów");
+    const add = el("button", "btn ghost sm", "Dodaj do zakładów");
     add.type = "button";
-    add.addEventListener("click", () => draftBet({ mecz: m.gosp + " – " + m.gosc, rozgr: ligaName(m.liga_id), data: dayKey(m.start), szansa: t.over,
-      opis: who + ": " + NOUN[S.calc.stat] + " powyżej " + line(S.calc.line), kurs: offer ? offer[3] : null,
-      nogi: [{ fixture_id: m.id, stat: S.calc.stat, scope: S.calc.scope, line: S.calc.line, side: "over" }] }));
+    add.addEventListener("click", () => draftBet({ mecz: m.gosp + " – " + m.gosc, rozgr: ligaName(m.liga_id), data: dayKey(m.start), szansa: p,
+      opis: who + ": " + atLeastText(k, stat) + " (powyżej " + line(ln) + ")", kurs: offer ? offer[3] : null,
+      nogi: [{ fixture_id: m.id, stat, scope: S.calc.scope, line: ln, side: "over" }] }));
     info.append(add);
     out.append(info);
   }
-  $("#c-stat").addEventListener("change", (e) => { if (S.calc) { S.calc.stat = e.target.value; S.calc.line = null; } render(); });
-  $("#c-scope").addEventListener("change", (e) => { if (S.calc) { S.calc.scope = e.target.value; S.calc.line = null; } render(); });
-  $("#c-line").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (S.calc && Number.isFinite(v) && v > 0) { S.calc.line = Math.round(v * 2) / 2; render(); } });
+  $("#c-stat").addEventListener("change", (e) => { if (S.calc) { S.calc.stat = e.target.value; S.calc.k = null; } render(); });
+  $("#c-scope").addEventListener("change", (e) => { if (S.calc) { S.calc.scope = e.target.value; S.calc.k = null; } render(); });
+  $("#c-line").addEventListener("input", (e) => { const v = parseInt(e.target.value, 10); if (S.calc && Number.isFinite(v) && v >= 1) { S.calc.k = v; render(); } });
   function renderProgi(m) {
     const rows = [];
     [["home", m.gosp], ["away", m.gosc], ["total", "Łącznie w meczu"]].forEach(([scope, who]) => {
@@ -889,10 +967,10 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       { f: "mu", h: "Średnio", num: true, fmt: d1 },
       { f: "k70", h: "Co najmniej (70%)", num: true, fmt: (v) => (v ? String(v) : "—") },
       { f: "p70", h: "Szansa", num: true, fmt: (v) => pct(v) },
-      { f: "o70", h: "Graj od kursu", num: true, fmt: dec },
+      { f: "o70", h: "Opłaca się od kursu", num: true, fmt: dec },
       { f: "k55", h: "Co najmniej (55%)", num: true, fmt: (v) => (v ? String(v) : "—") },
       { f: "p55", h: "Szansa", num: true, fmt: (v) => pct(v) },
-      { f: "o55", h: "Graj od kursu", num: true, fmt: dec },
+      { f: "o55", h: "Opłaca się od kursu", num: true, fmt: dec },
     ], "key", { nosortAll: true });
   }
   function renderTeams(m) {
@@ -931,28 +1009,28 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
   function renderKursy(m) {
     const order = (s) => { const i = MAIN.indexOf(s); return i < 0 ? 99 : i; };
     const SC = { home: 0, away: 1, total: 2 };
-    const rows = (m.kursy || []).filter((k) => MAIN.includes(k[0])).map((k) => {
-      const [stat, scope, ln, oOver, bOver, oUnder, bUnder, qOver] = k;
-      const t = nbTail(meanOf(m, stat, scope), alphaOf(stat, scope, m.liga_id), ln);
-      return { key: stat + scope + ln, stat, scope, ln, statL: STAT[stat], kto: scope === "home" ? m.gosp : scope === "away" ? m.gosc : "łącznie",
-        pO: t.over, q: qOver, oOver, bOver, oUnder, bUnder,
-        evO: oOver ? t.over * oOver * TAX + t.push * TAX - 1 : null, evU: oUnder ? t.under * oUnder * TAX + t.push * TAX - 1 : null };
+    // only "over" bets on X.5 lines, written as "co najmniej k"
+    const half = (ln) => Math.abs(ln - Math.floor(ln) - 0.5) < 1e-9;
+    const all = (m.kursy || []).filter((k) => MAIN.includes(k[0]) && half(k[2]) && k[3]).map((k) => {
+      const [stat, scope, ln, oOver, bOver, , , qOver] = k;
+      const kk = Math.round(ln + 0.5), p = atLeast(meanOf(m, stat, scope), alphaOf(stat, scope, m.liga_id), kk);
+      return { key: stat + scope + ln, stat, scope, ln, kto: scope === "home" ? m.gosp : scope === "away" ? m.gosc : "cały mecz",
+        zd: atLeastText(kk, stat), p, q: qOver, oOver, bOver, ev: p * oOver * TAX - 1 };
     }).sort((a, b) => order(a.stat) - order(b.stat) || SC[a.scope] - SC[b.scope] || a.ln - b.ln);
-    const shown = S.allLines ? rows : rows.filter((r) => r.q === null || (r.q >= 0.2 && r.q <= 0.8));
+    const shown = S.allLines ? all : all.filter((r) => r.q === null || (r.q >= 0.2 && r.q <= 0.8));
     $("#mz-all").checked = !!S.allLines;
-    $("#mz-lines").textContent = rows.length ? "Pokazano " + shown.length + " z " + rows.length + " linii." : "";
-    table($("#mz-kursy"), shown, [
-      { f: "statL", h: "Statystyka", nw: true },
+    $("#mz-lines").textContent = all.length ? "Pokazano " + shown.length + " z " + all.length + " progów." : "";
+    const rows = [];
+    shown.forEach((r, i) => { if (!i || shown[i - 1].stat !== r.stat) rows.push({ _grp: STAT[r.stat] }); rows.push(r); });
+    table($("#mz-kursy"), rows, [
       { f: "kto", h: "Kto", nw: true },
-      { f: "ln", h: "Linia", num: true, fmt: line },
-      { f: "pO", h: "Model: powyżej", num: true, fmt: (v) => pct(v) },
-      { f: "q", h: "Rynek: powyżej", num: true, fmt: (v) => pct(v) },
-      { f: "oOver", h: "Powyżej", num: true, render: (td, r) => { td.textContent = r.oOver ? dec(r.oOver) + " " : "—"; if (r.bOver) td.append(el("span", "c-muted", r.bOver)); } },
-      { f: "evO", h: "zysk", num: true, fmt: (v) => spct(v), cls: (v, r) => (v > 0 && PICKABLE.has(r.stat) ? "c-win" : "c-muted") },
-      { f: "oUnder", h: "Poniżej", num: true, render: (td, r) => { td.textContent = r.oUnder ? dec(r.oUnder) + " " : "—"; if (r.bUnder) td.append(el("span", "c-muted", r.bUnder)); } },
-      { f: "evU", h: "zysk", num: true, fmt: (v) => spct(v), cls: (v, r) => (v > 0 && PICKABLE.has(r.stat) ? "c-win" : "c-muted") },
+      { f: "zd", h: "Zakład", render: (td, r) => { td.append(el("b", null, r.zd), " ", el("span", "c-muted", "(powyżej " + line(r.ln) + ")")); } },
+      { f: "oOver", h: "Kurs u bukmachera", num: true, render: (td, r) => { td.textContent = dec(r.oOver) + " "; if (r.bOver) td.append(el("span", "c-muted", r.bOver)); } },
+      { f: "p", h: "Szansa wg modelu", num: true, fmt: (v) => pct(v) },
+      { f: "q", h: "Bukmacherzy", num: true, fmt: (v) => pct(v) },
+      { f: "ev", h: "Zysk z podatkiem", num: true, fmt: (v) => spct(v), cls: (v, r) => (v > 0 && PICKABLE.has(r.stat) && r.oOver <= MAX_PICK_ODDS ? "c-win" : "c-muted") },
     ], "key", { nosortAll: true });
-    if (!rows.length) $("#mz-kursy").replaceChildren(el("caption", "c-muted", "Brak kursów na statystyki dla tego meczu (pobieram je na 3 dni przed meczem)."));
+    if (!all.length) $("#mz-kursy").replaceChildren(el("caption", "c-muted", "Brak kursów na statystyki dla tego meczu (pobieram je na 3 dni przed meczem)."));
   }
   $("#mz-all").addEventListener("change", (e) => { S.allLines = e.target.checked; render(); });
 
@@ -962,7 +1040,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     fillLiga($("#sz-liga"), S.sz.liga);
     const ss = $("#sz-stat");
     if (!ss.options.length) ss.replaceChildren(...MAIN.map((s) => new Option(STAT[s], s)));
-    ss.value = S.sz.stat; $("#sz-kto").value = S.sz.kto; $("#sz-typ").value = S.sz.typ; $("#sz-dni").value = String(S.sz.dni);
+    ss.value = S.sz.stat; $("#sz-kto").value = S.sz.kto; $("#sz-dni").value = String(S.sz.dni);
     const t = todayKey(), last = dayKey(new Date(Date.now() + (S.sz.dni - 1) * 864e5).toISOString());
     const pmin = Math.min(0.99, Math.max(0.01, (parseFloat($("#sz-p").value) || 70) / 100));
     const kFixed = parseInt($("#sz-k").value, 10);
@@ -977,17 +1055,14 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
         if (mu === null) return;
         const a = alphaOf(S.sz.stat, scope, m.liga_id);
         let k = null, p = null;
-        if (Number.isFinite(kFixed)) { k = kFixed; p = S.sz.typ === "min" ? atLeast(mu, a, k) : atMost(mu, a, k); }
-        else if (S.sz.typ === "min") { const th = threshold(mu, a, pmin); if (th) { k = th.k; p = th.p; } }
-        else { for (let x = 0; x < 80; x++) { const q = atMost(mu, a, x); if (q >= pmin) { k = x; p = q; break; } } }
+        if (Number.isFinite(kFixed) && kFixed >= 1) { k = kFixed; p = atLeast(mu, a, k); }
+        else { const th = threshold(mu, a, pmin); if (th) { k = th.k; p = th.p; } }
         if (k === null || p < pmin) return;
-        const who = scope === "home" ? m.gosp : scope === "away" ? m.gosc : "łącznie";
-        const ln = S.sz.typ === "min" ? k - 0.5 : k + 0.5;
+        const who = scope === "home" ? m.gosp : scope === "away" ? m.gosc : "Cały mecz";
+        const ln = k - 0.5;
         const offer = (m.kursy || []).find((x) => x[0] === S.sz.stat && x[1] === scope && x[2] === ln);
-        const odd = offer ? (S.sz.typ === "min" ? offer[3] : offer[5]) : null;
         res.push({ key: m.id + scope, m, start: m.start, mecz: m.gosp + " – " + m.gosc, liga: ligaShort(m.liga_id),
-          opis: who + ": " + (S.sz.typ === "min" ? "co najmniej " : "co najwyżej ") + k + " " + NOUN[S.sz.stat],
-          mu, p, min: minOdds(p), odd, bm: offer ? (S.sz.typ === "min" ? offer[4] : offer[6]) : null, scope, ln });
+          opis: who + ": " + atLeastText(k, S.sz.stat), mu, p, min: minOdds(p), odd: offer ? offer[3] : null, bm: offer ? offer[4] : null, scope, ln });
       });
     });
     $("#sz-count").textContent = "Wyniki: " + int(res.length);
@@ -995,21 +1070,21 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       { f: "start", h: "Kiedy", nw: true, fmt: when },
       { f: "liga", h: "Rozgr.", nw: true },
       { f: "mecz", h: "Mecz", wide: true },
-      { f: "opis", h: "Zdarzenie", wide: true },
+      { f: "opis", h: "Zdarzenie", wide: true, render: (td, r) => { td.append(el("b", null, r.opis), " ", el("span", "c-muted", "(powyżej " + line(r.ln) + ")")); } },
       { f: "mu", h: "Średnio", num: true, fmt: d1 },
-      { f: "p", h: "Szansa", num: true, fmt: (v) => pct(v) },
-      { f: "min", h: "Graj od kursu", num: true, fmt: dec, cls: () => "c-win" },
-      { f: "odd", h: "Kurs w serwisie", num: true, render: (td, r) => { td.textContent = r.odd ? dec(r.odd) + " " : "—"; if (r.bm) td.append(el("span", "c-muted", r.bm)); } },
+      { f: "odd", h: "Kurs u bukmachera", num: true, render: (td, r) => { td.textContent = r.odd ? dec(r.odd) + " " : "—"; if (r.bm) td.append(el("span", "c-muted", r.bm)); } },
+      { f: "p", h: "Szansa wg modelu", num: true, fmt: (v) => pct(v) },
+      { f: "min", h: "Opłaca się od kursu", num: true, fmt: dec, cls: () => "c-win" },
       { f: "_a", h: "", nosort: true, nw: true, render: (td, r) => {
         const b = el("button", "btn ghost sm", "Analiza"); b.type = "button"; b.addEventListener("click", () => openMatch(r.m.id));
         const add = el("button", "btn ghost sm", "+ zakład"); add.type = "button";
-        add.addEventListener("click", () => draftBet({ mecz: r.mecz, rozgr: ligaName(r.m.liga_id), data: dayKey(r.start), opis: r.opis, kurs: r.odd, szansa: r.p,
-          nogi: [{ fixture_id: r.m.id, stat: S.sz.stat, scope: r.scope, line: r.ln, side: S.sz.typ === "min" ? "over" : "under" }] }));
+        add.addEventListener("click", () => draftBet({ mecz: r.mecz, rozgr: ligaName(r.m.liga_id), data: dayKey(r.start), opis: r.opis + " (powyżej " + line(r.ln) + ")", kurs: r.odd, szansa: r.p,
+          nogi: [{ fixture_id: r.m.id, stat: S.sz.stat, scope: r.scope, line: r.ln, side: "over" }] }));
         td.append(b, add);
       } },
     ], "key", { sort: null });
   }
-  [["#sz-liga", "liga"], ["#sz-stat", "stat"], ["#sz-kto", "kto"], ["#sz-typ", "typ"]].forEach(([sel, k]) => $(sel).addEventListener("change", (e) => { S.sz[k] = e.target.value; render(); }));
+  [["#sz-liga", "liga"], ["#sz-stat", "stat"], ["#sz-kto", "kto"]].forEach(([sel, k]) => $(sel).addEventListener("change", (e) => { S.sz[k] = e.target.value; render(); }));
   $("#sz-dni").addEventListener("change", (e) => { S.sz.dni = parseInt(e.target.value, 10) || 3; render(); });
   ["#sz-k", "#sz-p"].forEach((s) => $(s).addEventListener("input", () => render()));
   $("#sz-kursy").addEventListener("change", (e) => { S.sz.kursy = e.target.checked; render(); });
