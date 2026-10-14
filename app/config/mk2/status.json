@@ -1,6 +1,6 @@
 {
  "_comment": "Stan projektu MK2 pokazywany w panelu (zakładka Plan). Edytuj tutaj, potem scripts/mk2/export_dashboard.py. status: gotowe | w_toku | brakuje | decyzja | problem; kto: MK2 (Claude), Ty, Oskar.",
- "updated": "2026-10-13",
+ "updated": "2026-10-14",
  "items": [
   {
    "id": "repo",
@@ -77,11 +77,10 @@
   {
    "id": "klucz",
    "obszar": "API",
-   "status": "brakuje",
+   "status": "gotowe",
    "rzecz": "Klucz API-Football z planu Pro",
-   "szczegoly": "W systemie jest klucz Free: 100 zapytań/dzień, kursy tylko wczoraj–jutro, brak sezonu 2026 po lidze. Ustalone: klucz ze wspólnego konta (7 500/dzień, dzielone z Oskarem). Bez niego nie ruszy zbieranie kursów, kalendarz, rozliczenia ani historia.",
-   "kto": "Ty",
-   "jak": "setx API_FOOTBALL_KEY \"KLUCZ\" i powiedzieć Oskarowi o wspólnym limicie"
+   "szczegoly": "Ustawiony 14.10 (zmienna użytkownika Windows). Plan Pro aktywny do 28.10.2026 – trzeba go przedłużyć. Limit 7 500 zapytań dziennie jest wspólny z serwerem Oskara (14.10 rano zużył ok. 1 300); nasze skrypty zostawiają mu zawsze co najmniej 3 000.",
+   "kto": "MK2"
   },
   {
    "id": "push",
@@ -97,7 +96,7 @@
    "obszar": "Zbieranie",
    "status": "brakuje",
    "rzecz": "Zadania w Harmonogramie Windows (kursy, zamknięcia, skaner, fit)",
-   "szczegoly": "register_tasks.ps1 gotowy i sprawdzony (-DryRun). Uruchomić po ustawieniu klucza Pro; komputer musi być włączony.",
+   "szczegoly": "Klucz Pro już jest. Do harmonogramu: codzienne uruchamianie modelu statystyk (stats_daily.py, 2–3 razy dziennie) oraz zadania skanera Oskara. Komputer musi być włączony; decyzja, gdzie to ma działać, jest niżej.",
    "kto": "Ty",
    "jak": "register_tasks.ps1 (albo napisz „zarejestruj”)"
   },
@@ -195,6 +194,54 @@
    "status": "decyzja",
    "rzecz": "Komu pokazać aplikację",
    "szczegoly": "Aplikacja jest prywatna; udostępnia się ją z menu Udostępnij na stronie. Kto ma prawo zmian, może zapisywać typy, notatki i prośby.",
+   "kto": "Ty"
+  },
+  {
+   "id": "st-model",
+   "obszar": "Statystyki",
+   "status": "w_toku",
+   "rzecz": "Model statystyk drużyn: strzały, celne, rożne, faule, kartki, spalone",
+   "szczegoly": "Pierwsza wersja działa od 14.10: jeden model dla 15 lig z rankingu UEFA, 8 lig dodatkowych i trzech pucharów (puchary łączą ligi). Na meczach od połowy sierpnia przewiduje lepiej niż średnie ligowe. Poziom dopasowany do rynku. Typy tylko ze strzałów, celnych i rożnych.",
+   "kto": "MK2"
+  },
+  {
+   "id": "st-test",
+   "obszar": "Statystyki",
+   "status": "w_toku",
+   "rzecz": "Sprawdzian modelu na historii (sezon 2025/26) i porównanie z modelem Oskara",
+   "szczegoly": "Test krok po kroku: co miesiąc nowe dopasowanie i prognoza kolejnych meczów, porównanie z częstościami ligowymi i z prognozami NB2 Oskara. Wynik zdecyduje o ustawieniach (zapominanie starszych meczów, siła wygładzania).",
+   "kto": "MK2"
+  },
+  {
+   "id": "st-kursy",
+   "obszar": "Statystyki",
+   "status": "w_toku",
+   "rzecz": "Archiwum kursów na statystyki (od 14.10)",
+   "szczegoly": "Historii kursów na strzały i rożne nie ma nigdzie, więc zbieramy je sami: przy każdym uruchomieniu kursy meczów z 3 najbliższych dni. Po kilku tygodniach da się sprawdzić, czy typy modelu wygrywają z rynkiem.",
+   "kto": "MK2"
+  },
+  {
+   "id": "st-excel",
+   "obszar": "Zakłady",
+   "status": "gotowe",
+   "rzecz": "Arkusz Excel do zakładów i zakładka Moje zakłady",
+   "szczegoly": "Zakłady wpisuje się w aplikacji (także jednym kliknięciem z typu albo meczu); rozliczenie podpowiada się samo, gdy są statystyki meczu. Eksport do CSV w kolejności kolumn arkusza „Zaklady MK2.xlsx” (podatek 12% i 10% od wygranych powyżej 2280 zł).",
+   "kto": "MK2"
+  },
+  {
+   "id": "d-fbref",
+   "obszar": "Dane",
+   "status": "gotowe",
+   "rzecz": "FBref i Betwatch: sprawdzone",
+   "szczegoly": "FBref: regulamin zabrania używania danych do modeli przewidujących i scrapowania, a od stycznia 2026 nie ma tam już danych Opta (xG). Nie używamy, zostają tylko do ręcznego podglądu. Betwatch (przepływ pieniędzy na Betfair): legalnie tylko przez płatne API (100 €/mies.), bez rynków na strzały. Opcjonalnie później jako sygnał rynku.",
+   "kto": "MK2"
+  },
+  {
+   "id": "d-ligi15",
+   "obszar": "Statystyki",
+   "status": "decyzja",
+   "rzecz": "Lista „top 15 lig”",
+   "szczegoly": "Wg rankingu UEFA 2026: Anglia, Włochy, Hiszpania, Niemcy, Francja, Portugalia, Holandia, Belgia, Turcja, Czechy, Grecja, Polska, Dania, Norwegia, Cypr. Cypr ma w API mało statystyk. Szwajcaria, Austria i Szkocja są w modelu jako ligi dodatkowe. Zamienić Cypr na którąś z nich?",
    "kto": "Ty"
   }
  ]

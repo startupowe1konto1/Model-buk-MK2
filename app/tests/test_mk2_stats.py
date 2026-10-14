@@ -1,0 +1,143 @@
+"""scripts/mk2 statistics model: NB probabilities, the team-effects fit, market alignment, picks, settlement."""
+
+from __future__ import annotations
+
+import math
+import sqlite3
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+from scipy import stats
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "mk2"))
+
+import stats_daily as sd  # noqa: E402
+import stats_model as sm  # noqa: E402
+import stats_picks as sp  # noqa: E402
+
+
+def test_nb_over_matches_scipy_and_handles_whole_lines():
+    mu, alpha = 12.3, 0.05
+    r = 1 / alpha
+    dist = stats.nbinom(r, r / (r + mu))
+    over, push, under = sm.nb_over(mu, alpha, 12.5)
+    assert push == 0 and over + under == pytest.approx(1.0)
+    assert over == pytest.approx(dist.sf(12))
+    over, push, under = sm.nb_over(mu, alpha, 12.0)
+    assert push == pytest.approx(dist.pmf(12))
+    assert over == pytest.approx(dist.sf(12))
+    assert over + push + under == pytest.approx(1.0)
+
+
+def synthetic_rows(seed: int = 7) -> pd.DataFrame:
+    """Ten teams, double round robin over two seasons; team 0 shoots most, team 9 concedes most."""
+    rng = np.random.default_rng(seed)
+    att = np.linspace(1.5, 0.7, 10)
+    deff = np.linspace(0.8, 1.4, 10)
+    rows, fid = [], 0
+    start = pd.Timestamp("2024-08-01", tz="UTC")
+    for season in (2024, 2025):
+        day = 0
+        for h in range(10):
+            for a in range(10):
+                if h == a:
+                    continue
+                fid += 1
+                day += 1
+                kick = start + pd.Timedelta(days=day + (365 if season == 2025 else 0))
+                for team, opp, home in ((h, a, 1.0), (a, h, 0.0)):
+                    lam = 12.0 * att[team] * deff[opp] * (1.2 if home else 1.0)
+                    rows.append({"fixture_id": fid, "league_id": 1, "season": season, "kickoff": kick,
+                                 "team_id": team, "opp_id": opp, "home": home, "cup": 0.0,
+                                 "side": "home" if home else "away", "total_shots": rng.poisson(lam)})
+    return pd.DataFrame(rows)
+
+
+def test_fit_stat_recovers_team_strength_and_home_advantage():
+    df = synthetic_rows()
+    fit = sm.fit_stat(df, "shots", pd.Timestamp("2027-01-01", tz="UTC"), half_life_days=10_000, ridge_team=1.0)
+    assert math.exp(fit.b_home) == pytest.approx(1.2, abs=0.05)
+    assert fit.mean(0, 9, True, False) > 2.5 * fit.mean(9, 0, True, False)
+    att = np.linspace(1.5, 0.7, 10)
+    deff = np.linspace(0.8, 1.4, 10)
+    errors = [abs(fit.mean(h, a, True, False) / (12.0 * att[h] * deff[a] * 1.2) - 1)
+              for h in range(10) for a in range(10) if h != a]
+    assert np.median(errors) < 0.05 and max(errors) < 0.15
+    assert fit.alpha < 0.02  # the data are Poisson
+
+
+def analysis_with_market(k_market: float) -> dict:
+    """Analysis whose market expects k_market times the model's counts on every line."""
+    alpha = 0.05
+    mecze = []
+    for i, mu in enumerate((10.0, 12.0, 14.0, 16.0)):
+        lines = []
+        for line in (mu - 2.5, mu - 0.5, mu + 1.5):
+            q = sm.nb_over(mu * k_market, alpha, line)[0]
+            p = sm.nb_over(mu, alpha, line)
+            lines.append({"stat": "shots", "scope": "home", "line": line, "p_over": p[0], "p_under": p[2], "rynek_over": q,
+                          "kursy_over": {"A": round(0.95 / q, 2)}, "kursy_under": {"A": round(0.95 / (1 - q), 2)}})
+        mecze.append({"fixture_id": i, "gospodarz": f"H{i}", "gosc": f"A{i}",
+                      "srednie": {"shots": {"home": mu, "away": 10.0, "total": mu + 10.0}}, "linie": lines})
+    return {"mecze": mecze, "model": {"shots": {"alpha": alpha, "alpha_total": 0.01}}}
+
+
+def test_level_factors_find_the_market_level():
+    assert sp.level_factors(analysis_with_market(1.0))[("shots", "home")] == pytest.approx(1.0, abs=0.011)
+    assert sp.level_factors(analysis_with_market(1.1))[("shots", "home")] == pytest.approx(1.1, abs=0.011)
+
+
+def test_candidates_ignore_outlier_prices_and_flag_tail_lines():
+    a = analysis_with_market(1.0)
+    line = a["mecze"][0]["linie"][1]
+    line["kursy_over"] = {"A": 1.90, "B": 1.92, "C": 2.60}  # C is far above the others
+    rows = sp.candidates(a, {("shots", "home"): 1.0})
+    r = next(x for x in rows if x["fixture_id"] == 0 and x["line"] == line["line"] and x["side"] == "over")
+    assert r["kurs"] == 1.92 and r["bukmacher"] == "B"
+    tail = next(x for x in rows if x["fixture_id"] == 0 and x["line"] == a["mecze"][0]["linie"][2]["line"]
+                and x["side"] == "over")
+    assert (0.30 <= tail["p_rynek"] <= 0.80) == tail["do_typow"]
+
+
+def test_coupons_take_legs_from_different_matches_within_the_odds_band():
+    picks = [{"fixture_id": f, "opis": f"leg{f}{s}", "kurs": o, "bukmacher": "A", "p_model": p, "ev": p * o - 1}
+             for f, s, o, p in ((1, "a", 1.40, 0.75), (1, "b", 1.45, 0.72), (2, "a", 1.42, 0.74), (3, "a", 3.0, 0.4))]
+    out = sp.coupons(picks, 2)
+    assert out and all(1.8 <= c["kurs"] <= 2.5 for c in out)
+    assert not any("leg1a" in " ".join(c["nogi"]) and "leg1b" in " ".join(c["nogi"]) for c in out)
+
+
+def picks_db() -> sqlite3.Connection:
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.execute("""create table picks (made_at text, day text, fixture_id integer, stat text, scope text, line real,
+        side text, p_model real, p_market real, odd real, bookmaker text, ev real, ev_tax real, rank integer,
+        primary key (day, fixture_id, stat, scope, line, side))""")
+    return con
+
+
+def test_settle_picks_win_loss_and_push():
+    con = picks_db()
+    for rank, (scope, line, side) in enumerate((("total", 25.5, "under"), ("home", 13.5, "over"), ("away", 12.0, "over")), 1):
+        con.execute("insert into picks values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    ("2026-10-14T18:00:00Z", "2026-10-14", 99, "shots", scope, line, side, 0.5, 0.45, 2.0, "X", 0.0, 0.0, rank))
+    df = pd.DataFrame([
+        {"fixture_id": 99, "side": "home", "total_shots": 14},
+        {"fixture_id": 99, "side": "away", "total_shots": 12},
+    ])
+    res = {p["scope"]: p for p in sd.settle_picks(con, df)}
+    assert res["total"]["wynik"] == "przegrana" and res["total"]["wartosc"] == 26  # 26 shots, under 25.5 loses
+    assert res["home"]["wynik"] == "wygrana" and res["home"]["zysk"] == pytest.approx(1.0)
+    assert res["home"]["zysk_podatek"] == pytest.approx(2.0 * 0.88 - 1)
+    assert res["away"]["wynik"] == "zwrot" and res["away"]["zysk"] == 0.0
+
+
+def test_settle_picks_waits_for_statistics():
+    con = picks_db()
+    con.execute("insert into picks values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("2026-10-14T18:00:00Z", "2026-10-14", 5, "corners", "total", 9.5, "over", 0.5, 0.45, 2.0, "X", 0.0, 0.0, 1))
+    out = sd.settle_picks(con, pd.DataFrame(columns=["fixture_id", "side", "corners"]))
+    assert out[0]["wynik"] is None and "zysk" not in out[0]

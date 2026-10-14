@@ -1,0 +1,176 @@
+  <!-- MECZE -->
+  <section class="mk-page" id="pg-mecze" role="tabpanel" aria-labelledby="t-mecze">
+    <div class="mk-card">
+      <div class="mk-row" style="justify-content: space-between">
+        <h2>Mecze</h2>
+        <div class="mk-row">
+          <label class="mk-label" for="m-liga">Rozgrywki
+            <select class="mk-ctrl" id="m-liga"></select>
+          </label>
+          <input class="mk-ctrl" id="m-q" type="search" placeholder="Szukaj drużyny…" aria-label="Szukaj drużyny">
+        </div>
+      </div>
+      <div class="mk-chips" id="m-days" role="group" aria-label="Dzień"></div>
+      <p class="mk-note">Kliknij mecz, żeby zobaczyć prognozę: ile strzałów, rożnych, fauli i kartek, z jaką szansą i od jakiego kursu warto grać po podatku 12%.</p>
+    </div>
+    <div class="mk-page" id="m-list"></div>
+  </section>
+
+  <!-- MECZ -->
+  <section class="mk-page" id="pg-mecz" role="tabpanel" aria-labelledby="t-mecze" hidden>
+    <button class="mk-btn ghost mk-back" id="mz-back" type="button">← Wszystkie mecze</button>
+    <div class="mk-card">
+      <div class="mk-facts" id="mz-meta"></div>
+      <h2 id="mz-title" class="mk-match-title">Mecz</h2>
+      <div class="mk-vs" id="mz-stats"></div>
+      <p class="mk-note">Średnie oczekiwane przez model (gospodarz – gość). Strzały liczą także niecelne i zablokowane; celne to strzały na bramkę; kartki to żółte i czerwone.</p>
+    </div>
+    <div class="mk-card" id="mz-why-card">
+      <h2>Na co zwrócić uwagę</h2>
+      <ul class="mk-why" id="mz-why"></ul>
+      <p class="mk-note">To porównania w lidze krajowej każdej drużyny. Prognoza modelu powyżej uwzględnia też różnicę poziomu lig, więc przy meczach drużyn z różnych lig może być niższa lub wyższa, niż sugerują same średnie.</p>
+    </div>
+    <div class="mk-card">
+      <h2>Kalkulator szansy</h2>
+      <div class="mk-calc">
+        <label class="mk-label" for="c-stat">Statystyka <select class="mk-ctrl" id="c-stat"></select></label>
+        <label class="mk-label" for="c-scope">Kto <select class="mk-ctrl" id="c-scope"></select></label>
+        <label class="mk-label" for="c-line">Linia <input class="mk-in num" id="c-line" type="number" step="0.5" min="0.5"></label>
+      </div>
+      <div class="mk-calc-out" id="c-out"></div>
+    </div>
+    <div class="mk-card">
+      <h2>Pewniejsze progi</h2>
+      <p class="mk-note">Najwyższy próg, który według modelu padnie z szansą co najmniej 70% albo 55%. Min. kurs: od takiego kursu zakład opłaca się po podatku 12%.</p>
+      <div class="mk-wrap short"><table class="mk-tbl" id="mz-progi"></table></div>
+    </div>
+    <div class="mk-card">
+      <h2>Kursy bukmacherów na statystyki</h2>
+      <p class="mk-note">Linie z serwisu kursowego (Bet365, Betano, 1xBet, Pinnacle i inni). „Rynek” to szansa wynikająca z kursów po zdjęciu marży. Zysk liczony z podatkiem 12% przy najlepszym kursie. U polskiego bukmachera kurs będzie inny: porównaj go z kursem minimalnym.</p>
+      <div class="mk-row"><label class="mk-check" for="mz-all"><input id="mz-all" type="checkbox"> wszystkie linie</label><span class="mk-count" id="mz-lines"></span></div>
+      <div class="mk-wrap"><table class="mk-tbl" id="mz-kursy"></table></div>
+    </div>
+    <div class="mk-cols" id="mz-teams"></div>
+  </section>
+
+  <!-- TYPY DNIA -->
+  <section class="mk-page" id="pg-typydnia" role="tabpanel" aria-labelledby="t-typydnia" hidden>
+    <div class="mk-card">
+      <h2>Typy dnia</h2>
+      <div class="mk-chips" id="td-days" role="group" aria-label="Dzień"></div>
+      <p class="mk-note">Linie, przy których model najmocniej różni się od rynku (strzały, celne strzały, rożne). To test: listę zapisuję przed meczem, a po meczu rozliczam ją w zakładce Skuteczność. Graj tylko wtedy, gdy kurs u Twojego bukmachera jest co najmniej równy minimalnemu.</p>
+    </div>
+    <div class="mk-page" id="td-top"></div>
+    <div class="mk-card">
+      <h2>Kupony ok. 2,0</h2>
+      <p class="mk-note">Połączenia 2–3 kandydatów z różnych meczów o łącznym kursie 1,8–2,5. Szansa kuponu to iloczyn szans nóg.</p>
+      <div class="mk-page" id="td-kupony"></div>
+    </div>
+    <div class="mk-card">
+      <h2>Pozostali kandydaci</h2>
+      <div class="mk-wrap short"><table class="mk-tbl" id="td-kand"></table></div>
+    </div>
+  </section>
+
+  <!-- SZUKAJ -->
+  <section class="mk-page" id="pg-szukaj" role="tabpanel" aria-labelledby="t-szukaj" hidden>
+    <div class="mk-card">
+      <h2>Szukaj zdarzeń</h2>
+      <p class="mk-note">Np. gospodarz co najmniej 12 strzałów z szansą 70% i więcej. Zostaw próg pusty, a dla każdego meczu pokażę najwyższy próg, który spełnia minimalną szansę.</p>
+      <div class="mk-form" id="sz-form">
+        <label for="sz-dni">Kiedy
+          <select class="mk-ctrl" id="sz-dni"><option value="1">dziś</option><option value="2">dziś i jutro</option><option value="3" selected>najbliższe 3 dni</option><option value="8">najbliższy tydzień</option></select>
+        </label>
+        <label for="sz-liga">Rozgrywki <select class="mk-ctrl" id="sz-liga"></select></label>
+        <label for="sz-stat">Statystyka <select class="mk-ctrl" id="sz-stat"></select></label>
+        <label for="sz-kto">Kto
+          <select class="mk-ctrl" id="sz-kto"><option value="home">gospodarz</option><option value="away">gość</option><option value="any">dowolna drużyna</option><option value="total">łącznie w meczu</option></select>
+        </label>
+        <label for="sz-typ">Zdarzenie
+          <select class="mk-ctrl" id="sz-typ"><option value="min">co najmniej</option><option value="max">co najwyżej</option></select>
+        </label>
+        <label for="sz-k">Próg (puste: najwyższy możliwy)<input class="mk-in num" id="sz-k" type="number" min="0" step="1"></label>
+        <label for="sz-p">Minimalna szansa (%)<input class="mk-in num" id="sz-p" type="number" min="1" max="99" step="1" value="70"></label>
+        <label class="mk-check" for="sz-kursy"><input id="sz-kursy" type="checkbox"> tylko mecze z kursami</label>
+      </div>
+      <span class="mk-count" id="sz-count"></span>
+      <div class="mk-wrap"><table class="mk-tbl" id="sz-tbl"></table></div>
+    </div>
+  </section>
+
+  <!-- MOJE ZAKŁADY -->
+  <section class="mk-page" id="pg-zaklady" role="tabpanel" aria-labelledby="t-zaklady" hidden>
+    <div class="mk-card">
+      <h2 id="zk-form-title">Dodaj zakład</h2>
+      <form class="mk-form" id="zk-form">
+        <label for="zk-data">Data<input class="mk-in" id="zk-data" type="date"></label>
+        <label for="zk-mecz">Mecz<input class="mk-in" id="zk-mecz" type="text" placeholder="np. Aston Villa – Fenerbahçe"></label>
+        <label for="zk-rozgr">Rozgrywki<input class="mk-in" id="zk-rozgr" type="text" placeholder="np. Liga Mistrzów"></label>
+        <label for="zk-rodzaj">Rodzaj
+          <select class="mk-ctrl" id="zk-rodzaj"><option>Singiel</option><option>Kupon 2</option><option>Kupon 3</option><option>Kupon 4+</option></select>
+        </label>
+        <label for="zk-opis" style="grid-column: 1 / -1">Zakład (przy kuponie wszystkie nogi)<textarea class="mk-ta" id="zk-opis" placeholder="np. Aston Villa: strzały powyżej 13,5"></textarea></label>
+        <label for="zk-buk">Bukmacher<input class="mk-in" id="zk-buk" type="text" placeholder="np. STS, Betclic, Superbet"></label>
+        <label for="zk-kurs">Kurs<input class="mk-in num" id="zk-kurs" type="number" min="1.01" step="0.01"></label>
+        <label for="zk-stawka">Stawka (zł)<input class="mk-in num" id="zk-stawka" type="number" min="1" step="1" value="10"></label>
+        <label for="zk-tryb">Tryb
+          <select class="mk-ctrl" id="zk-tryb"><option>Realny</option><option>Papier</option></select>
+        </label>
+        <label for="zk-szansa">Szansa wg modelu (%)<input class="mk-in num" id="zk-szansa" type="number" min="1" max="99" step="1"></label>
+        <label for="zk-wynik">Wynik
+          <select class="mk-ctrl" id="zk-wynik"><option value="">nierozliczony</option><option value="W">wygrana</option><option value="P">przegrana</option><option value="Z">zwrot</option></select>
+        </label>
+        <label for="zk-notatki" style="grid-column: 1 / -1">Notatki<textarea class="mk-ta" id="zk-notatki"></textarea></label>
+        <div class="mk-row">
+          <button class="mk-btn" id="zk-save" type="submit">Zapisz zakład</button>
+          <button class="mk-btn ghost" id="zk-clear" type="button">Wyczyść</button>
+          <span id="zk-msg"></span>
+        </div>
+      </form>
+      <p class="mk-note" id="zk-hint"></p>
+    </div>
+    <div class="mk-card">
+      <div class="mk-row" style="justify-content: space-between">
+        <h2>Moje zakłady</h2>
+        <div class="mk-row">
+          <label class="mk-label" for="zk-filtr">Pokaż
+            <select class="mk-ctrl" id="zk-filtr"><option value="">wszystkie</option><option value="Realny">realne</option><option value="Papier">na papierze</option><option value="open">nierozliczone</option></select>
+          </label>
+          <button class="mk-btn ghost" id="zk-csv" type="button">Pobierz do Excela (CSV)</button>
+          <span id="zk-csv-msg"></span>
+        </div>
+      </div>
+      <div class="mk-sum" id="zk-sum"></div>
+      <div class="mk-wrap"><table class="mk-tbl" id="zk-tbl"></table></div>
+      <p class="mk-note">Podatek: 12% od stawki, więc wygrana to 0,88 × stawka × kurs. Od wygranej powyżej 2280 zł dochodzi 10% podatku. Plik CSV ma kolumny w tej samej kolejności co arkusz Excel „Zaklady MK2.xlsx”.</p>
+    </div>
+  </section>
+
+  <!-- SKUTECZNOŚĆ -->
+  <section class="mk-page" id="pg-skutecznosc" role="tabpanel" aria-labelledby="t-skutecznosc" hidden>
+    <div class="mk-card">
+      <h2>Typy dnia: wynik testu</h2>
+      <p class="mk-note">Każdy typ dnia zapisany przed meczem i rozliczony z prawdziwą statystyką. Zysk liczony na stawkę 1 przy kursie z listy, bez podatku i z podatkiem 12%.</p>
+      <div class="mk-sum" id="sk-sum"></div>
+      <div class="mk-wrap"><table class="mk-tbl" id="sk-tbl"></table></div>
+    </div>
+    <div class="mk-card">
+      <h2>Prognozy kontra rzeczywistość</h2>
+      <p class="mk-note">Dla każdego rozegranego meczu: ostatnia prognoza przed pierwszym gwizdkiem porównana z tym, co padło. Progi „70%” powinny trafiać mniej więcej 7 razy na 10. Wyraźnie mniej oznacza, że model jest zbyt pewny siebie.</p>
+      <div class="mk-wrap short"><table class="mk-tbl" id="sk-prog"></table></div>
+    </div>
+  </section>
+
+  <!-- PROŚBY -->
+  <section class="mk-page" id="pg-prosby" role="tabpanel" aria-labelledby="t-prosby" hidden>
+    <div class="mk-card">
+      <h2>Prośby do Claude</h2>
+      <p class="mk-note">Napisz, co ma się zmienić albo co sprawdzić: nowa funkcja, test, poprawka. Claude odpowie tutaj i zmieni stan prośby.</p>
+      <form class="mk-form" id="pr-form">
+        <label for="pr-tekst" style="grid-column: 1 / -1">Prośba<textarea class="mk-ta" id="pr-tekst" placeholder="Np. dodaj filtr po lidze w kuponach"></textarea></label>
+        <div class="mk-row"><button class="mk-btn" id="pr-add" type="submit">Wyślij prośbę</button><span id="pr-msg"></span></div>
+      </form>
+      <div class="mk-wrap short"><table class="mk-tbl" id="tb-prosby"></table></div>
+    </div>
+  </section>
+
