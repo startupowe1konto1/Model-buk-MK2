@@ -151,6 +151,39 @@ def test_settle_picks_win_loss_and_push():
     assert res["away"]["wynik"] == "zwrot" and res["away"]["zysk"] == 0.0
 
 
+def coupons_db() -> sqlite3.Connection:
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.execute("""create table coupons (made_at text, day text, kind text, legs text, odd real, p_model real,
+        p_market real, ev real, ev_tax real, why text, primary key (day, kind))""")
+    return con
+
+
+def test_settle_coupons_needs_every_leg_and_handles_a_push():
+    import json
+    con = coupons_db()
+    legs = [{"fixture_id": 1, "stat": "corners", "scope": "away", "line": 5.5, "side": "under", "kurs": 1.8},
+            {"fixture_id": 2, "stat": "corners", "scope": "total", "line": 10.0, "side": "under", "kurs": 1.3}]
+    con.execute("insert into coupons values (?,?,?,?,?,?,?,?,?,?)",
+                ("2026-10-14T18:00:00Z", "2026-10-14", "2", json.dumps(legs), 2.34, 0.55, 0.41, 0.3, 0.15, "x"))
+    rows = lambda h1, a1, h2, a2: pd.DataFrame([  # noqa: E731
+        {"fixture_id": 1, "side": "home", "corners": h1}, {"fixture_id": 1, "side": "away", "corners": a1},
+        {"fixture_id": 2, "side": "home", "corners": h2}, {"fixture_id": 2, "side": "away", "corners": a2}])
+    won = sd.settle_coupons(con, rows(6, 4, 3, 5))[0]          # 4 < 5.5 and 8 < 10
+    assert won["wynik"] == "wygrana" and won["zysk"] == pytest.approx(1.8 * 1.3 - 1, abs=1e-3)
+    pushed = sd.settle_coupons(con, rows(6, 4, 5, 5))[0]       # second leg exactly 10: returned, odds 1.8 remain
+    assert pushed["wynik"] == "wygrana" and pushed["zysk"] == pytest.approx(0.8)
+    lost = sd.settle_coupons(con, rows(6, 7, None, None))[0]   # first leg lost, second unknown: lost anyway
+    assert lost["wynik"] == "przegrana" and lost["zysk_podatek"] == -1.0
+    waiting = sd.settle_coupons(con, rows(6, 4, None, None))[0]  # one leg won, one unknown: wait
+    assert waiting["wynik"] is None
+
+
+def test_rank_phrase_reads_from_the_nearer_end():
+    assert sd.rank_phrase(2, 20) == "2. najwięcej w lidze"
+    assert sd.rank_phrase(19, 20) == "2. najmniej w lidze"
+
+
 def test_settle_picks_waits_for_statistics():
     con = picks_db()
     con.execute("insert into picks values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

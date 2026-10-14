@@ -108,6 +108,9 @@ def describe(m: dict, stat: str, scope: str, side: str, line: float) -> str:
     return f"{who}: {sm.STAT_PL[stat]} {word} {str(line).replace('.', ',')}"
 
 
+LEG_KEYS = ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "kurs", "bukmacher", "p_model", "p_rynek")
+
+
 def coupons(picks: list[dict], legs: int, lo: float = 1.8, hi: float = 2.5, top: int = 5) -> list[dict]:
     """Best combinations of legs from different matches with total odds in [lo, hi]."""
     pool = [p for p in picks if p["ev"] > 0 and p["p_model"] >= 0.55][:40]
@@ -120,9 +123,12 @@ def coupons(picks: list[dict], legs: int, lo: float = 1.8, hi: float = 2.5, top:
             continue
         p = math.prod(c["p_model"] for c in combo)
         out.append({"nogi": [c["opis"] + f" @ {c['kurs']:.2f} ({c['bukmacher']})" for c in combo],
+                    "legs": [{k: c.get(k) for k in LEG_KEYS} for c in combo],
                     "kurs": round(odd, 2), "p_model": round(p, 4), "ev": round(p * odd - 1, 4),
                     "ev_podatek": round(p * odd * TAX - 1, 4)})
     out.sort(key=lambda c: -c["ev"])
+    for c in out:
+        c["n_kombinacji"] = len(out)
     return out[:top]
 
 

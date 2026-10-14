@@ -12,12 +12,15 @@ Steps (all on by default; each can be skipped):
                checking the model against the market later).
 4. forecast  -- one fit per statistic on all finished matches; expected counts for every upcoming
                fixture saved in ``stats/predictions.sqlite`` with the time they were made.
-5. picks     -- the market-aligned candidates (stats_picks) of each day; the top ones are logged as
-               paper picks in ``stats/predictions.sqlite`` (table picks) and settled later.
+5. picks     -- the market-aligned candidates (stats_picks) of each day, each with a plain-language
+               reason; the top ones and the best two-leg coupon are logged as paper bets in
+               ``stats/predictions.sqlite`` (tables picks, coupons), frozen at kick-off and settled
+               from the match statistics.
 6. export    -- JSON for the dashboard in ``--dest`` (matches, teams, picks, track record, meta).
 
-The API quota is shared with Oskar's collectors: a run stops spending at ``--max-requests`` or when
-the account has ``--reserve`` requests left.  The key is read from the Windows user environment.
+The API quota is shared with other users of the same API account: a run stops spending at
+``--max-requests`` or when the account has ``--reserve`` requests left.  The key is read from the
+Windows user environment.
 
 Usage (from app/):
     .venv\\Scripts\\python scripts\\mk2\\stats_daily.py
@@ -98,6 +101,14 @@ def init_dbs() -> tuple[sqlite3.Connection, sqlite3.Connection, sqlite3.Connecti
         made_at text, day text, fixture_id integer, stat text, scope text, line real, side text,
         p_model real, p_market real, odd real, bookmaker text, ev real, ev_tax real, rank integer,
         primary key (day, fixture_id, stat, scope, line, side))""")
+    cols = [r[1] for r in pr.execute("pragma table_info(picks)")]
+    if "why" not in cols:
+        pr.execute("alter table picks add column why text")
+    if "expected" not in cols:
+        pr.execute("alter table picks add column expected real")
+    pr.execute("""create table if not exists coupons (
+        made_at text, day text, kind text, legs text, odd real, p_model real, p_market real, ev real,
+        ev_tax real, why text, primary key (day, kind))""")
     for con in (fx, od, pr):
         con.commit()
     return fx, od, pr
@@ -290,7 +301,7 @@ def analysis_for(fixtures: list[sqlite3.Row], fits: dict, odds: dict[int, list[d
         n_away = (team_n or {}).get(f["away_id"], 0)
         out["mecze"].append({"fixture_id": f["fixture_id"], "start": f["kickoff_utc"], "gospodarz": f["home"],
                              "gosc": f["away"], "liga_id": f["league_id"], "srednie": means, "linie": lines,
-                             "n_gosp": n_home, "n_gosc": n_away,
+                             "n_gosp": n_home, "n_gosc": n_away, "home_id": f["home_id"], "away_id": f["away_id"],
                              "min_n": min(n_home, n_away) if team_n is not None else sp.MIN_TEAM_MATCHES})
     return out
 
@@ -350,17 +361,22 @@ def group_factors(analysis: dict, pooled: dict) -> dict[str, dict[tuple[str, str
 # ---------------------------------------------------------------------------- 6. export helpers
 
 def team_profiles(df: pd.DataFrame, team_ids: set[int], fits: dict, leagues: dict[int, int]) -> dict:
-    """Season averages for/against (domestic league, current season), ranks in the league, last 5."""
+    """Season averages for/against in the domestic league, ranks in the league, last 5 matches.
+
+    The season shown is the latest one in which the team has at least MIN_SEASON_MATCHES league
+    matches with statistics (early in a season, or with a provider gap, the previous one), and the
+    ranks compare it with the teams of that league and season that also have enough matches.
+    """
     stats = ("shots", "sot", "corners", "fouls", "cards", "offsides")
     cols = {s: sm.STATS[s] for s in stats}
     opp = df.set_index(["fixture_id", "team_id"])
     out = {}
-    cur = df[df["cup"] == 0]
-    latest_season = cur.groupby("league_id")["season"].transform("max")
-    cur = cur[cur["season"] == latest_season]
+    dom = df[df["cup"] == 0]
+    newest = dom.groupby("league_id")["season"].transform("max")
+    dom = dom[dom["season"] >= newest - 1]
     agg_rows = []
-    for (lid, tid), g in cur.groupby(["league_id", "team_id"]):
-        rec = {"league_id": lid, "team_id": tid, "n": len(g)}
+    for (lid, season, tid), g in dom.groupby(["league_id", "season", "team_id"]):
+        rec = {"league_id": lid, "season": season, "team_id": tid, "n": len(g)}
         for s, c in cols.items():
             rec[f"{s}_for"] = g[c].mean()
             against = [v for v in (opp.loc[(f, o)][c] for f, o in zip(g["fixture_id"], g["opp_id"])) if pd.notna(v)]
@@ -373,11 +389,13 @@ def team_profiles(df: pd.DataFrame, team_ids: set[int], fits: dict, leagues: dic
             continue
         lid = leagues.get(tid, 0)
         prof = {"nazwa": rows_t["team"].iloc[-1], "liga_id": lid, "sezon": {}, "miejsce": {}, "model": {}, "ost5": []}
-        a = agg[(agg["league_id"] == lid)] if not agg.empty else agg
-        me = a[a["team_id"] == tid] if not a.empty else a
-        if not me.empty:
-            me = me.iloc[0]
+        mine = agg[(agg["league_id"] == lid) & (agg["team_id"] == tid) & (agg["n"] >= MIN_SEASON_MATCHES)] \
+            if not agg.empty else agg
+        if not mine.empty:
+            me = mine.sort_values("season").iloc[-1]
+            a = agg[(agg["league_id"] == lid) & (agg["season"] == me["season"]) & (agg["n"] >= MIN_SEASON_MATCHES)]
             prof["mecze_w_sezonie"] = int(me["n"])
+            prof["sezon_nazwa"] = _season_label(int(me["season"]), int(lid))
             for s in stats:
                 f_, ag = me[f"{s}_for"], me[f"{s}_against"]
                 prof["sezon"][s] = [_r(f_), _r(ag)]
@@ -399,6 +417,14 @@ def team_profiles(df: pd.DataFrame, team_ids: set[int], fits: dict, leagues: dic
             })
         out[str(tid)] = prof
     return out
+
+
+MIN_SEASON_MATCHES = 4
+CALENDAR_YEAR_LEAGUES = {103, 113}  # Norway, Sweden play spring to autumn
+
+
+def _season_label(season: int, league_id: int) -> str:
+    return str(season) if league_id in CALENDAR_YEAR_LEAGUES else f"{season}/{str(season + 1)[-2:]}"
 
 
 def _r(v, nd: int = 2):
@@ -506,28 +532,105 @@ def forecast_track(pr: sqlite3.Connection, df: pd.DataFrame, finished: dict) -> 
     return out
 
 
-# ---------------------------------------------------------------------------- 8. settle paper picks
+# ---------------------------------------------------------------------------- 8. explanations
+
+NOUN_GEN = {"shots": "strzałów", "sot": "celnych strzałów", "corners": "rożnych", "fouls": "fauli",
+            "cards": "kartek", "yellow": "żółtych kartek", "offsides": "spalonych"}
+
+
+def _pc(p: float) -> str:
+    return f"{round(p * 100)}%"
+
+
+def _pl2(v: float) -> str:
+    return f"{v:.2f}".replace(".", ",")
+
+
+def _int(v) -> str:
+    return "?" if v is None else str(int(round(v)))
+
+
+def rank_phrase(r: int, n: int) -> str:
+    """'3. najwięcej w lidze' for the top half, '2. najmniej w lidze' for the bottom half."""
+    return f"{r}. najwięcej w lidze" if r <= (n + 1) / 2 else f"{n - r + 1}. najmniej w lidze"
+
+
+def why_pick(c: dict, m: dict, teams: dict, rank: int, n: int) -> str:
+    """Plain-language reasons for a pick: the model's number, the teams' record, the market, the ranking."""
+    stat, scope, side, line = c["stat"], c["scope"], c["side"], c["line"]
+    noun = NOUN_GEN[stat]
+    who = {"home": m["gospodarz"], "away": m["gosc"], "total": "w całym meczu"}[scope]
+    parts = [f"Model oczekuje {_pl(c['oczekiwane'])} {noun} ({who}) przy linii {_pl(line)}, więc "
+             f"{'powyżej' if side == 'over' else 'poniżej'} wychodzi z szansą {_pc(c['p_model'])}."]
+    th, ta = teams.get(str(m["home_id"])), teams.get(str(m["away_id"]))
+    if scope in ("home", "away"):
+        t, o = (th, ta) if scope == "home" else (ta, th)
+        tn, on = (m["gospodarz"], m["gosc"]) if scope == "home" else (m["gosc"], m["gospodarz"])
+        if t and t["sezon"].get(stat) and t["sezon"][stat][0] is not None:
+            r = t["miejsce"].get(stat) or [None, None, None]
+            parts.append(f"{tn} ma w swojej lidze średnio {_pl(t['sezon'][stat][0])} {noun} na mecz"
+                         + (f" ({rank_phrase(r[0], r[2])})" if r[0] else "") + ".")
+        if o and o["sezon"].get(stat) and o["sezon"][stat][1] is not None:
+            r = o["miejsce"].get(stat) or [None, None, None]
+            parts.append(f"Rywale drużyny {on} mają przeciw niej średnio {_pl(o['sezon'][stat][1])}"
+                         + (f" ({rank_phrase(r[1], r[2])})" if r[1] else "") + ".")
+        last_t = [g["s"][stat][0] for g in (t or {}).get("ost5", []) if g["s"].get(stat) and g["s"][stat][0] is not None]
+        last_o = [g["s"][stat][1] for g in (o or {}).get("ost5", []) if g["s"].get(stat) and g["s"][stat][1] is not None]
+        if last_t:
+            parts.append(f"Ostatnie mecze drużyny {tn}: {', '.join(_int(x) for x in last_t)}.")
+        if last_o:
+            parts.append(f"Rywale drużyny {on} w jej ostatnich meczach: {', '.join(_int(x) for x in last_o)}.")
+    else:
+        for t, tn in ((th, m["gospodarz"]), (ta, m["gosc"])):
+            if t and t["sezon"].get(stat) and None not in t["sezon"][stat]:
+                parts.append(f"{tn}: w lidze średnio {_pl(t['sezon'][stat][0])} {noun} własnych "
+                             f"i {_pl(t['sezon'][stat][1])} rywali na mecz.")
+    parts.append(f"Bukmacherzy dają {_pc(c['p_rynek'])} (najlepszy kurs {_pl2(c['kurs'])}, {c['bukmacher']}), "
+                 f"model {_pc(c['p_model'])}: różnica {round((c['p_model'] - c['p_rynek']) * 100):+d} pkt.")
+    if n:
+        parts.append(("Najwyższy" if rank == 1 else f"{rank}. najwyższy") + f" oczekiwany zysk spośród {n} linii tego dnia, "
+                     "które przeszły filtry (strzały, celne, rożne; linie ze środka rynku; różnica z rynkiem 4–15 pkt; "
+                     "drużyny z co najmniej 10 meczami w danych).")
+    return " ".join(parts)
+
+
+def why_coupon(k: dict, alts: list[dict]) -> str:
+    q = math.prod(l["p_rynek"] for l in k["legs"])
+    s = (f"{len(k['legs'])} zdarzenia z różnych meczów, łączny kurs {_pl2(k['kurs'])}. Szansa wg modelu {_pc(k['p_model'])}, "
+         f"wg bukmacherów {_pc(q)}; oczekiwany zysk z podatkiem {round(k['ev_podatek'] * 100):+d}% stawki. "
+         f"Najlepszy z {k.get('n_kombinacji', 1)} kuponów o łącznym kursie 1,8–2,5 złożonych z kandydatów tego dnia")
+    if alts:
+        s += "; kolejne: " + "; ".join(
+            f"{' + '.join(l['opis'] for l in a['legs'])} (kurs {_pl2(a['kurs'])}, zysk {round(a['ev_podatek'] * 100):+d}%)"
+            for a in alts[:2])
+    return s + "."
+
+
+# ---------------------------------------------------------------------------- 9. settle paper picks and coupons
+
+def settle_leg(leg: dict, by_fix: dict) -> tuple[str | None, float | None]:
+    g = by_fix.get(leg["fixture_id"])
+    if g is None or len(g) != 2:
+        return None, None
+    col = sm.STATS[leg["stat"]]
+    h = g[g["side"] == "home"][col].iloc[0]
+    a = g[g["side"] == "away"][col].iloc[0]
+    if pd.isna(h) or pd.isna(a):
+        return None, None
+    val = float({"home": h, "away": a, "total": h + a}[leg["scope"]])
+    if val == leg["line"]:
+        return "zwrot", val
+    return ("wygrana" if (val > leg["line"]) == (leg["side"] == "over") else "przegrana"), val
+
 
 def settle_picks(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
     rows = [dict(r) for r in pr.execute("select * from picks order by day, rank")]
     by_fix = {fid: g for fid, g in df.groupby("fixture_id")}
     out = []
     for p in rows:
-        g = by_fix.get(p["fixture_id"])
-        res = None
-        if g is not None and len(g) == 2:
-            col = sm.STATS[p["stat"]]
-            h = g[g["side"] == "home"][col].iloc[0]
-            a = g[g["side"] == "away"][col].iloc[0]
-            if pd.notna(h) and pd.notna(a):
-                val = {"home": h, "away": a, "total": h + a}[p["scope"]]
-                if val == p["line"]:
-                    res = "zwrot"
-                elif (val > p["line"]) == (p["side"] == "over"):
-                    res = "wygrana"
-                else:
-                    res = "przegrana"
-                p["wartosc"] = float(val)
+        res, val = settle_leg(p, by_fix)
+        if val is not None:
+            p["wartosc"] = val
         p["wynik"] = res
         if res == "wygrana":
             p["zysk"] = round(p["odd"] - 1, 4)
@@ -538,6 +641,27 @@ def settle_picks(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
             p["zysk"] = p["zysk_podatek"] = 0.0
         out.append(p)
     return out
+
+
+def settle_coupons(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
+    rows = [dict(r) for r in pr.execute("select * from coupons order by day")]
+    by_fix = {fid: g for fid, g in df.groupby("fixture_id")}
+    for c in rows:
+        legs = json.loads(c["legs"])
+        res = [settle_leg(l, by_fix) for l in legs]
+        for l, (r, v) in zip(legs, res):
+            l["wynik"], l["wartosc"] = r, v
+        c["legs"] = legs
+        c["wynik"] = None
+        if any(r == "przegrana" for r, _ in res):
+            c["wynik"], c["zysk"], c["zysk_podatek"] = "przegrana", -1.0, -1.0
+        elif all(r in ("wygrana", "zwrot") for r, _ in res):
+            odd = math.prod(l["kurs"] if r == "wygrana" else 1.0 for l, (r, _) in zip(legs, res))
+            if odd > 1.0:
+                c["wynik"], c["zysk"], c["zysk_podatek"] = "wygrana", round(odd - 1, 4), round(odd * 0.88 - 1, 4)
+            else:
+                c["wynik"], c["zysk"], c["zysk_podatek"] = "zwrot", 0.0, 0.0
+    return rows
 
 
 # ---------------------------------------------------------------------------- main
@@ -592,13 +716,17 @@ def main() -> None:
     pr.commit()
     print(f"forecast: {len(upcoming)} upcoming fixtures, {sum(1 for m in analysis['mecze'] if m['linie'])} with odds")
 
-    # picks
+    team_ids = {f["home_id"] for f in upcoming} | {f["away_id"] for f in upcoming}
+    teams = team_profiles(df, team_ids, fits, leagues)
+
+    # candidates: one per (match, statistic, scope), best expected value first, grouped by day
     cands = []
     for g, gf in factors.items():
         cands += sp.candidates({"mecze": [m for m in analysis["mecze"] if group_of(m["liga_id"]) == g],
                                 "model": analysis["model_puchary" if g == "puchary" else "model"]}, gf)
+    by_match = {m["fixture_id"]: m for m in analysis["mecze"]}
     for c in cands:
-        c["day"] = next(m["start"] for m in analysis["mecze"] if m["fixture_id"] == c["fixture_id"])[:10]
+        c["day"] = by_match[c["fixture_id"]]["start"][:10]
     good = [c for c in cands if c["do_typow"] and sp.MIN_EDGE <= c["przewaga"] <= sp.MAX_EDGE and c["ev"] >= sp.MIN_EV]
     good.sort(key=lambda c: -c["ev"])
     days: dict[str, list[dict]] = {}
@@ -609,9 +737,33 @@ def main() -> None:
             continue
         seen.add(key)
         days.setdefault(c["day"], []).append(c)
+    # Coupon legs come from a wider pool than the picks: likelier events (model at least 55%) whose
+    # price still beats the model's fair price, with a smaller edge over the market (2-15 points).
+    leg_pool: dict[str, list[dict]] = {}
+    seen_leg = set()
+    for c in sorted(cands, key=lambda c: -c["ev"]):
+        key = (c["fixture_id"], c["stat"], c["scope"])
+        if (c["do_typow"] and 0.02 <= c["przewaga"] <= sp.MAX_EDGE and c["ev"] > 0 and c["p_model"] >= 0.55
+                and key not in seen_leg):
+            seen_leg.add(key)
+            leg_pool.setdefault(c["day"], []).append(c)
+    for day, lst in leg_pool.items():
+        for rank, c in enumerate(lst, 1):
+            c.setdefault("why", why_pick(c, by_match[c["fixture_id"]], teams, rank, len(lst)))
+    coupons_of_day: dict[str, list[dict]] = {}
+    for day in sorted(set(days) | set(leg_pool)):
+        lst = days.get(day, [])
+        for rank, c in enumerate(lst, 1):
+            c["why"] = why_pick(c, by_match[c["fixture_id"]], teams, rank, len(lst))
+        ks = sp.coupons(leg_pool.get(day, []), 2)
+        for i, k in enumerate(ks):
+            k["why"] = why_coupon(k, ks[i + 1:i + 3])
+        coupons_of_day[day] = ks
+
     if "picks" not in skip:
         kickoff = {m["fixture_id"]: m["start"] for m in analysis["mecze"]}
-        for day, lst in days.items():
+        for day in sorted(set(days) | set(coupons_of_day)):
+            lst = days.get(day, [])
             # Picks of matches that have started are frozen (they are what gets settled); the rest of
             # the day's list is replaced by this run's, so the log keeps the last list made before kickoff.
             logged = [dict(r) for r in pr.execute("select fixture_id from picks where day = ?", (day,))]
@@ -622,22 +774,52 @@ def main() -> None:
                            (day, *open_ids))
             fresh = [c for c in lst if kickoff.get(c["fixture_id"], "") > made]
             for rank, c in enumerate(fresh[:max(0, PICK_LIMIT_PER_DAY - len(frozen))], len(frozen) + 1):
-                pr.execute("insert or replace into picks values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
-                    made, day, c["fixture_id"], c["stat"], c["scope"], c["line"], c["side"], c["p_model"],
-                    c["p_rynek"], c["kurs"], c["bukmacher"], c["ev"], c["ev_podatek"], rank))
+                pr.execute("insert or replace into picks (made_at, day, fixture_id, stat, scope, line, side, p_model, "
+                           "p_market, odd, bookmaker, ev, ev_tax, rank, why, expected) "
+                           "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
+                               made, day, c["fixture_id"], c["stat"], c["scope"], c["line"], c["side"], c["p_model"],
+                               c["p_rynek"], c["kurs"], c["bukmacher"], c["ev"], c["ev_podatek"], rank, c["why"],
+                               c["oczekiwane"]))
+            # the coupon of the day: the best two-leg coupon, frozen once its first match has started
+            ks = coupons_of_day.get(day) or []
+            row = pr.execute("select legs from coupons where day = ? and kind = '2'", (day,)).fetchone()
+            started = row is not None and min(kickoff.get(l["fixture_id"], "") for l in json.loads(row[0])) <= made
+            if ks and not started and min(kickoff.get(l["fixture_id"], "") for l in ks[0]["legs"]) > made:
+                k = ks[0]
+                pr.execute("insert or replace into coupons values (?,?,?,?,?,?,?,?,?,?)", (
+                    made, day, "2", json.dumps(k["legs"], ensure_ascii=False), k["kurs"], k["p_model"],
+                    math.prod(l["p_rynek"] for l in k["legs"]), k["ev"], k["ev_podatek"], k["why"]))
         pr.commit()
 
     if "export" not in skip:
-        export(Path(args.dest), analysis, factors, fits, df, leagues, upcoming, days, pr, made)
+        export(Path(args.dest), analysis, factors, fits, df, teams, upcoming, days, coupons_of_day, pr, fx, made)
     print(f"requests used {client.used}, account remaining {client.remaining}")
 
 
-def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFrame, leagues: dict,
-           upcoming: list, days: dict, pr: sqlite3.Connection, made: str) -> None:
+def fixture_names(fx: sqlite3.Connection, ids: set[int]) -> dict[int, dict]:
+    out = {}
+    for fid in ids:
+        r = fx.execute("select fixture_id, league_id, kickoff_utc, home, away from fixtures where fixture_id = ?",
+                       (fid,)).fetchone()
+        if r:
+            out[fid] = dict(r)
+    return out
+
+
+def plan_items() -> list[dict]:
+    path = HERE.parents[1] / "config" / "mk2" / "status.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("items", [])
+    except (OSError, ValueError):
+        return []
+
+
+def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFrame, teams: dict,
+           upcoming: list, days: dict, coupons_of_day: dict, pr: sqlite3.Connection, fx: sqlite3.Connection,
+           made: str) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     by_id = {f["fixture_id"]: f for f in upcoming}
-    team_ids = {f["home_id"] for f in upcoming} | {f["away_id"] for f in upcoming}
-    teams = team_profiles(df, team_ids, fits, leagues)
+    rank_of = {lid: i for i, lid in enumerate([*CUPS, *TOP15, *EXTRA])}
     matches = []
     for m in analysis["mecze"]:
         f = by_id[m["fixture_id"]]
@@ -650,7 +832,6 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
             "home_id": f["home_id"], "away_id": f["away_id"],
             "m": {s: [round(m["srednie"][s]["home"] * k[s][0], 2), round(m["srednie"][s]["away"] * k[s][1], 2)]
                   for s in sm.STATS},
-            "surowe": {s: [round(m["srednie"][s]["home"], 2), round(m["srednie"][s]["away"], 2)] for s in sm.STATS},
             "kursy": [[l["stat"], l["scope"], l["line"], l.get("kurs_over"), l.get("buk_over"), l.get("kurs_under"),
                        l.get("buk_under"), None if l.get("rynek_over") is None else round(l["rynek_over"], 4),
                        len(set(l.get("kursy_over", {})) | set(l.get("kursy_under", {})))] for l in m["linie"]],
@@ -660,48 +841,77 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         for key in ("home_id", "away_id"):
             rec.pop(key)
         matches.append(rec)
-    # The day's picks shown are the logged ones (what will be settled); the fresh candidates fill
-    # days not logged yet and feed the coupons.
+    # fixed order everywhere: competition, kick-off, home team
+    matches.sort(key=lambda r: (rank_of.get(r["liga_id"], 999), r["start"], r["gosp"]))
+
     finished = finished_results(df, days_back=21)
     track = forecast_track(pr, df, finished)
     settled = settle_picks(pr, df)
-    # aligned expected count per (fixture, stat, scope), shown next to each pick's line
-    expected = {}
-    for m in analysis["mecze"]:
-        gf = factors[group_of(m["liga_id"])]
-        for s in sm.STATS:
-            for scope in ("home", "away", "total"):
-                expected[(m["fixture_id"], s, scope)] = m["srednie"][s][scope] * gf[(s, scope)]
+    coupons = settle_coupons(pr, df)
+    names = fixture_names(fx, {p["fixture_id"] for p in settled}
+                          | {l["fixture_id"] for c in coupons for l in c["legs"]})
+
+    def named(fid: int) -> dict:
+        f = names.get(fid) or {}
+        return {"gospodarz": f.get("home", "?"), "gosc": f.get("away", "?")}
+
+    def logged_pick(s: dict) -> dict:
+        m = named(s["fixture_id"])
+        p = s["p_model"]
+        return {"fixture_id": s["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}",
+                "start": (names.get(s["fixture_id"]) or {}).get("kickoff_utc"), "stat": s["stat"],
+                "scope": s["scope"], "line": s["line"], "side": s["side"],
+                "opis": sp.describe(m, s["stat"], s["scope"], s["side"], s["line"]),
+                "p_model": p, "p_rynek": s["p_market"], "kurs": s["odd"], "bukmacher": s["bookmaker"],
+                "kurs_min_z_podatkiem": round(1 / (p * 0.88), 2), "ev": s["ev"], "ev_podatek": s["ev_tax"],
+                "wynik": s.get("wynik"), "wartosc": s.get("wartosc"), "zysk": s.get("zysk"),
+                "zysk_podatek": s.get("zysk_podatek"), "zapisano": s["made_at"], "why": s.get("why"),
+                "oczekiwane": _r(s.get("expected"), 2)}
+
+    def logged_coupon(c: dict) -> dict:
+        return {"legs": c["legs"], "kurs": c["odd"], "p_model": c["p_model"], "p_rynek": c["p_market"],
+                "ev": c["ev"], "ev_podatek": c["ev_tax"], "why": c["why"], "wynik": c.get("wynik"),
+                "zysk": c.get("zysk"), "zysk_podatek": c.get("zysk_podatek"), "zapisano": c["made_at"]}
+
     logged: dict[str, list[dict]] = {}
     for s in settled:
         logged.setdefault(s["day"], []).append(s)
+    logged_c = {c["day"]: c for c in coupons if c["kind"] == "2"}
     picks_out = {}
-    for day in sorted(set(days) | set(logged)):
+    for day in sorted(set(days) | set(logged) | set(logged_c)):
         lst = days.get(day, [])
-        top = [_logged_pick(s, by_id, expected) for s in sorted(logged[day], key=lambda s: s["rank"])]             if day in logged else [_pick(c) for c in lst[:PICK_LIMIT_PER_DAY]]
-        picks_out[day] = {"top": top, "kupony2": sp.coupons(lst, 2), "kupony3": sp.coupons(lst, 3),
-                          "kandydaci": [_pick(c) for c in lst[:30]]}
-    done = [p for p in settled if p.get("wynik")]
-    summary = {
-        "typy": len(settled), "rozliczone": len(done),
-        "wygrane": sum(p["wynik"] == "wygrana" for p in done),
-        "przegrane": sum(p["wynik"] == "przegrana" for p in done),
-        "zysk": round(sum(p["zysk"] for p in done), 3),
-        "zysk_podatek": round(sum(p["zysk_podatek"] for p in done), 3),
-    }
+        top = ([logged_pick(s) for s in sorted(logged[day], key=lambda s: s["rank"])] if day in logged
+               else [_pick(c) for c in lst[:PICK_LIMIT_PER_DAY]])
+        ks = coupons_of_day.get(day, [])
+        kupon = logged_coupon(logged_c[day]) if day in logged_c else (ks[0] if ks else None)
+        picks_out[day] = {"top": top, "kupon": kupon, "kupony": ks[:5], "kandydaci": [_pick(c) for c in lst[:30]]}
+
+    # results: what came in and what did not, per day and in total
+    def tally(items: list[dict]) -> dict:
+        done = [x for x in items if x.get("wynik")]
+        return {"n": len(items), "rozliczone": len(done),
+                "trafione": sum(x["wynik"] == "wygrana" for x in done),
+                "chybione": sum(x["wynik"] == "przegrana" for x in done),
+                "zysk": round(sum(x["zysk"] for x in done), 3),
+                "zysk_podatek": round(sum(x["zysk_podatek"] for x in done), 3)}
+    results = []
+    for day in sorted(set(logged) | set(logged_c), reverse=True):
+        ps = [logged_pick(s) for s in sorted(logged.get(day, []), key=lambda s: s["rank"])]
+        kc = logged_coupon(logged_c[day]) if day in logged_c else None
+        results.append({"dzien": day, "typy": ps, "kupon": kc, "typy_wynik": tally(ps),
+                        "kupon_wynik": tally([kc]) if kc else None})
+    wyniki = {"dni": results, "razem": {"typy": tally([logged_pick(s) for s in settled]),
+                                        "kupony": tally([logged_coupon(c) for c in coupons])},
+              "prognozy": track}
     meta = {
         "utworzono": made,
         "dane_do": df["kickoff"].max().isoformat(),
         "ligi": {str(k): v for k, v in MODEL_LEAGUES.items()},
-        "dodatkowe": list(EXTRA),
         "skroty": {str(k): v for k, v in SHORT.items()},
-        "top15": list(TOP15), "puchary": list(CUPS),
+        "top15": list(TOP15), "puchary": list(CUPS), "dodatkowe": list(EXTRA),
         "model": {s: {"alpha": round(f.alpha, 5), "alpha_total": round(f.alpha_total, 5),
                       "alpha_puchary": round(f.dispersion("home", True), 5),
-                      "alpha_total_puchary": round(f.dispersion("total", True), 5),
-                      "dom": round(math.exp(f.b_home), 3), "puchar": round(math.exp(f.b_cup), 3),
-                      "k": {g: [round(gf[(s, "home")], 3), round(gf[(s, "away")], 3), round(gf[(s, "total")], 3)]
-                            for g, gf in factors.items()}}
+                      "alpha_total_puchary": round(f.dispersion("total", True), 5)}
                   for s, f in fits.items()},
         "podatek": 0.88,
         "mecze": len(matches),
@@ -712,30 +922,19 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     write("st_mecze.json", matches)
     write("st_druzyny.json", teams)
     write("st_typy.json", picks_out)
-    write("st_wyniki.json", {"podsumowanie": summary, "typy": settled, "prognozy": track})
+    write("st_wyniki.json", wyniki)
     write("st_rozliczenia.json", finished)
+    write("st_plan.json", plan_items())
     write("st_meta.json", meta)
-    print(f"export: {len(matches)} matches, {len(teams)} teams, {sum(len(v['top']) for v in picks_out.values())} picks -> {dest}")
-
-
-def _logged_pick(s: dict, by_id: dict, expected: dict) -> dict:
-    f = by_id.get(s["fixture_id"])
-    m = {"gospodarz": f["home"], "gosc": f["away"]} if f else {"gospodarz": "?", "gosc": "?"}
-    p = s["p_model"]
-    return {"fixture_id": s["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}", "stat": s["stat"],
-            "scope": s["scope"], "line": s["line"], "side": s["side"],
-            "opis": sp.describe(m, s["stat"], s["scope"], s["side"], s["line"]),
-            "p_model": p, "p_rynek": s["p_market"], "kurs": s["odd"], "bukmacher": s["bookmaker"],
-            "kurs_uczciwy": round(1 / p, 2), "kurs_min_z_podatkiem": round(1 / (p * 0.88), 2),
-            "ev": s["ev"], "ev_podatek": s["ev_tax"], "przewaga": round(p - s["p_market"], 4),
-            "wynik": s.get("wynik"), "wartosc": s.get("wartosc"), "zapisano": s["made_at"],
-            "oczekiwane": _r(expected.get((s["fixture_id"], s["stat"], s["scope"])), 2)}
+    print(f"export: {len(matches)} matches, {len(teams)} teams, {sum(len(v['top']) for v in picks_out.values())} picks, "
+          f"{len(results)} days of results -> {dest}")
 
 
 def _pick(c: dict) -> dict:
-    return {k: c[k] for k in ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "p_model", "p_rynek",
-                              "kurs", "bukmacher", "kurs_uczciwy", "kurs_min_z_podatkiem", "ev", "ev_podatek",
-                              "przewaga", "oczekiwane")}
+    out = {k: c.get(k) for k in ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "p_model", "p_rynek",
+                                 "kurs", "bukmacher", "kurs_uczciwy", "kurs_min_z_podatkiem", "ev", "ev_podatek",
+                                 "przewaga", "oczekiwane", "why")}
+    return out
 
 
 if __name__ == "__main__":

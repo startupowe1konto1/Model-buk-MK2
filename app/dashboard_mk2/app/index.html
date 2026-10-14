@@ -1,28 +1,17 @@
-<title>Model Buk MK2</title>
+<title>Typometr</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
 <style>
-/* Layout: sticky header (name, data freshness, source picker, tabs) over one working column up to 80rem;
-   every table scrolls inside its own card; edits happen in place and save to the app's shared store. */
+/* Typometr: one working column (max 72rem) under a sticky header with five tabs. Typy dnia is the
+   landing page: today's picks with their reasons, the coupon of the day and what came in on past days. */
 :root {
-  --paper: #f2f4f1;
-  --panel: #ffffff;
-  --ink: #17212b;
-  --muted: #5a6570;
-  --line: #d8ded6;
-  --pitch: #1f6a4a;
-  --pitch-soft: #e2eee6;
-  --win: #1c7646;
-  --loss: #b0372d;
-  --warn: #965f00;
-  --chip: #eaede8;
+  --paper: #f2f4f1; --panel: #ffffff; --ink: #17212b; --muted: #5a6570; --line: #d8ded6;
+  --pitch: #1f6a4a; --pitch-soft: #e2eee6; --win: #1c7646; --loss: #b0372d; --warn: #965f00; --chip: #eaede8;
   --shade: rgba(23, 33, 43, 0.06);
   --display: "Barlow Semi Condensed", "Arial Narrow", "Segoe UI", sans-serif;
   --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  --r: 10px;
-  color-scheme: light;
+  --r: 10px; color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -38,581 +27,400 @@
 }
 [hidden] { display: none !important; }
 body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; }
-.mk-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--line); }
-.mk-top-in, .mk-main { max-width: 80rem; margin-inline: auto; padding-inline: 16px; }
-.mk-top-in { display: grid; gap: 8px; padding-block: 12px 0; }
-.mk-brand { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; justify-content: space-between; }
-.mk-brand h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 1.6rem; letter-spacing: 0.01em; }
-.mk-fresh { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-.mk-fresh b { color: var(--ink); font-weight: 600; }
-.mk-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.mk-tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; margin-inline: -4px; padding-inline: 4px; }
-.mk-tab { font: 600 0.95rem var(--display); letter-spacing: 0.02em; color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 10px 7px; cursor: pointer; white-space: nowrap; }
-.mk-tab:hover { color: var(--ink); }
-.mk-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--pitch); }
-.mk-tab .n { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--chip); color: var(--ink); font: 600 0.75rem var(--body); text-align: center; }
-.mk-main { padding-block: 18px 48px; display: grid; gap: 16px; }
-.mk-page { display: grid; gap: 16px; min-width: 0; }
-.mk-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 10px; min-width: 0; box-shadow: 0 1px 2px var(--shade); }
-.mk-card h2 { margin: 0; font: 600 1.2rem var(--display); letter-spacing: 0.01em; text-wrap: balance; }
-.mk-card h3 { margin: 0; font: 600 1rem var(--display); }
-.mk-note { margin: 0; color: var(--muted); font-size: 0.9rem; max-width: 78ch; }
-.mk-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: 16px; }
-.mk-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr)); gap: 12px; }
-.mk-kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 2px; align-content: start; }
-.mk-kpi .l { color: var(--muted); font-size: 0.8rem; letter-spacing: 0.02em; }
-.mk-kpi .v { font: 700 2rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
-.mk-kpi .s { color: var(--muted); font-size: 0.8rem; }
-.mk-kpi.alert { border-color: var(--loss); }
-.mk-kpi.alert .v { color: var(--loss); }
-.mk-banner { border-radius: var(--r); padding: 10px 14px; background: var(--chip); color: var(--ink); font-size: 0.9rem; }
-.mk-banner.err { background: var(--panel); border: 1px solid var(--loss); }
-.mk-ctrl, .mk-in, .mk-ta { font: inherit; font-size: 0.9rem; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; max-width: 100%; }
-.mk-ta { width: 100%; min-height: 3.2em; resize: vertical; box-sizing: border-box; }
-.mk-in.num { width: 6.5rem; font-variant-numeric: tabular-nums; }
-.mk-label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 0.85rem; }
-.mk-btn { font: 600 0.9rem var(--body); border-radius: 8px; padding: 6px 12px; cursor: pointer; border: 1px solid var(--pitch); background: var(--pitch); color: var(--panel); }
-.mk-btn.ghost { background: transparent; color: var(--pitch); }
-.mk-btn.danger { background: transparent; color: var(--loss); border-color: var(--loss); }
-.mk-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.mk-btn:focus-visible, .mk-tab:focus-visible, .mk-ctrl:focus-visible, .mk-in:focus-visible, .mk-ta:focus-visible, .mk-th:focus-visible, .mk-item:focus-visible { outline: 2px solid var(--pitch); outline-offset: 2px; }
-.mk-saved { color: var(--win); font-size: 0.85rem; }
-.mk-err { color: var(--loss); font-size: 0.85rem; }
-.mk-wrap { overflow: auto; max-height: 36rem; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
-.mk-wrap.short { max-height: 22rem; }
-.mk-tbl { width: 100%; border-collapse: collapse; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
-.mk-tbl th { position: sticky; top: 0; z-index: 1; background: var(--panel); text-align: left; color: var(--muted); font-weight: 600; padding: 7px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.mk-th { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
-.mk-th::after { content: ""; display: inline-block; width: 0.8em; }
-th[aria-sort="ascending"] .mk-th::after { content: " ↑"; }
-th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
-.mk-tbl td { padding: 6px 9px; border-top: 1px solid var(--line); vertical-align: top; }
-.mk-tbl .r { text-align: right; white-space: nowrap; }
-.mk-tbl .nw { white-space: nowrap; }
-.mk-tbl .wide { min-width: 15rem; }
-.mk-tbl .mid { min-width: 11rem; }
-.mk-tbl tr.click { cursor: pointer; }
-.mk-tbl tr.click:hover td { background: var(--pitch-soft); }
-.mk-tbl tr[aria-selected="true"] td { background: var(--pitch-soft); }
-.mk-chip { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 0.78rem; line-height: 1.6; white-space: nowrap; background: var(--chip); color: var(--ink); }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--line); }
+.top-in, .main { max-width: 72rem; margin-inline: auto; padding-inline: 16px; }
+.top-in { display: grid; gap: 6px; padding-block: 12px 0; }
+.brand { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; justify-content: space-between; }
+.brand h1 { margin: 0; font: 700 1.7rem var(--display); letter-spacing: 0.01em; }
+.brand .sub { color: var(--muted); font-size: 0.9rem; margin-left: 8px; font-family: var(--body); font-weight: 400; }
+.fresh { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.fresh b { color: var(--ink); font-weight: 600; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; margin-inline: -4px; padding-inline: 4px; }
+.tab { font: 600 1rem var(--display); letter-spacing: 0.02em; color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px 7px; cursor: pointer; white-space: nowrap; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--pitch); }
+.tab .n { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--chip); color: var(--ink); font: 600 0.75rem var(--body); text-align: center; }
+.main { padding-block: 18px 48px; display: grid; gap: 16px; }
+.page { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 10px; min-width: 0; box-shadow: 0 1px 2px var(--shade); }
+.card h2 { margin: 0; font: 600 1.25rem var(--display); letter-spacing: 0.01em; text-wrap: balance; }
+.card h3 { margin: 0; font: 600 1.02rem var(--display); }
+.note { margin: 0; color: var(--muted); font-size: 0.9rem; max-width: 80ch; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row.between { justify-content: space-between; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 16px; align-items: start; }
+.banner { border-radius: var(--r); padding: 10px 14px; background: var(--chip); font-size: 0.9rem; }
+.banner.err { background: var(--panel); border: 1px solid var(--loss); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chipbtn { font: 600 0.88rem var(--body); border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.chipbtn[aria-pressed="true"] { background: var(--pitch); border-color: var(--pitch); color: var(--panel); }
+.chipbtn .n { opacity: 0.8; font-weight: 400; margin-left: 5px; }
+.chip { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 0.8rem; line-height: 1.65; white-space: nowrap; background: var(--chip); color: var(--ink); }
 .c-win { color: var(--win); } .c-loss { color: var(--loss); } .c-warn { color: var(--warn); } .c-muted { color: var(--muted); }
-.mk-chip.c-win, .mk-chip.c-loss, .mk-chip.c-warn { background: transparent; border: 1px solid currentColor; }
-.mk-count { color: var(--muted); font-size: 0.82rem; }
-.mk-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 16px; align-items: start; }
-.mk-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.mk-item { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; padding: 8px 10px; border-radius: 8px; background: var(--paper); border: 1px solid var(--line); cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; }
-.mk-item .t { font-weight: 600; }
-.mk-item .d { grid-column: 2; color: var(--muted); font-size: 0.85rem; }
-.mk-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-top: 0.42rem; background: var(--muted); }
-.mk-dot.gotowe { background: var(--win); } .mk-dot.brakuje, .mk-dot.problem { background: var(--loss); } .mk-dot.decyzja, .mk-dot.w_toku { background: var(--warn); }
-.mk-plan { display: grid; gap: 10px; }
-.mk-pi { border: 1px solid var(--line); border-left: 4px solid var(--muted); border-radius: 8px; padding: 12px; display: grid; gap: 8px; background: var(--panel); }
-.mk-pi.gotowe { border-left-color: var(--win); } .mk-pi.brakuje, .mk-pi.problem { border-left-color: var(--loss); } .mk-pi.decyzja, .mk-pi.w_toku { border-left-color: var(--warn); }
-.mk-pi .hd { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; justify-content: space-between; }
-.mk-pi .ti { font-weight: 600; }
-.mk-pi .meta { color: var(--muted); font-size: 0.8rem; }
-.mk-pi .cmd { font-family: var(--mono); font-size: 0.8rem; background: var(--chip); border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; user-select: all; }
-.mk-form { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); align-items: end; }
-.mk-form label { display: grid; gap: 4px; color: var(--muted); font-size: 0.85rem; }
-.mk-chart { position: relative; min-height: 15rem; min-width: 0; }
-.mk-chart svg { display: block; }
-.mk-tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px var(--shade); padding: 6px 9px; font-size: 0.8rem; color: var(--ink); white-space: nowrap; z-index: 3; }
-.mk-tip .t { color: var(--muted); }
-.mk-detail { border-top: 2px solid var(--pitch); }
-.mk-facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 0.88rem; }
-.mk-facts b { color: var(--ink); font-variant-numeric: tabular-nums; }
-.mk-sum { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 0.95rem; }
-.mk-sum b { font-family: var(--display); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-.mk-skel { color: transparent; background: var(--chip); border-radius: 6px; }
-@media (prefers-reduced-motion: no-preference) { .mk-page { animation: mkin 180ms ease-out; } @keyframes mkin { from { opacity: 0.6; } to { opacity: 1; } } }
-/* statistics sections */
-.mk-subnav { display: grid; gap: 6px; padding-top: 2px; border-top: 1px solid var(--line); }
-.mk-tab.sm { font-size: 0.88rem; padding: 6px 9px 5px; }
-.mk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.mk-chipbtn { font: 600 0.85rem var(--body); border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
-.mk-chipbtn[aria-pressed="true"] { background: var(--pitch); border-color: var(--pitch); color: var(--panel); }
-.mk-chipbtn .n { opacity: 0.75; font-weight: 400; margin-left: 5px; }
-.mk-chipbtn:focus-visible, .mk-match:focus-visible { outline: 2px solid var(--pitch); outline-offset: 2px; }
-.mk-group { gap: 6px; }
-.mk-group h3 { margin: 0 0 2px; font: 600 1rem var(--display); color: var(--muted); letter-spacing: 0.02em; }
-.mk-match { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; }
-.mk-match:hover { border-color: var(--pitch); }
-.mk-match .tm { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
-.mk-match .tt { font-weight: 600; }
-.mk-match .st { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
-.mk-match .bd { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
-@media (max-width: 560px) { .mk-match { grid-template-columns: 2.8rem minmax(0, 1fr); } .mk-match .bd { grid-column: 2; justify-content: flex-start; } .mk-match .st { display: block; } }
-.mk-match-title { font-size: 1.5rem !important; }
-.mk-vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); gap: 10px; }
-.mk-stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; background: var(--panel); align-content: start; }
-.mk-stat .l { color: var(--muted); font-size: 0.8rem; }
-.mk-stat .v { display: flex; justify-content: space-between; font: 700 1.45rem/1 var(--display); font-variant-numeric: tabular-nums; }
-.mk-stat .s { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-.mk-stat .s b { color: var(--ink); }
-.mk-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--chip); }
-.mk-bar .h { background: var(--pitch); }
-.mk-bar .a { background: var(--muted); opacity: 0.55; }
-.mk-calc { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
-.mk-calc-out { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 10px; }
-.mk-big { font: 700 1.7rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
-.mk-why { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }
-.mk-pick { border: 1px solid var(--line); border-left: 4px solid var(--pitch); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; background: var(--panel); }
-.mk-pick .hd { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
-.mk-pick .ti { font-weight: 600; }
-.mk-back { justify-self: start; }
-.mk-btn.sm { padding: 2px 8px; font-size: 0.8rem; margin: 1px 4px 1px 0; }
-.mk-check { display: flex !important; grid-auto-flow: column; gap: 6px; align-items: center; }
-.mk-tbl caption { caption-side: bottom; text-align: left; padding: 10px; }
+.chip.c-win, .chip.c-loss, .chip.c-warn { background: transparent; border: 1px solid currentColor; font-weight: 600; }
+.ctrl, .in, .ta { font: inherit; font-size: 0.92rem; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; max-width: 100%; }
+.ta { width: 100%; min-height: 3.2em; resize: vertical; box-sizing: border-box; }
+.in.num { width: 6.5rem; font-variant-numeric: tabular-nums; }
+.label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 0.86rem; }
+.btn { font: 600 0.9rem var(--body); border-radius: 8px; padding: 6px 12px; cursor: pointer; border: 1px solid var(--pitch); background: var(--pitch); color: var(--panel); }
+.btn.ghost { background: transparent; color: var(--pitch); }
+.btn.danger { background: transparent; color: var(--loss); border-color: var(--loss); }
+.btn.sm { padding: 2px 8px; font-size: 0.8rem; margin: 1px 4px 1px 0; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible, .tab:focus-visible, .ctrl:focus-visible, .in:focus-visible, .ta:focus-visible, .th:focus-visible, .match:focus-visible, .chipbtn:focus-visible, summary:focus-visible { outline: 2px solid var(--pitch); outline-offset: 2px; }
+.saved { color: var(--win); font-size: 0.85rem; } .err { color: var(--loss); font-size: 0.85rem; }
+.wrap { overflow: auto; max-height: 34rem; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.wrap.short { max-height: 22rem; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.tbl th { position: sticky; top: 0; z-index: 1; background: var(--panel); text-align: left; color: var(--muted); font-weight: 600; padding: 7px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.th { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.th::after { content: ""; display: inline-block; width: 0.8em; }
+th[aria-sort="ascending"] .th::after { content: " ↑"; }
+th[aria-sort="descending"] .th::after { content: " ↓"; }
+.tbl td { padding: 6px 9px; border-top: 1px solid var(--line); vertical-align: top; }
+.tbl .r { text-align: right; white-space: nowrap; } .tbl .nw { white-space: nowrap; } .tbl .wide { min-width: 14rem; }
+.tbl tr.grp td { background: var(--chip); font-weight: 600; }
+.tbl caption { caption-side: bottom; text-align: left; padding: 10px; }
+.form { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); align-items: end; }
+.form label { display: grid; gap: 4px; color: var(--muted); font-size: 0.86rem; }
+.check { display: flex !important; gap: 6px; align-items: center; }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: 0.9rem; }
+.facts b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.sum { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 0.95rem; align-items: baseline; }
+.sum b { font: 700 1.3rem var(--display); font-variant-numeric: tabular-nums; }
+/* picks */
+.pick { border: 1px solid var(--line); border-left: 4px solid var(--pitch); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; background: var(--panel); }
+.pick.won { border-left-color: var(--win); } .pick.lost { border-left-color: var(--loss); }
+.pick .hd { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.pick .ti { font: 600 1.1rem var(--display); }
+.pick .mt { color: var(--muted); font-size: 0.9rem; }
+.pick .legs { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }
+details.why summary { cursor: pointer; color: var(--pitch); font-weight: 600; font-size: 0.9rem; }
+details.why p { margin: 6px 0 0; font-size: 0.92rem; max-width: 80ch; }
+/* matches */
+.group { gap: 6px; }
+.group h3 { margin: 0 0 2px; color: var(--muted); letter-spacing: 0.02em; }
+.match { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; }
+.match:hover { border-color: var(--pitch); }
+.match .tm { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
+.match .tt { font-weight: 600; }
+.match .st { display: block; color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.match .bd { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 560px) { .match { grid-template-columns: 2.8rem minmax(0, 1fr); } .match .bd { grid-column: 2; justify-content: flex-start; } }
+.vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); gap: 10px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; background: var(--panel); align-content: start; }
+.stat .l { color: var(--muted); font-size: 0.82rem; }
+.stat .v { display: flex; justify-content: space-between; font: 700 1.5rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.stat .s { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.stat .s b { color: var(--ink); }
+.bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--chip); }
+.bar .h { background: var(--pitch); } .bar .a { background: var(--muted); opacity: 0.55; }
+.big { font: 700 1.7rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.calc { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.calc-out { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 10px; }
+.title { font: 600 1.6rem var(--display) !important; }
+.list { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }
+.plan { display: grid; gap: 8px; }
+.pi { border: 1px solid var(--line); border-left: 4px solid var(--muted); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; background: var(--panel); }
+.pi.gotowe { border-left-color: var(--win); } .pi.brakuje, .pi.problem { border-left-color: var(--loss); } .pi.decyzja, .pi.w_toku { border-left-color: var(--warn); }
+.pi .hd { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; justify-content: space-between; }
+.pi .ti { font-weight: 600; }
+.pi .meta { color: var(--muted); font-size: 0.8rem; }
+details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
+@media (prefers-reduced-motion: no-preference) { .page { animation: fin 180ms ease-out; } @keyframes fin { from { opacity: 0.6; } to { opacity: 1; } } }
 </style>
 
-<header class="mk-top">
-  <div class="mk-top-in">
-    <div class="mk-brand">
-      <h1>Model Buk MK2</h1>
-      <span class="mk-fresh" id="fresh">Wczytywanie danych…</span>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <h1>Typometr<span class="sub">statystyki meczów i typy</span></h1>
+      <span class="fresh" id="fresh">Wczytywanie danych…</span>
     </div>
-    <nav class="mk-tabs" role="tablist" aria-label="Sekcje">
-      <button class="mk-tab" role="tab" id="t-mecze" data-p="mecze" aria-selected="true">Mecze</button>
-      <button class="mk-tab" role="tab" id="t-typydnia" data-p="typydnia">Typy dnia</button>
-      <button class="mk-tab" role="tab" id="t-szukaj" data-p="szukaj">Szukaj</button>
-      <button class="mk-tab" role="tab" id="t-zaklady" data-p="zaklady">Moje zakłady<span class="n" id="n-zak">0</span></button>
-      <button class="mk-tab" role="tab" id="t-skutecznosc" data-p="skutecznosc">Skuteczność</button>
-      <button class="mk-tab" role="tab" id="t-plan" data-p="plan">Plan</button>
-      <button class="mk-tab" role="tab" id="t-prosby" data-p="prosby">Prośby<span class="n" id="n-prosby">0</span></button>
-      <button class="mk-tab" role="tab" id="t-skaner" data-p="skaner">Skaner Oskara</button>
+    <nav class="tabs" role="tablist" aria-label="Sekcje">
+      <button class="tab" role="tab" id="t-typy" data-p="typy" aria-selected="true">Typy dnia</button>
+      <button class="tab" role="tab" id="t-mecze" data-p="mecze">Mecze</button>
+      <button class="tab" role="tab" id="t-szukaj" data-p="szukaj">Szukaj</button>
+      <button class="tab" role="tab" id="t-zaklady" data-p="zaklady">Moje zakłady<span class="n" id="n-zak">0</span></button>
+      <button class="tab" role="tab" id="t-projekt" data-p="projekt">Projekt<span class="n" id="n-prosby">0</span></button>
     </nav>
-    <div class="mk-subnav" id="subnav" hidden>
-      <nav class="mk-tabs" role="tablist" aria-label="Skaner Oskara">
-        <button class="mk-tab sm" role="tab" id="t-start" data-p="start">Podsumowanie</button>
-        <button class="mk-tab sm" role="tab" id="t-kupony" data-p="kupony">Kupony</button>
-        <button class="mk-tab sm" role="tab" id="t-typy" data-p="typy">Typy z kuponów<span class="n" id="n-typy">0</span></button>
-        <button class="mk-tab sm" role="tab" id="t-single" data-p="single">Single</button>
-        <button class="mk-tab sm" role="tab" id="t-przebiegi" data-p="przebiegi">Przebiegi</button>
-        <button class="mk-tab sm" role="tab" id="t-eksperymenty" data-p="eksperymenty">Eksperymenty</button>
-        <button class="mk-tab sm" role="tab" id="t-dane" data-p="dane">Dane</button>
-        <button class="mk-tab sm" role="tab" id="t-ustawienia" data-p="ustawienia">Strategia skanera</button>
-      </nav>
-      <div class="mk-row">
-        <label class="mk-label" for="f-src">Źródło
-          <select class="mk-ctrl" id="f-src"><option value="">Wszystkie źródła</option></select>
-        </label>
-        <span class="mk-count" id="who"></span>
-      </div>
-    </div>
   </div>
 </header>
 
-<main class="mk-main">
-  <div class="mk-banner" id="ro" hidden></div>
-  <div class="mk-banner err" id="loaderr" hidden></div>
+<main class="main">
+  <div class="banner" id="ro" hidden></div>
+  <div class="banner err" id="loaderr" hidden></div>
+
+  <!-- TYPY DNIA -->
+  <section class="page" id="pg-typy" role="tabpanel" aria-labelledby="t-typy">
+    <div class="card">
+      <div class="row between"><h2>Typy dnia</h2><span class="fresh" id="td-info"></span></div>
+      <div class="chips" id="td-days" role="group" aria-label="Dzień"></div>
+      <div class="sum" id="td-sum"></div>
+    </div>
+    <div class="page" id="td-picks"></div>
+    <div class="page" id="td-kupon"></div>
+    <div class="card">
+      <h2>Wyniki do tej pory</h2>
+      <p class="note">Każdy typ i kupon dnia zapisuję przed meczem, a po meczu sprawdzam z prawdziwą statystyką. Zysk liczę na stawkę 1 przy kursie z listy, bez podatku i z podatkiem 12%.</p>
+      <div class="sum" id="wy-sum"></div>
+      <div class="wrap short"><table class="tbl" id="wy-dni"></table></div>
+      <details class="why"><summary>Jak trafne są same prognozy?</summary>
+        <p class="note">Dla każdego rozegranego meczu: ostatnia prognoza przed pierwszym gwizdkiem kontra to, co padło. Progi „co najmniej X” z szansą 70% powinny trafiać ok. 7 razy na 10.</p>
+        <div class="wrap short"><table class="tbl" id="wy-prog"></table></div>
+      </details>
+    </div>
+  </section>
+
   <!-- MECZE -->
-  <section class="mk-page" id="pg-mecze" role="tabpanel" aria-labelledby="t-mecze">
-    <div class="mk-card">
-      <div class="mk-row" style="justify-content: space-between">
+  <section class="page" id="pg-mecze" role="tabpanel" aria-labelledby="t-mecze" hidden>
+    <div class="card">
+      <div class="row between">
         <h2>Mecze</h2>
-        <div class="mk-row">
-          <label class="mk-label" for="m-liga">Rozgrywki
-            <select class="mk-ctrl" id="m-liga"></select>
-          </label>
-          <input class="mk-ctrl" id="m-q" type="search" placeholder="Szukaj drużyny…" aria-label="Szukaj drużyny">
+        <div class="row">
+          <label class="label" for="m-liga">Rozgrywki <select class="ctrl" id="m-liga"></select></label>
+          <input class="ctrl" id="m-q" type="search" placeholder="Szukaj drużyny…" aria-label="Szukaj drużyny">
         </div>
       </div>
-      <div class="mk-chips" id="m-days" role="group" aria-label="Dzień"></div>
-      <p class="mk-note">Kliknij mecz, żeby zobaczyć prognozę: ile strzałów, rożnych, fauli i kartek, z jaką szansą i od jakiego kursu warto grać po podatku 12%.</p>
+      <div class="chips" id="m-days" role="group" aria-label="Dzień"></div>
     </div>
-    <div class="mk-page" id="m-list"></div>
+    <div class="page" id="m-list"></div>
   </section>
 
   <!-- MECZ -->
-  <section class="mk-page" id="pg-mecz" role="tabpanel" aria-labelledby="t-mecze" hidden>
-    <button class="mk-btn ghost mk-back" id="mz-back" type="button">← Wszystkie mecze</button>
-    <div class="mk-card">
-      <div class="mk-facts" id="mz-meta"></div>
-      <h2 id="mz-title" class="mk-match-title">Mecz</h2>
-      <div class="mk-vs" id="mz-stats"></div>
-      <p class="mk-note">Średnie oczekiwane przez model (gospodarz – gość). Strzały liczą także niecelne i zablokowane; celne to strzały na bramkę; kartki to żółte i czerwone.</p>
+  <section class="page" id="pg-mecz" role="tabpanel" aria-labelledby="t-mecze" hidden>
+    <button class="btn ghost" id="mz-back" type="button" style="justify-self: start">← Wszystkie mecze</button>
+    <div class="card">
+      <div class="facts" id="mz-meta"></div>
+      <h2 class="title" id="mz-title">Mecz</h2>
+      <div class="vs" id="mz-stats"></div>
+      <p class="note">Średnie oczekiwane przez model (gospodarz – gość). Strzały liczą też niecelne i zablokowane; kartki to żółte i czerwone.</p>
     </div>
-    <div class="mk-card" id="mz-why-card">
+    <div class="card" id="mz-picks-card">
+      <h2>Typy w tym meczu</h2>
+      <div class="page" id="mz-picks"></div>
+    </div>
+    <div class="card" id="mz-why-card">
       <h2>Na co zwrócić uwagę</h2>
-      <ul class="mk-why" id="mz-why"></ul>
-      <p class="mk-note">To porównania w lidze krajowej każdej drużyny. Prognoza modelu powyżej uwzględnia też różnicę poziomu lig, więc przy meczach drużyn z różnych lig może być niższa lub wyższa, niż sugerują same średnie.</p>
+      <ul class="list" id="mz-why"></ul>
+      <p class="note">Porównania w lidze krajowej każdej drużyny; prognoza uwzględnia też różnicę poziomu lig.</p>
     </div>
-    <div class="mk-card">
-      <h2>Kalkulator szansy</h2>
-      <div class="mk-calc">
-        <label class="mk-label" for="c-stat">Statystyka <select class="mk-ctrl" id="c-stat"></select></label>
-        <label class="mk-label" for="c-scope">Kto <select class="mk-ctrl" id="c-scope"></select></label>
-        <label class="mk-label" for="c-line">Linia <input class="mk-in num" id="c-line" type="number" step="0.5" min="0.5"></label>
+    <div class="card">
+      <h2>Sprawdź szansę</h2>
+      <div class="calc">
+        <label class="label" for="c-stat">Statystyka <select class="ctrl" id="c-stat"></select></label>
+        <label class="label" for="c-scope">Kto <select class="ctrl" id="c-scope"></select></label>
+        <label class="label" for="c-line">Linia <input class="in num" id="c-line" type="number" step="0.5" min="0.5"></label>
       </div>
-      <div class="mk-calc-out" id="c-out"></div>
+      <div class="calc-out" id="c-out"></div>
     </div>
-    <div class="mk-card">
+    <div class="card">
       <h2>Pewniejsze progi</h2>
-      <p class="mk-note">Najwyższy próg, który według modelu padnie z szansą co najmniej 70% albo 55%. Min. kurs: od takiego kursu zakład opłaca się po podatku 12%.</p>
-      <div class="mk-wrap short"><table class="mk-tbl" id="mz-progi"></table></div>
+      <p class="note">Najwyższy próg, który według modelu padnie z szansą co najmniej 70% (albo 55%). Min. kurs: od takiego kursu zakład opłaca się po podatku 12%.</p>
+      <div class="wrap short"><table class="tbl" id="mz-progi"></table></div>
     </div>
-    <div class="mk-card">
-      <h2>Kursy bukmacherów na statystyki</h2>
-      <p class="mk-note">Linie z serwisu kursowego (Bet365, Betano, 1xBet, Pinnacle i inni). „Rynek” to szansa wynikająca z kursów po zdjęciu marży. Zysk liczony z podatkiem 12% przy najlepszym kursie. U polskiego bukmachera kurs będzie inny: porównaj go z kursem minimalnym.</p>
-      <div class="mk-row"><label class="mk-check" for="mz-all"><input id="mz-all" type="checkbox"> wszystkie linie</label><span class="mk-count" id="mz-lines"></span></div>
-      <div class="mk-wrap"><table class="mk-tbl" id="mz-kursy"></table></div>
-    </div>
-    <div class="mk-cols" id="mz-teams"></div>
-  </section>
-
-  <!-- TYPY DNIA -->
-  <section class="mk-page" id="pg-typydnia" role="tabpanel" aria-labelledby="t-typydnia" hidden>
-    <div class="mk-card">
-      <h2>Typy dnia</h2>
-      <div class="mk-chips" id="td-days" role="group" aria-label="Dzień"></div>
-      <p class="mk-note">Linie, przy których model najmocniej różni się od rynku (strzały, celne strzały, rożne). To test: listę zapisuję przed meczem, a po meczu rozliczam ją w zakładce Skuteczność. Graj tylko wtedy, gdy kurs u Twojego bukmachera jest co najmniej równy minimalnemu.</p>
-    </div>
-    <div class="mk-page" id="td-top"></div>
-    <div class="mk-card">
-      <h2>Kupony ok. 2,0</h2>
-      <p class="mk-note">Połączenia 2–3 kandydatów z różnych meczów o łącznym kursie 1,8–2,5. Szansa kuponu to iloczyn szans nóg.</p>
-      <div class="mk-page" id="td-kupony"></div>
-    </div>
-    <div class="mk-card">
-      <h2>Pozostali kandydaci</h2>
-      <div class="mk-wrap short"><table class="mk-tbl" id="td-kand"></table></div>
+    <div class="cols" id="mz-teams"></div>
+    <div class="card">
+      <details class="box" id="mz-kursy-box"><summary>Kursy bukmacherów na statystyki</summary>
+        <p class="note">Linie z serwisu kursowego (Bet365, Betano, 1xBet, Pinnacle i inni). „Rynek” to szansa wynikająca z kursów po zdjęciu marży. Zysk liczony z podatkiem 12% przy najlepszym kursie.</p>
+        <div class="row"><label class="check" for="mz-all"><input id="mz-all" type="checkbox"> wszystkie linie</label><span class="fresh" id="mz-lines"></span></div>
+        <div class="wrap"><table class="tbl" id="mz-kursy"></table></div>
+      </details>
     </div>
   </section>
 
   <!-- SZUKAJ -->
-  <section class="mk-page" id="pg-szukaj" role="tabpanel" aria-labelledby="t-szukaj" hidden>
-    <div class="mk-card">
+  <section class="page" id="pg-szukaj" role="tabpanel" aria-labelledby="t-szukaj" hidden>
+    <div class="card">
       <h2>Szukaj zdarzeń</h2>
-      <p class="mk-note">Np. gospodarz co najmniej 12 strzałów z szansą 70% i więcej. Zostaw próg pusty, a dla każdego meczu pokażę najwyższy próg, który spełnia minimalną szansę.</p>
-      <div class="mk-form" id="sz-form">
+      <p class="note">Np. gospodarz co najmniej 12 strzałów z szansą 70% i więcej. Zostaw próg pusty, a dla każdego meczu pokażę najwyższy próg, który spełnia minimalną szansę.</p>
+      <div class="form">
         <label for="sz-dni">Kiedy
-          <select class="mk-ctrl" id="sz-dni"><option value="1">dziś</option><option value="2">dziś i jutro</option><option value="3" selected>najbliższe 3 dni</option><option value="8">najbliższy tydzień</option></select>
+          <select class="ctrl" id="sz-dni"><option value="1">dziś</option><option value="2">dziś i jutro</option><option value="3" selected>najbliższe 3 dni</option><option value="8">najbliższy tydzień</option></select>
         </label>
-        <label for="sz-liga">Rozgrywki <select class="mk-ctrl" id="sz-liga"></select></label>
-        <label for="sz-stat">Statystyka <select class="mk-ctrl" id="sz-stat"></select></label>
+        <label for="sz-liga">Rozgrywki <select class="ctrl" id="sz-liga"></select></label>
+        <label for="sz-stat">Statystyka <select class="ctrl" id="sz-stat"></select></label>
         <label for="sz-kto">Kto
-          <select class="mk-ctrl" id="sz-kto"><option value="home">gospodarz</option><option value="away">gość</option><option value="any">dowolna drużyna</option><option value="total">łącznie w meczu</option></select>
+          <select class="ctrl" id="sz-kto"><option value="home">gospodarz</option><option value="away">gość</option><option value="any">dowolna drużyna</option><option value="total">łącznie w meczu</option></select>
         </label>
         <label for="sz-typ">Zdarzenie
-          <select class="mk-ctrl" id="sz-typ"><option value="min">co najmniej</option><option value="max">co najwyżej</option></select>
+          <select class="ctrl" id="sz-typ"><option value="min">co najmniej</option><option value="max">co najwyżej</option></select>
         </label>
-        <label for="sz-k">Próg (puste: najwyższy możliwy)<input class="mk-in num" id="sz-k" type="number" min="0" step="1"></label>
-        <label for="sz-p">Minimalna szansa (%)<input class="mk-in num" id="sz-p" type="number" min="1" max="99" step="1" value="70"></label>
-        <label class="mk-check" for="sz-kursy"><input id="sz-kursy" type="checkbox"> tylko mecze z kursami</label>
+        <label for="sz-k">Próg (puste: najwyższy możliwy)<input class="in num" id="sz-k" type="number" min="0" step="1"></label>
+        <label for="sz-p">Minimalna szansa (%)<input class="in num" id="sz-p" type="number" min="1" max="99" step="1" value="70"></label>
+        <label class="check" for="sz-kursy"><input id="sz-kursy" type="checkbox"> tylko mecze z kursami</label>
       </div>
-      <span class="mk-count" id="sz-count"></span>
-      <div class="mk-wrap"><table class="mk-tbl" id="sz-tbl"></table></div>
+      <span class="fresh" id="sz-count"></span>
+      <div class="wrap"><table class="tbl" id="sz-tbl"></table></div>
     </div>
   </section>
 
   <!-- MOJE ZAKŁADY -->
-  <section class="mk-page" id="pg-zaklady" role="tabpanel" aria-labelledby="t-zaklady" hidden>
-    <div class="mk-card">
+  <section class="page" id="pg-zaklady" role="tabpanel" aria-labelledby="t-zaklady" hidden>
+    <div class="card">
       <h2 id="zk-form-title">Dodaj zakład</h2>
-      <form class="mk-form" id="zk-form">
-        <label for="zk-data">Data<input class="mk-in" id="zk-data" type="date"></label>
-        <label for="zk-mecz">Mecz<input class="mk-in" id="zk-mecz" type="text" placeholder="np. Aston Villa – Fenerbahçe"></label>
-        <label for="zk-rozgr">Rozgrywki<input class="mk-in" id="zk-rozgr" type="text" placeholder="np. Liga Mistrzów"></label>
+      <form class="form" id="zk-form">
+        <label for="zk-data">Data<input class="in" id="zk-data" type="date"></label>
+        <label for="zk-mecz">Mecz<input class="in" id="zk-mecz" type="text" placeholder="np. Aston Villa – Fenerbahçe"></label>
+        <label for="zk-rozgr">Rozgrywki<input class="in" id="zk-rozgr" type="text" placeholder="np. Liga Mistrzów"></label>
         <label for="zk-rodzaj">Rodzaj
-          <select class="mk-ctrl" id="zk-rodzaj"><option>Singiel</option><option>Kupon 2</option><option>Kupon 3</option><option>Kupon 4+</option></select>
+          <select class="ctrl" id="zk-rodzaj"><option>Singiel</option><option>Kupon 2</option><option>Kupon 3</option><option>Kupon 4+</option></select>
         </label>
-        <label for="zk-opis" style="grid-column: 1 / -1">Zakład (przy kuponie wszystkie nogi)<textarea class="mk-ta" id="zk-opis" placeholder="np. Aston Villa: strzały powyżej 13,5"></textarea></label>
-        <label for="zk-buk">Bukmacher<input class="mk-in" id="zk-buk" type="text" placeholder="np. STS, Betclic, Superbet"></label>
-        <label for="zk-kurs">Kurs<input class="mk-in num" id="zk-kurs" type="number" min="1.01" step="0.01"></label>
-        <label for="zk-stawka">Stawka (zł)<input class="mk-in num" id="zk-stawka" type="number" min="1" step="1" value="10"></label>
-        <label for="zk-tryb">Tryb
-          <select class="mk-ctrl" id="zk-tryb"><option>Realny</option><option>Papier</option></select>
-        </label>
-        <label for="zk-szansa">Szansa wg modelu (%)<input class="mk-in num" id="zk-szansa" type="number" min="1" max="99" step="1"></label>
+        <label for="zk-opis" style="grid-column: 1 / -1">Zakład (przy kuponie wszystkie nogi)<textarea class="ta" id="zk-opis" placeholder="np. Aston Villa: strzały powyżej 13,5"></textarea></label>
+        <label for="zk-buk">Bukmacher<input class="in" id="zk-buk" type="text" placeholder="np. STS, Betclic, Superbet"></label>
+        <label for="zk-kurs">Kurs<input class="in num" id="zk-kurs" type="number" min="1.01" step="0.01"></label>
+        <label for="zk-stawka">Stawka (zł)<input class="in num" id="zk-stawka" type="number" min="1" step="1" value="10"></label>
+        <label for="zk-tryb">Tryb <select class="ctrl" id="zk-tryb"><option>Realny</option><option>Papier</option></select></label>
+        <label for="zk-szansa">Szansa wg modelu (%)<input class="in num" id="zk-szansa" type="number" min="1" max="99" step="1"></label>
         <label for="zk-wynik">Wynik
-          <select class="mk-ctrl" id="zk-wynik"><option value="">nierozliczony</option><option value="W">wygrana</option><option value="P">przegrana</option><option value="Z">zwrot</option></select>
+          <select class="ctrl" id="zk-wynik"><option value="">nierozliczony</option><option value="W">wygrana</option><option value="P">przegrana</option><option value="Z">zwrot</option></select>
         </label>
-        <label for="zk-notatki" style="grid-column: 1 / -1">Notatki<textarea class="mk-ta" id="zk-notatki"></textarea></label>
-        <div class="mk-row">
-          <button class="mk-btn" id="zk-save" type="submit">Zapisz zakład</button>
-          <button class="mk-btn ghost" id="zk-clear" type="button">Wyczyść</button>
-          <span id="zk-msg"></span>
-        </div>
+        <label for="zk-notatki" style="grid-column: 1 / -1">Notatki<textarea class="ta" id="zk-notatki"></textarea></label>
+        <div class="row"><button class="btn" id="zk-save" type="submit">Zapisz zakład</button><button class="btn ghost" id="zk-clear" type="button">Wyczyść</button><span id="zk-msg"></span></div>
       </form>
-      <p class="mk-note" id="zk-hint"></p>
+      <p class="note" id="zk-hint"></p>
     </div>
-    <div class="mk-card">
-      <div class="mk-row" style="justify-content: space-between">
+    <div class="card">
+      <div class="row between">
         <h2>Moje zakłady</h2>
-        <div class="mk-row">
-          <label class="mk-label" for="zk-filtr">Pokaż
-            <select class="mk-ctrl" id="zk-filtr"><option value="">wszystkie</option><option value="Realny">realne</option><option value="Papier">na papierze</option><option value="open">nierozliczone</option></select>
+        <div class="row">
+          <label class="label" for="zk-filtr">Pokaż
+            <select class="ctrl" id="zk-filtr"><option value="">wszystkie</option><option value="Realny">realne</option><option value="Papier">na papierze</option><option value="open">nierozliczone</option></select>
           </label>
-          <button class="mk-btn ghost" id="zk-csv" type="button">Pobierz do Excela (CSV)</button>
-          <span id="zk-csv-msg"></span>
+          <button class="btn ghost" id="zk-csv" type="button">Pobierz do Excela (CSV)</button><span id="zk-csv-msg"></span>
         </div>
       </div>
-      <div class="mk-sum" id="zk-sum"></div>
-      <div class="mk-wrap"><table class="mk-tbl" id="zk-tbl"></table></div>
-      <p class="mk-note">Podatek: 12% od stawki, więc wygrana to 0,88 × stawka × kurs. Od wygranej powyżej 2280 zł dochodzi 10% podatku. Plik CSV ma kolumny w tej samej kolejności co arkusz Excel „Zaklady MK2.xlsx”.</p>
+      <div class="sum" id="zk-sum"></div>
+      <div class="wrap"><table class="tbl" id="zk-tbl"></table></div>
+      <p class="note">Podatek: 12% od stawki, więc wygrana to 0,88 × stawka × kurs; od wygranej powyżej 2280 zł dochodzi 10% podatku. Plik CSV ma kolumny w kolejności arkusza „Zaklady MK2.xlsx”.</p>
     </div>
   </section>
 
-  <!-- SKUTECZNOŚĆ -->
-  <section class="mk-page" id="pg-skutecznosc" role="tabpanel" aria-labelledby="t-skutecznosc" hidden>
-    <div class="mk-card">
-      <h2>Typy dnia: wynik testu</h2>
-      <p class="mk-note">Każdy typ dnia zapisany przed meczem i rozliczony z prawdziwą statystyką. Zysk liczony na stawkę 1 przy kursie z listy, bez podatku i z podatkiem 12%.</p>
-      <div class="mk-sum" id="sk-sum"></div>
-      <div class="mk-wrap"><table class="mk-tbl" id="sk-tbl"></table></div>
-    </div>
-    <div class="mk-card">
-      <h2>Prognozy kontra rzeczywistość</h2>
-      <p class="mk-note">Dla każdego rozegranego meczu: ostatnia prognoza przed pierwszym gwizdkiem porównana z tym, co padło. Progi „70%” powinny trafiać mniej więcej 7 razy na 10. Wyraźnie mniej oznacza, że model jest zbyt pewny siebie.</p>
-      <div class="mk-wrap short"><table class="mk-tbl" id="sk-prog"></table></div>
-    </div>
-  </section>
-
-  <!-- PROŚBY -->
-  <section class="mk-page" id="pg-prosby" role="tabpanel" aria-labelledby="t-prosby" hidden>
-    <div class="mk-card">
+  <!-- PROJEKT -->
+  <section class="page" id="pg-projekt" role="tabpanel" aria-labelledby="t-projekt" hidden>
+    <div class="card">
       <h2>Prośby do Claude</h2>
-      <p class="mk-note">Napisz, co ma się zmienić albo co sprawdzić: nowa funkcja, test, poprawka. Claude odpowie tutaj i zmieni stan prośby.</p>
-      <form class="mk-form" id="pr-form">
-        <label for="pr-tekst" style="grid-column: 1 / -1">Prośba<textarea class="mk-ta" id="pr-tekst" placeholder="Np. dodaj filtr po lidze w kuponach"></textarea></label>
-        <div class="mk-row"><button class="mk-btn" id="pr-add" type="submit">Wyślij prośbę</button><span id="pr-msg"></span></div>
+      <p class="note">Napisz, co ma się zmienić albo co sprawdzić. Claude odpowie tutaj i zmieni stan prośby.</p>
+      <form class="form" id="pr-form">
+        <label for="pr-tekst" style="grid-column: 1 / -1">Prośba<textarea class="ta" id="pr-tekst" placeholder="Np. dodaj kupony z trzech zdarzeń"></textarea></label>
+        <div class="row"><button class="btn" id="pr-add" type="submit">Wyślij prośbę</button><span id="pr-msg"></span></div>
       </form>
-      <div class="mk-wrap short"><table class="mk-tbl" id="tb-prosby"></table></div>
+      <div class="wrap short"><table class="tbl" id="tb-prosby"></table></div>
     </div>
-  </section>
-
-
-  <!-- START -->
-  <section class="mk-page" id="pg-start" role="tabpanel" aria-labelledby="t-start" hidden>
-    <div class="mk-card">
-      <h2 id="headline">Wczytywanie…</h2>
-      <p class="mk-note" id="headline-note"></p>
-    </div>
-    <div class="mk-kpis" id="kpis"></div>
-    <div class="mk-grid2">
-      <div class="mk-card">
-        <h2>Wynik na papierze: kupony, gdyby postawić każdy</h2>
-        <p class="mk-note">Suma przy stawce 1 na każdy rozliczony kupon eksperymentu. Skaner wybrał je bez podatku; seria z podatkiem 12% pokazuje, co dałyby w Polsce. Przegrana liczy się od pierwszej przegranej nogi, wygrana po rozliczeniu wszystkich. Małe próby.</p>
-        <div class="mk-chart" id="ch-zysk"></div>
-      </div>
-      <div class="mk-card">
-        <h2>Przewaga nóg z wartością</h2>
-        <p class="mk-note">O ile kurs przebija uczciwą cenę. Kupon z 2 nóg wychodzi na zero przy podatku 12% od 6,6% na nogę, singiel od 13,6%. Zielone: 6,6–10%. Pomarańczowe: powyżej 10%, co skaner z pełnymi zabezpieczeniami odrzuca jako błąd danych; są tylko w przebiegach z luźnym limitem.</p>
-        <div class="mk-chart" id="ch-przewaga"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- KUPONY -->
-  <section class="mk-page" id="pg-kupony" role="tabpanel" aria-labelledby="t-kupony" hidden>
-    <div class="mk-card">
-      <div class="mk-row" style="justify-content: space-between">
-        <h2>Wskazane kupony</h2>
-        <div class="mk-row">
-          <label class="mk-label" for="f-wynik">Wynik
-            <select class="mk-ctrl" id="f-wynik">
-              <option value="">wszystkie</option><option value="win">wygrane</option><option value="loss">przegrane</option>
-              <option value="no_result">bez wyniku w danych</option><option value="open">przed meczem</option>
-            </select>
-          </label>
-          <label class="mk-label" for="f-pod">Przechodzi przy
-            <select class="mk-ctrl" id="f-pod">
-              <option value="">wszystkie</option><option value="t088">podatku 12%</option><option value="t094">podatku 6%</option><option value="t100">tylko bez podatku</option>
-            </select>
-          </label>
-          <input class="mk-ctrl" id="q-kupony" type="search" placeholder="Szukaj meczu, bukmachera…" aria-label="Szukaj w kuponach">
-        </div>
-      </div>
-      <p class="mk-note">Każdy kupon raz na eksperyment. Kurs na czerwono: poniżej 1,14, przy podatku 12% nie da zysku nawet po trafieniu. „Bez wyniku w danych”: mecz się odbył, ale paczka kończy się 1.10. Kliknij wiersz, żeby zobaczyć nogi, dodać kupon do swoich typów albo dopisać notatkę.</p>
-      <span class="mk-count" id="c-kupony"></span>
-      <div class="mk-wrap"><table class="mk-tbl" id="tb-kupony"></table></div>
-    </div>
-    <div class="mk-card mk-detail" id="det" hidden>
-      <div class="mk-row" style="justify-content: space-between">
-        <h2 id="det-title">Kupon</h2>
-        <button class="mk-btn ghost" id="det-close" type="button">Zamknij</button>
-      </div>
-      <div class="mk-facts" id="det-facts"></div>
-      <div class="mk-wrap short"><table class="mk-tbl" id="tb-nogi"></table></div>
-      <div class="mk-form" id="det-form">
-        <label for="det-stawka">Stawka (zł)<input class="mk-in num" id="det-stawka" type="number" min="1" step="1" value="10"></label>
-        <label for="det-notatka" style="grid-column: span 2">Notatka do kuponu<textarea class="mk-ta" id="det-notatka" placeholder="Np. dlaczego tak, na co uważać"></textarea></label>
-        <div class="mk-row">
-          <button class="mk-btn" id="det-add" type="button">Dodaj do moich typów</button>
-          <button class="mk-btn ghost" id="det-note" type="button">Zapisz notatkę</button>
-          <span id="det-msg"></span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- MOJE TYPY -->
-  <section class="mk-page" id="pg-typy" role="tabpanel" aria-labelledby="t-typy" hidden>
-    <div class="mk-card">
-      <h2>Moje typy</h2>
-      <p class="mk-note">Kupony wybrane do testu na papierze, ze stawką. Wynik i zysk liczą się sami, gdy w danych pojawi się rozstrzygnięcie. Zysk z podatkiem 12% to realny scenariusz w Polsce.</p>
-      <div class="mk-sum" id="typy-sum"></div>
-      <div class="mk-wrap"><table class="mk-tbl" id="tb-typy"></table></div>
-      <p class="mk-note" id="typy-empty" hidden>Nie masz jeszcze typów. Otwórz zakładkę Kupony, kliknij kupon i wybierz „Dodaj do moich typów”.</p>
-    </div>
-  </section>
-
-  <!-- SINGLE -->
-  <section class="mk-page" id="pg-single" role="tabpanel" aria-labelledby="t-single" hidden>
-    <div class="mk-card">
-      <div class="mk-row" style="justify-content: space-between">
-        <h2>Single: nogi z wartością</h2>
-        <div class="mk-row">
-          <label class="mk-label" for="f-swynik">Wynik
-            <select class="mk-ctrl" id="f-swynik">
-              <option value="">wszystkie</option><option value="win">wygrane</option><option value="loss">przegrane</option>
-              <option value="no_result">bez wyniku w danych</option><option value="open">przed meczem</option>
-            </select>
-          </label>
-          <input class="mk-ctrl" id="q-single" type="search" placeholder="Szukaj meczu, ligi, zakładu…" aria-label="Szukaj w singlach">
-        </div>
-      </div>
-      <p class="mk-note">Pierwsza obserwacja każdej nogi z wartością (liczonej bez podatku) w eksperymencie. Ta sama noga u kilku bukmacherów to kilka wierszy. „Zysk z podatkiem 12%” mówi, co dałaby, gdyby ją postawić.</p>
-      <span class="mk-count" id="c-single"></span>
-      <div class="mk-wrap"><table class="mk-tbl" id="tb-single"></table></div>
-    </div>
-  </section>
-
-  <!-- PRZEBIEGI -->
-  <section class="mk-page" id="pg-przebiegi" role="tabpanel" aria-labelledby="t-przebiegi" hidden>
-    <div class="mk-card">
-      <h2>Nogi z wartością w kolejnych przebiegach</h2>
-      <p class="mk-note">Słupek szary: bez podatku; kolorowy: przy podatku 12%. Czas polski. Przy powtórkach to czas symulowany.</p>
-      <div class="mk-chart" id="ch-przebiegi"></div>
-    </div>
-    <div class="mk-card">
-      <h2>Wszystkie przebiegi</h2>
-      <div class="mk-wrap"><table class="mk-tbl" id="tb-przebiegi"></table></div>
-    </div>
-  </section>
-
-  <!-- EKSPERYMENTY -->
-  <section class="mk-page" id="pg-eksperymenty" role="tabpanel" aria-labelledby="t-eksperymenty" hidden>
-    <div class="mk-card">
-      <h2>Eksperymenty</h2>
-      <p class="mk-note">Eksperyment to rejestr plus konfiguracja skanera. Ten sam zakład bywa w kilku eksperymentach, więc sumy wierszy są większe niż liczby bez powtórzeń na Starcie. Kliknij wiersz, żeby zobaczyć wyniki według skanera.</p>
-      <div class="mk-wrap"><table class="mk-tbl" id="tb-eksperymenty"></table></div>
-    </div>
-    <div class="mk-card">
-      <h2 id="wy-title">Wyniki według skanera</h2>
-      <p class="mk-note">Zakłady wartościowe przy danym podatku, rozliczone, trafienia, zysk na stawkę i CLV. CLV z tych danych jest zawyżone, bo kursów nie zbierano do startu meczu. Starsze konfiguracje nie dzielą rynków na płynne i słabe, więc nie mają tu wierszy.</p>
-      <div class="mk-wrap"><table class="mk-tbl" id="tb-wyniki"></table></div>
-    </div>
-  </section>
-
-  <!-- DANE -->
-  <section class="mk-page" id="pg-dane" role="tabpanel" aria-labelledby="t-dane" hidden>
-    <div class="mk-card">
-      <h2>Co mamy w danych</h2>
-      <p class="mk-note">Paczka od Oskara (tylko do odczytu) i nasz folder MK2. Czas polski.</p>
-      <div class="mk-wrap"><table class="mk-tbl" id="tb-dane"></table></div>
-    </div>
-  </section>
-
-  <!-- PLAN -->
-  <section class="mk-page" id="pg-plan" role="tabpanel" aria-labelledby="t-plan" hidden>
-    <div class="mk-cols">
-      <div class="mk-card">
-        <h2>Co już mamy</h2>
-        <ul class="mk-list" id="have"></ul>
-      </div>
-      <div class="mk-card">
-        <h2>Czego potrzebujemy</h2>
-        <p class="mk-note">Najpierw to, co blokuje dalsze prace. Kliknij, żeby zmienić stan albo dopisać notatkę.</p>
-        <ul class="mk-list" id="need"></ul>
-      </div>
-    </div>
-    <div class="mk-card">
-      <div class="mk-row" style="justify-content: space-between">
-        <h2>Plan i stan prac</h2>
-        <label class="mk-label" for="f-status">Pokaż
-          <select class="mk-ctrl" id="f-status">
-            <option value="">wszystko</option><option value="brakuje">brakuje</option><option value="problem">problem</option>
-            <option value="decyzja">do decyzji</option><option value="w_toku">w toku</option><option value="gotowe">gotowe</option>
-          </select>
+    <div class="card">
+      <div class="row between">
+        <h2>Plan</h2>
+        <label class="label" for="pl-filtr">Pokaż
+          <select class="ctrl" id="pl-filtr"><option value="open">do zrobienia i decyzje</option><option value="">wszystko</option><option value="gotowe">gotowe</option></select>
         </label>
       </div>
-      <p class="mk-note">Zmień stan, dopisz notatkę albo swoją decyzję i zapisz. Zmiany widzą wszyscy, którzy mają tę stronę, a Claude czyta je przy następnej rozmowie.</p>
-      <div class="mk-plan" id="plan-list"></div>
+      <div class="plan" id="pl-list"></div>
     </div>
-  </section>
-
-  <!-- STRATEGIA I PROŚBY -->
-  <section class="mk-page" id="pg-ustawienia" role="tabpanel" aria-labelledby="t-ustawienia" hidden>
-    <div class="mk-card">
-      <h2>Ustawienia skanera Oskara do następnego testu</h2>
-      <p class="mk-note">Co ma sprawdzić skaner przy następnej powtórce albo skanie na żywo. Claude zamieni to na profil skanera, uruchomi test i wyniki pojawią się w tej aplikacji jako nowy eksperyment.</p>
-      <form class="mk-form" id="st-form">
-        <label for="st-kmin">Kurs kuponu od<input class="mk-in num" id="st-kmin" type="number" min="1.01" step="0.01" placeholder="np. 1,30"></label>
-        <label for="st-kmax">Kurs kuponu do<input class="mk-in num" id="st-kmax" type="number" min="1.01" step="0.01" placeholder="np. 2,00"></label>
-        <label for="st-nogi">Nogi w kuponie
-          <select class="mk-ctrl" id="st-nogi"><option value="2">2</option><option value="2,3">2 albo 3</option><option value="3">3</option><option value="1">singiel</option></select>
-        </label>
-        <label for="st-noga">Kurs jednej nogi do<input class="mk-in num" id="st-noga" type="number" min="1.01" step="0.01" placeholder="np. 2,00"></label>
-        <label for="st-pod">Podatek
-          <select class="mk-ctrl" id="st-pod"><option value="0.88">12% (standard)</option><option value="0.94">6% (Betclic, umowa AKO)</option><option value="1.00">bez podatku (Betclic do 1000 zł)</option></select>
-        </label>
-        <label for="st-ligi">Ligi
-          <select class="mk-ctrl" id="st-ligi"><option value="wszystkie">wszystkie z kursami</option><option value="top10">top 10 + puchary europejskie</option><option value="płynne">tylko rynki płynne</option></select>
-        </label>
-        <label for="st-uwagi" style="grid-column: 1 / -1">Uwagi<textarea class="mk-ta" id="st-uwagi" placeholder="Np. sprawdź tylko gole i podwójną szansę"></textarea></label>
-        <div class="mk-row"><button class="mk-btn" id="st-save" type="submit">Zapisz ustawienia</button><span id="st-msg"></span></div>
-      </form>
-      <p class="mk-note" id="st-meta"></p>
+    <div class="card">
+      <h2>Jak to działa</h2>
+      <ul class="list">
+        <li>Dane: statystyki meczów (strzały, celne, rożne, faule, kartki) z ostatnich sezonów 15 najlepszych lig wg rankingu UEFA, 7 lig dodatkowych i trzech pucharów, uzupełniane codziennie z API-Football. Kursy też z API-Football.</li>
+        <li>Model liczy dla każdej drużyny, ile „robi” danej statystyki i na ile pozwala rywalom, z uwzględnieniem poziomu ligi, gospodarza, pucharu i świeżości meczów (starsze ważą mniej).</li>
+        <li>Typy dnia: linie, przy których model najbardziej różni się od bukmacherów, ale nie skrajnie. Każdy typ ma opis „Dlaczego”, a po meczu jest rozliczany z prawdziwą statystyką.</li>
+        <li>Aktualizacja: kilka razy dziennie (wyniki, kursy, prognozy, typy).</li>
+      </ul>
     </div>
   </section>
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script>
 (function () {
   "use strict";
-  // ------------------------------------------------------------------ state
+  // ================================================================== state and helpers
   const S = {
-    data: {}, meta: null, page: "mecze", src: "",
-    mz: { day: "", liga: "main", q: "" }, mecz: null, calc: null, td: null, skaner: "start",
+    data: {}, page: "typy", sorts: {}, td: null, mecz: null, calc: null, allLines: false,
+    mz: { day: "", liga: "main", q: "" },
     sz: { liga: "main", stat: "shots", kto: "home", typ: "min", dni: 3, kursy: false },
-    zkEdit: null, zkDraft: null, downloads: null, f: { wynik: "", pod: "", swynik: "", status: "" }, q: { kupony: "", single: "" },
-    sel: null, exp: null, sorts: {},
+    zkEdit: null, zkDraft: null, downloads: null, drafts: {},
     db: null, user: null, me: null, canWrite: false, names: {},
-    ov: { plan: {}, typy: {}, notatki: {}, prosby: [], profil: null, zaklady: [] },
+    ov: { plan: {}, prosby: [], zaklady: [] },
   };
-  const PAGES = ["mecze", "mecz", "typydnia", "szukaj", "zaklady", "skutecznosc", "plan", "prosby",
-    "start", "kupony", "typy", "single", "przebiegi", "eksperymenty", "dane", "ustawienia"];
-  const SKANER = ["start", "kupony", "typy", "single", "przebiegi", "eksperymenty", "dane", "ustawienia"];
+  const PAGES = ["typy", "mecze", "mecz", "szukaj", "zaklady", "projekt"];
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e.textContent = text; return e; };
-
-  // ------------------------------------------------------------------ formatting (Polish)
   const nf = (d) => new Intl.NumberFormat("pl-PL", { minimumFractionDigits: d, maximumFractionDigits: d });
-  const NF0 = nf(0), NF2 = nf(2);
+  const NF0 = nf(0), NF1 = nf(1), NF2 = nf(2);
   const empty = (v) => v === null || v === undefined || v === "" || (typeof v === "number" && !Number.isFinite(v));
   const int = (v) => (empty(v) ? "—" : NF0.format(v));
+  const d1 = (v) => (empty(v) ? "—" : NF1.format(v));
   const dec = (v) => (empty(v) ? "—" : NF2.format(v));
-  const pct = (v, d = 1) => (empty(v) ? "—" : nf(d).format(v * 100) + "%");
-  const spct = (v, d = 1) => (empty(v) ? "—" : (v > 0 ? "+" : "") + nf(d).format(v * 100) + "%");
+  const pct = (v, d = 0) => (empty(v) ? "—" : nf(d).format(v * 100) + "%");
+  const spct = (v, d = 0) => (empty(v) ? "—" : (v > 0 ? "+" : "") + nf(d).format(v * 100) + "%");
   const money = (v) => (empty(v) ? "—" : (v > 0 ? "+" : "") + NF2.format(v));
   const zl = (v) => (empty(v) ? "—" : (v > 0 ? "+" : "") + NF2.format(v) + " zł");
+  const line = (v) => (empty(v) ? "—" : String(v).replace(".", ","));
+  const sign = (v) => (empty(v) ? "" : v > 0 ? "c-win" : v < 0 ? "c-loss" : "");
   const TF = new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   const DF = new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", day: "2-digit", month: "2-digit", year: "numeric" });
+  const HM = new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", hour: "2-digit", minute: "2-digit" });
+  const KEYF = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Warsaw", year: "numeric", month: "2-digit", day: "2-digit" });
   const when = (iso) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d) ? "—" : TF.format(d); };
   const day = (iso) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d) ? "—" : DF.format(d); };
-  const sign = (v) => (empty(v) ? "" : v > 0 ? "c-win" : v < 0 ? "c-loss" : "");
-  const OUT = { win: "c-win", half_win: "c-win", loss: "c-loss", half_loss: "c-loss", push: "c-muted", void: "c-muted", open: "c-warn", no_result: "c-muted" };
-  const STATUS_PL = { gotowe: "gotowe", w_toku: "w toku", brakuje: "brakuje", problem: "problem", decyzja: "do decyzji" };
-  const STATUS_C = { gotowe: "c-win", w_toku: "c-warn", brakuje: "c-loss", problem: "c-loss", decyzja: "c-warn" };
-  const STATUS_ORDER = { brakuje: 0, problem: 1, decyzja: 2, w_toku: 3, gotowe: 4 };
+  const hm = (iso) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d) ? "—" : HM.format(d); };
+  const dayKey = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : KEYF.format(d); };
+  const todayKey = () => dayKey(new Date().toISOString());
+  function dayLabel(key) {
+    const t = todayKey(), tm = dayKey(new Date(Date.now() + 864e5).toISOString()), ys = dayKey(new Date(Date.now() - 864e5).toISOString());
+    if (key === t) return "Dziś";
+    if (key === tm) return "Jutro";
+    if (key === ys) return "Wczoraj";
+    const [y, m, d] = key.split("-").map(Number);
+    return new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+  }
+  const STAT = { shots: "Strzały", sot: "Celne strzały", corners: "Rożne", fouls: "Faule", cards: "Kartki", yellow: "Żółte kartki", offsides: "Spalone" };
+  const NOUN = { shots: "strzałów", sot: "celnych strzałów", corners: "rożnych", fouls: "fauli", cards: "kartek", yellow: "żółtych kartek", offsides: "spalonych" };
+  const MAIN = ["shots", "sot", "corners", "fouls", "cards"];
+  const PICKABLE = new Set(["shots", "sot", "corners"]);
+  const TAX = 0.88;
+  const st = (k) => S.data["st_" + k];
+  const meta = () => st("meta") || {};
+  const matches = () => st("mecze") || [];
+  const matchById = (id) => matches().find((m) => String(m.id) === String(id));
+  const teamOf = (id) => (st("druzyny") || {})[String(id)];
+  const ligaName = (id) => ((meta().ligi || {})[String(id)]) || ("rozgrywki " + id);
+  const ligaShort = (id) => ((meta().skroty || {})[String(id)]) || String(id);
+  function ligaRank(id) {
+    const m = meta(), cups = m.puchary || [], top = m.top15 || [], extra = m.dodatkowe || [];
+    if (cups.includes(id)) return cups.indexOf(id);
+    if (top.includes(id)) return 10 + top.indexOf(id);
+    if (extra.includes(id)) return 40 + extra.indexOf(id);
+    return 100 + id;
+  }
+  const byOrder = (a, b) => ligaRank(a.liga_id) - ligaRank(b.liga_id) || a.start.localeCompare(b.start) || a.gosp.localeCompare(b.gosp, "pl");
 
-  // ------------------------------------------------------------------ data
-  const FILES = ["st_meta", "st_mecze", "st_druzyny", "st_typy", "st_wyniki", "st_rozliczenia",
-    "meta", "podsumowanie", "eksperymenty", "przebiegi", "kupony", "kupony_nogi", "single", "wyniki", "dane", "plan"];
-  // each file renders as soon as it arrives; a request that receives nothing for 6 s is aborted and tried again
-  // (4 tries), so a slow connection keeps loading while a stalled one recovers quickly
+  // ================================================================== model maths (NB2)
+  function alphaOf(stat, scope, ligaId) {
+    const m = (meta().model || {})[stat];
+    if (!m) return 0.05;
+    if ((meta().puchary || []).includes(ligaId) && m.alpha_puchary !== undefined) return scope === "total" ? m.alpha_total_puchary : m.alpha_puchary;
+    return scope === "total" ? m.alpha_total : m.alpha;
+  }
+  const meanOf = (m, stat, scope) => { const v = m.m[stat]; if (!v) return null; return scope === "home" ? v[0] : scope === "away" ? v[1] : v[0] + v[1]; };
+  function nbTail(mu, alpha, ln) {
+    const a = Math.max(alpha || 0, 1e-6), r = 1 / a, p = r / (r + mu);
+    let pmf = Math.exp(r * Math.log(p)), under = 0, push = 0;
+    for (let k = 0; k <= Math.floor(ln); k++) {
+      if (k > 0) pmf *= ((k - 1 + r) / k) * (1 - p);
+      if (k < ln) under += pmf; else if (k === ln) push = pmf;
+    }
+    return { over: Math.max(0, 1 - under - push), push, under };
+  }
+  const atLeast = (mu, alpha, k) => (k <= 0 ? 1 : nbTail(mu, alpha, k - 0.5).over);
+  const atMost = (mu, alpha, k) => nbTail(mu, alpha, k + 0.5).under;
+  function threshold(mu, alpha, level) {
+    let best = null;
+    for (let k = 1; k < 80; k++) { const p = atLeast(mu, alpha, k); if (p >= level) best = { k, p }; else break; }
+    return best;
+  }
+  const minOdds = (p) => (p > 0 ? 1 / (p * TAX) : null);
+  const fairOdds = (p) => (p > 0 ? 1 / p : null);
+
+  // ================================================================== data
+  const FILES = ["st_meta", "st_typy", "st_wyniki", "st_mecze", "st_druzyny", "st_rozliczenia", "st_plan"];
   async function fetchJson(name) {
     for (let i = 0; ; i++) {
       const ac = new AbortController();
@@ -623,14 +431,8 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
         const r = await fetch("data/" + name + ".json", { cache: i ? "reload" : "no-cache", signal: ac.signal });
         if (!r.ok) throw new Error(name + ": " + r.status);
         if (!r.body || typeof r.body.getReader !== "function") return await r.json();
-        const reader = r.body.getReader();
-        const chunks = [];
-        for (;;) {
-          arm();
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
+        const reader = r.body.getReader(), chunks = [];
+        for (;;) { arm(); const { done, value } = await reader.read(); if (done) break; chunks.push(value); }
         return JSON.parse(await new Blob(chunks).text());
       } catch (e) {
         if (i >= 3) throw e;
@@ -640,51 +442,24 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
   }
   async function load() {
     const failed = [];
-    await Promise.all(FILES.map((f) => fetchJson(f).then((v) => {
-      if (f === "meta") S.meta = v; else S.data[f] = v;
-      if (f === "meta" || f === "podsumowanie" || f === "st_meta") fillSources();
-      render();
-    }, () => { failed.push(f); })));
-    if (failed.length) {
-      const b = $("#loaderr");
-      b.textContent = "Nie wczytały się dane: " + failed.join(", ") + ". Odśwież stronę; jeśli to nie pomoże, napisz do Claude „odśwież aplikację”.";
-      b.hidden = false;
-    }
-    S.loaded = true;
-    fillSources();
+    await Promise.all(FILES.map((f) => fetchJson(f).then((v) => { S.data[f] = v; if (f === "st_meta") fresh(); render(); }, () => { failed.push(f); })));
+    if (failed.length) { const b = $("#loaderr"); b.textContent = "Nie wczytały się dane: " + failed.join(", ") + ". Odśwież stronę."; b.hidden = false; }
     render();
   }
-  const rows = (k) => S.data[k] || [];
-  const SHORT = { "oskar-live": "Oskar · na żywo", "oskar-offline": "Oskar · offline", "mk2-live-smoke": "MK2 · test na żywo",
-    "mk2-replay-mk2-band": "MK2 · powtórka 2 nogi", "mk2-replay-oskar-config": "MK2 · powtórka domyślna" };
-  const short = (v, r) => SHORT[r.zrodlo_id] || String(v || "—").replace(/\s*\(.*\)$/, "");
-  const bySrc = (list) => (S.src ? list.filter((r) => r.zrodlo_id === S.src) : list);
-
-  function fillSources() {
-    const sel = $("#f-src");
-    const srcs = rows("podsumowanie").filter((r) => r.zrodlo_id !== "razem");
-    sel.replaceChildren(new Option("Wszystkie źródła", ""), ...srcs.map((r) => new Option(r.zrodlo, r.zrodlo_id)));
-    sel.value = S.src;
-    const m = S.meta;
-    const f = $("#fresh");
+  function fresh() {
+    const m = meta(), f = $("#fresh");
     f.replaceChildren();
-    const sm2 = S.data.st_meta;
-    if (sm2) {
-      f.append("Prognozy z ", el("b", null, when(sm2.utworzono)), " · ostatnie wyniki z ", el("b", null, day(sm2.dane_do)));
-    } else if (m) {
-      const planDay = /^\d{4}-\d{2}-\d{2}$/.test(m.plan_z_dnia || "") ? m.plan_z_dnia.split("-").reverse().join(".") : m.plan_z_dnia;
-      f.append("Dane do ", el("b", null, m.dane_do || "—"), " · eksport ", el("b", null, m.eksport || "—"), " · plan z ", el("b", null, planDay || "—"));
-    } else f.textContent = "";
+    if (m.utworzono) f.append("Prognozy z ", el("b", null, when(m.utworzono)), " · wyniki do ", el("b", null, day(m.dane_do)));
   }
 
-  // ------------------------------------------------------------------ store (shared edits)
+  // ================================================================== shared store
   async function connect() {
     const cl = window.claude;
-    if (!cl || typeof cl.use !== "function") { readOnly("Ta kopia strony nie ma połączenia z bazą aplikacji: możesz przeglądać, ale zmiany nie zostaną zapisane."); return; }
+    if (!cl || typeof cl.use !== "function") { readOnly("Ta kopia strony nie ma połączenia z bazą: możesz przeglądać, ale zmiany nie zostaną zapisane."); return; }
     cl.use("downloads").then((d) => { S.downloads = d; }, () => { S.downloads = null; });
     const [db, user] = await Promise.all([cl.use("db"), cl.use("user")]);
     S.user = user;
-    if (!db) { readOnly("Tryb tylko do odczytu: zaloguj się na claude.ai albo poproś właściciela o prawo zmian, żeby zapisywać plan, typy i prośby."); return; }
+    if (!db) { readOnly("Tryb tylko do odczytu: zaloguj się na claude.ai, żeby zapisywać zakłady, plan i prośby."); return; }
     S.db = db;
     if (user) {
       S.me = await user.id();
@@ -694,37 +469,28 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
     } else S.canWrite = true;
     const err = (e) => { console.warn("db", e && e.code); };
     db.collection("plan").onSnapshot((s) => { S.ov.plan = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); render(); }, err);
-    db.collection("typy").onSnapshot((s) => { S.ov.typy = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); render(); }, err);
-    db.collection("notatki").onSnapshot((s) => { S.ov.notatki = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); render(); }, err);
     db.collection("prosby").orderBy("at", "desc").limit(200).onSnapshot((s) => { S.ov.prosby = s.docs.map((d) => Object.assign({ id: d.id }, d.data())); render(); }, err);
     db.collection("zaklady").orderBy("at", "desc").limit(1000).onSnapshot((s) => { S.ov.zaklady = s.docs.map((d) => Object.assign({ id: d.id }, d.data())); render(); }, err);
-    db.doc("ustawienia/profil").onSnapshot((d) => { S.ov.profil = d.exists ? d.data() : null; fillProfile(); render(); }, err);
     render();
   }
-  function readOnly(msg) {
-    S.canWrite = false;
-    const b = $("#ro");
-    b.textContent = msg;
-    b.hidden = false;
-    render();
-  }
+  function readOnly(msg) { S.canWrite = false; const b = $("#ro"); b.textContent = msg; b.hidden = false; render(); }
   async function save(fn, msgEl) {
-    if (!S.db || !S.canWrite) { msgEl.className = "mk-err"; msgEl.textContent = "Nie zapisano: brak prawa zmian."; return false; }
+    if (!S.db || !S.canWrite) { msgEl.className = "err"; msgEl.textContent = "Nie zapisano: brak prawa zmian."; return false; }
     msgEl.className = "c-muted"; msgEl.textContent = "Zapisuję…";
     for (let attempt = 0; ; attempt++) {
       try {
         await fn(S.db);
-        msgEl.className = "mk-saved"; msgEl.textContent = "Zapisano";
+        msgEl.className = "saved"; msgEl.textContent = "Zapisano";
         setTimeout(() => { if (msgEl.textContent === "Zapisano") msgEl.textContent = ""; }, 2500);
         return true;
       } catch (e) {
         const code = (e && e.code) || "";
         if (code === "unavailable" && attempt === 0) { await new Promise((res) => setTimeout(res, 400 + Math.random() * 800)); continue; }
-        msgEl.className = "mk-err";
-        msgEl.textContent = code === "invalid_argument" ? "Nie zapisano: brak prawa zmian w tej aplikacji."
-          : code === "quota_exceeded" ? "Nie zapisano: baza aplikacji jest pełna. Napisz do Claude, żeby ją uporządkował."
-          : code === "resource_exhausted" ? "Nie zapisano: za dużo zmian naraz. Odczekaj chwilę i spróbuj ponownie."
-          : "Nie zapisano (" + (code || "błąd") + "). Spróbuj jeszcze raz.";
+        msgEl.className = "err";
+        msgEl.textContent = code === "invalid_argument" ? "Nie zapisano: brak prawa zmian."
+          : code === "quota_exceeded" ? "Nie zapisano: baza jest pełna."
+          : code === "resource_exhausted" ? "Nie zapisano: za dużo zmian naraz, spróbuj za chwilę."
+          : "Nie zapisano (" + (code || "błąd") + ").";
         if (code === "invalid_argument" || code === "revoked") readOnly("Masz dostęp tylko do podglądu: zmian nie da się zapisać.");
         return false;
       }
@@ -734,39 +500,26 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
   async function resolveNames(ids) {
     const list = [...new Set(ids.filter(Boolean))].filter((i) => i !== "claude" && !(i in S.names));
     if (!S.user || !list.length) return;
-    try {
-      const ps = await S.user.profiles(list);
-      list.forEach((i) => { S.names[i] = (ps[i] && ps[i].name) || ""; });
-      render();
-    } catch (e) { list.forEach((i) => { S.names[i] = ""; }); }
+    try { const ps = await S.user.profiles(list); list.forEach((i) => { S.names[i] = (ps[i] && ps[i].name) || ""; }); render(); }
+    catch (e) { list.forEach((i) => { S.names[i] = ""; }); }
   }
-  // "claude" marks entries Claude wrote from the conversation (settings, answers); everything else is a viewer id
   const nameOf = (id) => (id === "claude" ? "Claude" : (id && S.names[id]) || (id && id === S.me ? "Ty" : "ktoś"));
 
-  // ------------------------------------------------------------------ tabs
+  // ================================================================== navigation
   function show(p, push) {
-    if (p === "skaner") p = S.skaner || "start";
-    if (!PAGES.includes(p)) p = "mecze";
+    if (!PAGES.includes(p)) p = "typy";
     if (p !== S.page) window.scrollTo(0, 0);
     S.page = p;
-    if (SKANER.includes(p)) S.skaner = p;
     PAGES.forEach((id) => { $("#pg-" + id).hidden = id !== p; });
-    const primary = SKANER.includes(p) ? "skaner" : p === "mecz" ? "mecze" : p;
-    document.querySelectorAll(".mk-tab").forEach((b) => b.setAttribute("aria-selected", b.dataset.p === primary || b.dataset.p === p ? "true" : "false"));
-    $("#subnav").hidden = !SKANER.includes(p);
+    const primary = p === "mecz" ? "mecze" : p;
+    document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", b.dataset.p === primary ? "true" : "false"));
     if (push) { try { history.replaceState(null, "", "#" + (p === "mecz" && S.mecz ? "mecz/" + S.mecz : p)); } catch (e) { /* ignore */ } }
     render();
   }
-  document.querySelectorAll(".mk-tab").forEach((b) => b.addEventListener("click", () => show(b.dataset.p, true)));
-  $("#f-src").addEventListener("change", (e) => { S.src = e.target.value; S.sel = null; render(); });
-  $("#f-wynik").addEventListener("change", (e) => { S.f.wynik = e.target.value; render(); });
-  $("#f-pod").addEventListener("change", (e) => { S.f.pod = e.target.value; render(); });
-  $("#f-swynik").addEventListener("change", (e) => { S.f.swynik = e.target.value; render(); });
-  $("#f-status").addEventListener("change", (e) => { S.f.status = e.target.value; render(); });
-  $("#q-kupony").addEventListener("input", (e) => { S.q.kupony = e.target.value; render(); });
-  $("#q-single").addEventListener("input", (e) => { S.q.single = e.target.value; render(); });
+  document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => show(b.dataset.p, true)));
+  function openMatch(id) { S.mecz = String(id); S.calc = null; show("mecz", true); }
 
-  // ------------------------------------------------------------------ table helper
+  // ================================================================== table helper
   function table(tbl, list, cols, key, opts) {
     opts = opts || {};
     const id = tbl.id;
@@ -783,21 +536,16 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
         return String(x).localeCompare(String(y), "pl") * dir;
       });
     }
-    const thead = el("thead");
-    const htr = el("tr");
+    const thead = el("thead"), htr = el("tr");
     cols.forEach((c) => {
       const th = el("th");
       if (c.num) th.className = "r";
       th.setAttribute("aria-sort", sort && sort.f === c.f ? (sort.dir === "asc" ? "ascending" : "descending") : "none");
       if (c.nosort || opts.nosortAll) th.textContent = c.h;
       else {
-        const b = el("button", "mk-th", c.h);
+        const b = el("button", "th", c.h);
         b.type = "button";
-        b.addEventListener("click", () => {
-          const cur = S.sorts[id] || opts.sort;
-          S.sorts[id] = { f: c.f, dir: cur && cur.f === c.f && cur.dir === "desc" ? "asc" : "desc" };
-          render();
-        });
+        b.addEventListener("click", () => { const cur = S.sorts[id] || opts.sort; S.sorts[id] = { f: c.f, dir: cur && cur.f === c.f && cur.dir === "desc" ? "asc" : "desc" }; render(); });
         th.append(b);
       }
       htr.append(th);
@@ -806,9 +554,8 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
     const tbody = el("tbody");
     data.forEach((r) => {
       const tr = el("tr");
+      if (r._grp) { tr.className = "grp"; const td = el("td", null, r._grp); td.colSpan = cols.length; tr.append(td); tbody.append(tr); return; }
       tr.dataset.key = String(r[key]);
-      if (opts.click) { tr.className = "click"; tr.tabIndex = 0; }
-      if (opts.selected && opts.selected === r[key]) tr.setAttribute("aria-selected", "true");
       cols.forEach((c) => {
         const td = el("td");
         if (c.render) c.render(td, r);
@@ -816,1005 +563,423 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
           const v = r[c.f];
           const text = c.fmt ? c.fmt(v, r) : empty(v) ? "—" : String(v);
           const cls = c.cls ? c.cls(v, r) : "";
-          if (c.chip) td.append(el("span", "mk-chip " + cls, text));
+          if (c.chip) td.append(el("span", "chip " + cls, text));
           else { td.textContent = text; if (cls) td.classList.add(cls); }
         }
         if (c.num) td.classList.add("r");
         if (c.nw) td.classList.add("nw");
         if (c.wide) td.classList.add("wide");
-        if (c.mid) td.classList.add("mid");
         tr.append(td);
       });
       tbody.append(tr);
     });
     tbl.replaceChildren(thead, tbody);
-    if (opts.click && !tbl.dataset.bound) {
-      tbl.dataset.bound = "1";
-      const pick = (ev) => { const tr = ev.target.closest("tr[data-key]"); if (tr) opts.click(tr.dataset.key); };
-      tbl.addEventListener("click", pick);
-      tbl.addEventListener("keydown", (ev) => { if (ev.key === "Enter") pick(ev); });
-    }
     return data.length;
   }
-  const search = (list, q, fields) => {
-    q = (q || "").trim().toLowerCase();
-    return q ? list.filter((r) => fields.some((f) => r[f] !== null && r[f] !== undefined && String(r[f]).toLowerCase().includes(q))) : list;
-  };
-  const outcomeFilter = (list, f) => {
-    if (!f) return list;
-    if (f === "win") return list.filter((r) => r.wynik_kod === "win" || r.wynik_kod === "half_win");
-    if (f === "loss") return list.filter((r) => r.wynik_kod === "loss" || r.wynik_kod === "half_loss");
-    return list.filter((r) => r.wynik_kod === f);
-  };
-
-  // ------------------------------------------------------------------ plan merged with the shared edits
-  function planItems() {
-    return rows("plan").map((p) => {
-      const o = S.ov.plan[p.id] || {};
-      return Object.assign({}, p, {
-        status: o.status || p.status,
-        notatka: o.notatka || "",
-        by: o.by || null,
-        at: o.at || null,
-        zmienione: !!o.status && o.status !== p.status,
-      });
-    });
-  }
-
-  // ------------------------------------------------------------------ pages
-  function renderStart() {
-    const all = rows("podsumowanie");
-    const r = all.find((x) => x.zrodlo_id === (S.src || "razem")) || {};
-    const tot = all.find((x) => x.zrodlo_id === "razem") || {};
-    $("#headline").textContent = all.length
-      ? (tot.kupony_ok_t088_pelne === 0
-        ? "Przy podatku 12% i pełnych zabezpieczeniach skaner nie wskazał żadnego opłacalnego kuponu."
-        : "Przy podatku 12% i pełnych zabezpieczeniach skaner wskazał " + int(tot.kupony_ok_t088_pelne) + " kuponów.")
-      : S.data.podsumowanie ? "Brak danych." : "Wczytywanie danych…";
-    $("#headline-note").textContent = all.length
-      ? "Sprawdzone w " + int(tot.przebiegi_pelne) + " przebiegach (Oskara i naszych powtórkach). " + int(tot.kupony_ok_t088_luzne) +
-        " kuponów z 12% pochodzi z wczesnych przebiegów z luźnym limitem przewagi 20%. Obecny limit to 10%: większą przewagę skaner traktuje jako błąd danych. Wartość pojawia się tylko bez podatku, więc następny krok to pomiar na prawdziwych, świeżych kursach."
-      : "";
-    const k = $("#kpis");
-    k.replaceChildren();
-    const tile = (label, value, sub, alert) => {
-      const t = el("div", "mk-kpi" + (alert ? " alert" : ""));
-      t.append(el("span", "l", label), el("span", "v", value), el("span", "s", sub || ""));
-      k.append(t);
-    };
-    tile("Kupony przy 12%, pełne zabezpieczenia", int(r.kupony_ok_t088_pelne), "z luźnym limitem: " + int(r.kupony_ok_t088_luzne));
-    tile("Wskazane kupony (bez powtórzeń)", int(r.kupony), "bez wyniku w danych " + int(r.kupony_bez_wyniku) + ", przed meczem " + int(r.kupony_przed_meczem));
-    tile("Rozliczone: wygrane / przegrane", int(r.kupony_wygrane) + " / " + int(r.kupony_przegrane), "z " + int(r.kupony_rozliczone) + " rozliczonych kuponów");
-    tile("Nogi z wartością bez podatku", int(r.single), "rozliczonych " + int(r.single_rozliczone));
-    tile("Kupony z kursem poniżej 1,14", int(r.kupony_za_niski_kurs), "przy 12% nie dadzą zysku nawet po trafieniu", (r.kupony_za_niski_kurs || 0) > 0);
-    tile("Przebiegi skanera", int(r.przebiegi), day(r.od) + " – " + day(r.do));
-
-    profitChart($("#ch-zysk"), bySrc(rows("eksperymenty")));
-    edgeChart($("#ch-przewaga"), bySrc(rows("single")));
-  }
-
-  function renderHaveNeed() {
-    const items = planItems();
-    const have = $("#have"), need = $("#need");
-    have.replaceChildren();
-    need.replaceChildren();
-    const li = (p) => {
-      const b = el("button", "mk-item");
-      b.type = "button";
-      b.append(el("span", "mk-dot " + p.status), el("span", "t", p.rzecz));
-      const d = el("span", "d", (STATUS_PL[p.status] || p.status) + (p.kto ? " · " + p.kto : "") + (p.notatka ? " · notatka: " + p.notatka : ""));
-      b.append(d);
-      b.addEventListener("click", () => { S.f.status = ""; $("#f-status").value = ""; S.focusPlan = p.id; show("plan", true); });
-      const x = el("li");
-      x.append(b);
-      return x;
-    };
-    items.filter((p) => p.status === "gotowe").forEach((p) => have.append(li(p)));
-    items.filter((p) => p.status !== "gotowe").sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)).forEach((p) => need.append(li(p)));
-  }
-
-  function renderKupony() {
-    $("#f-wynik").value = S.f.wynik;
-    $("#f-pod").value = S.f.pod;
-    let list = outcomeFilter(bySrc(rows("kupony")), S.f.wynik);
-    if (S.f.pod) list = list.filter((r) => r.przechodzi_kod === S.f.pod);
-    list = search(list, S.q.kupony, ["mecze", "bukmacher", "zrodlo", "wynik"]);
-    const n = table($("#tb-kupony"), list, [
-      { f: "as_of", h: "Wskazany", nw: true, render: (td, r) => {
-        td.append(when(r.as_of));
-        if (S.ov.typy[r.kupon_id]) { td.append(" "); td.append(el("span", "mk-chip c-win", "mój typ")); }
-      } },
-      { f: "zrodlo", h: "Źródło", fmt: short, nw: true },
-      { f: "mecze", h: "Mecze", wide: true },
-      { f: "kurs", h: "Kurs", num: true, fmt: dec, cls: (v, r) => (r.zysk_mozliwy_t088 ? "" : "c-loss") },
-      { f: "wynik", h: "Wynik", chip: true, cls: (v, r) => OUT[r.wynik_kod] || "" },
-      { f: "zysk_t088", h: "Zysk z 12%", num: true, fmt: money, cls: sign },
-      { f: "zysk_t100", h: "Zysk bez podatku", num: true, fmt: money, cls: sign },
-      { f: "przechodzi", h: "Przechodzi przy", chip: true, cls: (v, r) => (r.przechodzi_kod === "t088" ? "c-win" : r.przechodzi_kod === "t094" ? "c-warn" : "") },
-      { f: "bukmacher", h: "Bukmacher", nw: true },
-      { f: "nogi", h: "Nogi", num: true, fmt: int },
-      { f: "szansa", h: "Szansa", num: true, fmt: (v) => pct(v, 0) },
-      { f: "ev_dolne_t088", h: "EV dolne, 12%", num: true, fmt: (v) => spct(v), cls: sign },
-    ], "kupon_id", { click: (key) => {
-      S.sel = S.sel === key ? null : key;
-      render();
-      if (S.sel) Promise.resolve().then(() => Promise.resolve()).then(() => {
-        const det = $("#det");
-        const y = det.getBoundingClientRect().top + window.scrollY - $(".mk-top").offsetHeight - 12;
-        window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
-      });
-    }, selected: S.sel, sort: { f: "as_of", dir: "desc" } });
-    $("#c-kupony").textContent = S.data.kupony ? "Wiersze: " + int(n) : "Wczytywanie…";
-    renderDetail();
-  }
-
-  function renderDetail() {
-    const box = $("#det");
-    const r = S.sel ? rows("kupony").find((x) => x.kupon_id === S.sel) : null;
-    box.hidden = !r;
-    if (!r) return;
-    $("#det-title").textContent = "Kupon · " + (r.bukmacher || "—") + " · " + when(r.as_of);
-    const f = $("#det-facts");
-    f.replaceChildren();
-    const fact = (label, value, cls) => { const s = el("span"); s.append(label + " ", el("b", cls || null, value)); f.append(s); };
-    fact("Kurs", dec(r.kurs), r.zysk_mozliwy_t088 ? null : "c-loss");
-    fact("Szansa trafienia", pct(r.szansa, 0));
-    fact("EV dolne przy 12%", spct(r.ev_dolne_t088));
-    fact("Przechodzi przy", r.przechodzi || "—");
-    fact("Wynik", r.wynik || "—", OUT[r.wynik_kod]);
-    fact("Zysk z 12% przy stawce 1", money(r.zysk_t088), sign(r.zysk_t088));
-    fact("Źródło", r.zrodlo || "—");
-    const legs = rows("kupony_nogi").filter((l) => l.kupon_id === r.kupon_id);
-    if (legs.some((l) => /^(push|void|half_win|half_loss)$/.test(l.wynik_kod || ""))) {
-      f.append(el("span", "c-warn", "Noga ze zwrotem albo rozliczona w połowie obniża kurs kuponu, dlatego wygrany kupon może dać stratę po podatku."));
-    }
-    table($("#tb-nogi"), legs, [
-      { f: "nr", h: "Nr", num: true, fmt: int },
-      { f: "mecz", h: "Mecz", wide: true },
-      { f: "zaklad", h: "Zakład", wide: true },
-      { f: "kurs", h: "Kurs", num: true, fmt: dec },
-      { f: "wynik", h: "Wynik", chip: true, cls: (v, x) => OUT[x.wynik_kod] || "" },
-      { f: "start", h: "Start", fmt: when, nw: true },
-      { f: "liga", h: "Liga", mid: true },
-      { f: "p_uczciwe", h: "Szansa uczciwa", num: true, fmt: (v) => pct(v, 1) },
-      { f: "cena_z", h: "Cena z", nw: true },
-    ], "noga", { sort: { f: "nr", dir: "asc" } });
-    const typ = S.ov.typy[r.kupon_id];
-    const note = S.ov.notatki[r.kupon_id];
-    const stawka = $("#det-stawka"), nt = $("#det-notatka"), add = $("#det-add"), ntb = $("#det-note");
-    if (box.dataset.for !== r.kupon_id) {
-      box.dataset.for = r.kupon_id;
-      stawka.value = typ && typ.stawka ? typ.stawka : 10;
-      nt.value = (note && note.tekst) || "";
-      $("#det-msg").textContent = "";
-    }
-    add.textContent = typ ? "Zmień stawkę w moich typach" : "Dodaj do moich typów";
-    [stawka, nt, add, ntb].forEach((x) => { x.disabled = !S.canWrite; });
-  }
-  $("#det-close").addEventListener("click", () => { S.sel = null; render(); });
-  $("#det-add").addEventListener("click", () => {
-    const id = S.sel;
-    const v = Number($("#det-stawka").value);
-    const msg = $("#det-msg");
-    if (!id) return;
-    if (!(v > 0)) { msg.className = "mk-err"; msg.textContent = "Podaj stawkę większą od zera."; return; }
-    const prev = S.ov.typy[id] || {};
-    save((db) => db.collection("typy").doc(id).set(Object.assign({ kupon_id: id, stawka: v, notatka: prev.notatka || "" }, stamp())), msg);
-  });
-  $("#det-note").addEventListener("click", () => {
-    const id = S.sel;
-    if (!id) return;
-    const text = $("#det-notatka").value.trim();
-    save((db) => (text ? db.collection("notatki").doc(id).set(Object.assign({ cel: id, rodzaj: "kupon", tekst: text }, stamp())) : db.collection("notatki").doc(id).delete()), $("#det-msg"));
-  });
-
-  function renderTypy() {
-    const typy = Object.values(S.ov.typy);
-    $("#n-typy").textContent = String(typy.length);
-    const byId = new Map(rows("kupony").map((r) => [r.kupon_id, r]));
-    const list = typy.map((t) => {
-      const k = byId.get(t.kupon_id) || {};
-      const stake = Number(t.stawka) || 0;
-      return {
-        kupon_id: t.kupon_id, as_of: k.as_of, bukmacher: k.bukmacher, mecze: k.mecze || "kupon spoza obecnych danych", kurs: k.kurs,
-        stawka: stake, wynik: k.wynik || "—", wynik_kod: k.wynik_kod || "", przechodzi: k.przechodzi,
-        z88: empty(k.zysk_t088) ? null : stake * k.zysk_t088, z100: empty(k.zysk_t100) ? null : stake * k.zysk_t100,
-        notatka: (S.ov.notatki[t.kupon_id] && S.ov.notatki[t.kupon_id].tekst) || "", by: t.by, at: t.at,
-      };
-    });
-    resolveNames(list.map((x) => x.by));
-    const sum = $("#typy-sum");
-    sum.replaceChildren();
-    const settled = list.filter((x) => !empty(x.z88));
-    const add = (label, value, cls) => { const s = el("span"); s.append(label + " ", el("b", cls || null, value)); sum.append(s); };
-    add("Typów:", int(list.length));
-    add("Postawione na papierze:", NF2.format(list.reduce((a, x) => a + x.stawka, 0)) + " zł");
-    add("Rozliczone:", int(settled.length));
-    const z = settled.reduce((a, x) => a + x.z88, 0);
-    add("Wynik z podatkiem 12%:", settled.length ? zl(z) : "—", sign(z));
-    $("#typy-empty").hidden = list.length > 0;
-    table($("#tb-typy"), list, [
-      { f: "as_of", h: "Wskazany", fmt: when, nw: true },
-      { f: "bukmacher", h: "Bukmacher", nw: true },
-      { f: "mecze", h: "Mecze", wide: true },
-      { f: "kurs", h: "Kurs", num: true, fmt: dec },
-      { f: "stawka", h: "Stawka", num: true, fmt: (v) => NF2.format(v) + " zł" },
-      { f: "wynik", h: "Wynik", chip: true, cls: (v, r) => OUT[r.wynik_kod] || "" },
-      { f: "z88", h: "Zysk z 12%", num: true, fmt: zl, cls: sign },
-      { f: "z100", h: "Zysk bez podatku", num: true, fmt: zl, cls: sign },
-      { f: "notatka", h: "Notatka", wide: true },
-      { f: "by", h: "Kto i kiedy", fmt: (v, r) => nameOf(v) + (r.at ? ", " + when(r.at) : "") },
-      { f: "_x", h: "", nosort: true, render: (td, r) => {
-        const b = el("button", "mk-btn danger", "Usuń");
-        b.type = "button";
-        b.disabled = !S.canWrite;
-        const m = el("span");
-        b.addEventListener("click", (ev) => { ev.stopPropagation(); save((db) => db.collection("typy").doc(r.kupon_id).delete(), m); });
-        td.append(b, m);
-      } },
-    ], "kupon_id", { sort: { f: "as_of", dir: "desc" } });
-  }
-
-  function renderSingle() {
-    $("#f-swynik").value = S.f.swynik;
-    let list = outcomeFilter(bySrc(rows("single")), S.f.swynik);
-    list = search(list, S.q.single, ["mecz", "liga", "zaklad", "bukmacher", "zrodlo"]);
-    const n = table($("#tb-single"), list, [
-      { f: "as_of", h: "Wskazana", fmt: when, nw: true },
-      { f: "zrodlo", h: "Źródło", fmt: short, nw: true },
-      { f: "mecz", h: "Mecz", wide: true },
-      { f: "zaklad", h: "Zakład", wide: true },
-      { f: "kurs", h: "Kurs", num: true, fmt: dec },
-      { f: "przewaga", h: "Przewaga", num: true, fmt: (v) => spct(v), cls: (v) => (v > 0.10 ? "c-warn" : v >= 0.066 ? "c-win" : "") },
-      { f: "wynik", h: "Wynik", chip: true, cls: (v, r) => OUT[r.wynik_kod] || "" },
-      { f: "zysk_t088", h: "Zysk z 12%", num: true, fmt: money, cls: sign },
-      { f: "kurs_uczciwy", h: "Kurs uczciwy", num: true, fmt: dec },
-      { f: "bukmacher", h: "Bukmacher", nw: true },
-      { f: "liga", h: "Liga", mid: true },
-      { f: "cena_z", h: "Cena z", nw: true },
-    ], "noga_id", { sort: { f: "as_of", dir: "desc" } });
-    $("#c-single").textContent = S.data.single ? "Wiersze: " + int(n) : "Wczytywanie…";
-  }
-
-  function renderPrzebiegi() {
-    const list = bySrc(rows("przebiegi"));
-    scanChart($("#ch-przebiegi"), list);
-    table($("#tb-przebiegi"), list, [
-      { f: "as_of", h: "Czas decyzji", fmt: when, nw: true },
-      { f: "rodzaj", h: "Rodzaj", chip: true, cls: (v) => (/powtórka/.test(v || "") ? "" : "c-win") },
-      { f: "zrodlo", h: "Źródło", fmt: short, nw: true },
-      { f: "uruchomiony", h: "Uruchomiony", nw: true },
-      { f: "limit_przewagi", h: "Limit przewagi", num: true, cls: (v, r) => (r.luzne ? "c-warn" : "") },
-      { f: "mecze", h: "Mecze", num: true, fmt: int },
-      { f: "nogi_t100", h: "Nogi bez podatku", num: true, fmt: int },
-      { f: "nogi_t094", h: "Nogi, 6%", num: true, fmt: int },
-      { f: "nogi_t088", h: "Nogi, 12%", num: true, fmt: int, cls: (v) => (v > 0 ? "c-win" : "") },
-      { f: "kupony_t088", h: "Kupony przy 12%", num: true, fmt: int, cls: (v) => (v > 0 ? "c-win" : "") },
-      { f: "kupony_t094", h: "Kupony przy 6%", num: true, fmt: int },
-      { f: "kupony_t100", h: "Kupony tylko bez podatku", num: true, fmt: int },
-      { f: "model", h: "Model", chip: true, cls: (v, r) => (r.model_kod === "ok" ? "c-win" : "") },
-    ], "scan_id", { sort: { f: "as_of", dir: "desc" } });
-  }
-
-  function renderEksperymenty() {
-    table($("#tb-eksperymenty"), bySrc(rows("eksperymenty")), [
-      { f: "zrodlo", h: "Źródło", fmt: short, nw: true },
-      { f: "config_id", h: "Konfiguracja", nw: true },
-      { f: "zabezpieczenia", h: "Zabezpieczenia", chip: true, cls: (v, r) => (r.luzne ? "c-warn" : "c-win") },
-      { f: "nogi_w_kuponie", h: "Nogi w kuponie", nw: true },
-      { f: "przebiegi", h: "Przebiegi", num: true, fmt: int },
-      { f: "single", h: "Single", num: true, fmt: int },
-      { f: "kupony", h: "Kupony", num: true, fmt: int },
-      { f: "kupony_ok_t088", h: "Przy 12%", num: true, fmt: int, cls: (v) => (v > 0 ? "c-win" : "") },
-      { f: "kupony_ok_t094", h: "Przy 6%", num: true, fmt: int },
-      { f: "kupony_wygrane", h: "Wygrane", num: true, fmt: int },
-      { f: "kupony_przegrane", h: "Przegrane", num: true, fmt: int },
-      { f: "kupony_bez_wyniku", h: "Bez wyniku", num: true, fmt: int },
-      { f: "zysk_kupony_t088", h: "Zysk z 12%", num: true, fmt: money, cls: sign },
-      { f: "zysk_kupony_t100", h: "Zysk bez podatku", num: true, fmt: money, cls: sign },
-      { f: "opis", h: "Czym się różni", wide: true },
-    ], "eksperyment_id", { click: (key) => { S.exp = S.exp === key ? null : key; render(); }, selected: S.exp });
-    let wy = bySrc(rows("wyniki")).filter((r) => (r.zaklady || 0) > 0);
-    if (S.exp) wy = wy.filter((r) => r.zrodlo_id + ":" + r.config_id === S.exp);
-    $("#wy-title").textContent = S.exp ? "Wyniki według skanera · " + S.exp.split(":").slice(-1)[0] : "Wyniki według skanera";
-    table($("#tb-wyniki"), wy, [
-      { f: "zrodlo", h: "Źródło", fmt: short, nw: true },
-      { f: "config_id", h: "Konfiguracja", nw: true },
-      { f: "rodzaj", h: "Rodzaj" },
-      { f: "rynki", h: "Rynki" },
-      { f: "podatek", h: "Podatek", nw: true },
-      { f: "zaklady", h: "Zakłady", num: true, fmt: int },
-      { f: "rozliczone", h: "Rozliczone", num: true, fmt: int },
-      { f: "trafienia", h: "Trafienia", num: true, fmt: (v) => pct(v, 0) },
-      { f: "zysk_na_stawke", h: "Zysk na stawkę", num: true, fmt: (v) => spct(v), cls: sign },
-      { f: "clv_mediana", h: "CLV mediana", num: true, fmt: (v) => spct(v) },
-      { f: "pobite_zamkniecia", h: "Pobite zamknięcia", num: true, fmt: (v) => pct(v, 0) },
-    ], "wynik_id");
-  }
-
-  function renderDane() {
-    table($("#tb-dane"), rows("dane"), [
-      { f: "sekcja", h: "Obszar", nw: true },
-      { f: "pozycja", h: "Co" },
-      { f: "wartosc", h: "Wartość", nw: true },
-      { f: "stan", h: "Stan", chip: true, cls: (v) => ({ ok: "c-win", uwaga: "c-warn", problem: "c-loss" }[v] || "") },
-      { f: "uwagi", h: "Uwagi", wide: true },
-    ], "dane_id");
-  }
-
-  function renderPlan() {
-    renderHaveNeed();
-    $("#f-status").value = S.f.status;
-    const box = $("#plan-list");
-    let items = planItems().sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9));
-    if (S.f.status) items = items.filter((p) => p.status === S.f.status);
-    resolveNames(items.map((p) => p.by));
-    const active = document.activeElement && box.contains(document.activeElement) ? document.activeElement.id : null;
-    box.replaceChildren();
-    items.forEach((p) => {
-      const card = el("article", "mk-pi " + p.status);
-      card.id = "pi-" + p.id;
-      const hd = el("div", "hd");
-      const left = el("div");
-      left.append(el("div", "ti", p.rzecz), el("div", "meta", (p.obszar || "") + (p.kto ? " · " + p.kto : "")));
-      hd.append(left, el("span", "mk-chip " + (STATUS_C[p.status] || ""), STATUS_PL[p.status] || p.status));
-      card.append(hd, el("p", "mk-note", p.szczegoly || ""));
-      if (p.jak) { const c = el("div", "cmd", p.jak); card.append(c); }
-      const form = el("div", "mk-form");
-      const sl = el("label"); sl.htmlFor = "ps-" + p.id; sl.textContent = "Stan";
-      const sel = el("select", "mk-ctrl"); sel.id = "ps-" + p.id;
-      Object.entries(STATUS_PL).forEach(([k, v]) => sel.append(new Option(v, k)));
-      sel.value = p.status;
-      sl.append(sel);
-      const nl = el("label"); nl.htmlFor = "pn-" + p.id; nl.textContent = p.status === "decyzja" ? "Twoja decyzja / notatka" : "Notatka";
-      nl.style.gridColumn = "span 2";
-      const ta = el("textarea", "mk-ta"); ta.id = "pn-" + p.id;
-      ta.value = S.drafts && S.drafts[p.id] !== undefined ? S.drafts[p.id] : p.notatka;
-      ta.placeholder = p.status === "decyzja" ? "Np. single tylko dla Betclic; skanujemy wszystkie ligi" : "Co się zmieniło, co dalej";
-      ta.addEventListener("input", () => { S.drafts = S.drafts || {}; S.drafts[p.id] = ta.value; });
-      nl.append(ta);
-      const act = el("div", "mk-row");
-      const b = el("button", "mk-btn", "Zapisz"); b.type = "button";
-      const m = el("span");
-      b.addEventListener("click", async () => {
-        const ok = await save((db) => db.collection("plan").doc(p.id).set(Object.assign({ status: sel.value, notatka: ta.value.trim() }, stamp())), m);
-        if (ok && S.drafts) delete S.drafts[p.id];
-      });
-      [sel, ta, b].forEach((x) => { x.disabled = !S.canWrite; });
-      act.append(b, m);
-      form.append(sl, nl, act);
-      card.append(form);
-      if (p.at) card.append(el("div", "meta", "Ostatnia zmiana: " + nameOf(p.by) + ", " + when(p.at) + (p.zmienione ? " (stan zmieniony w aplikacji)" : "")));
-      box.append(card);
-    });
-    if (active) { const a = document.getElementById(active); if (a) a.focus(); }
-    if (S.focusPlan) {
-      const t = document.getElementById("pi-" + S.focusPlan);
-      S.focusPlan = null;
-      if (t) { t.scrollIntoView({ block: "center" }); const s = t.querySelector("select"); if (s) s.focus(); }
-    }
-  }
-
-  function fillProfile() {
-    const p = S.ov.profil;
-    if (!p || S.profileTouched) return;
-    const set = (id, v) => { if (!empty(v)) $(id).value = v; };
-    set("#st-kmin", p.kurs_min); set("#st-kmax", p.kurs_max); set("#st-nogi", p.nogi); set("#st-noga", p.kurs_nogi_max);
-    set("#st-pod", p.podatek); set("#st-ligi", p.ligi); $("#st-uwagi").value = p.uwagi || "";
-  }
-  ["#st-kmin", "#st-kmax", "#st-nogi", "#st-noga", "#st-pod", "#st-ligi", "#st-uwagi"].forEach((s) => $(s).addEventListener("input", () => { S.profileTouched = true; }));
-  $("#st-form").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const num = (s) => { const v = parseFloat($(s).value); return Number.isFinite(v) ? v : null; };
-    const data = Object.assign({
-      kurs_min: num("#st-kmin"), kurs_max: num("#st-kmax"), nogi: $("#st-nogi").value, kurs_nogi_max: num("#st-noga"),
-      podatek: $("#st-pod").value, ligi: $("#st-ligi").value, uwagi: $("#st-uwagi").value.trim(),
-    }, stamp());
-    const msg = $("#st-msg");
-    if (data.kurs_min && data.kurs_max && data.kurs_min > data.kurs_max) { msg.className = "mk-err"; msg.textContent = "Kurs „od” jest większy niż „do”."; return; }
-    save((db) => db.doc("ustawienia/profil").set(data), msg).then((ok) => { if (ok) S.profileTouched = false; });
-  });
-  $("#pr-form").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const t = $("#pr-tekst").value.trim();
-    const msg = $("#pr-msg");
-    if (!t) { msg.className = "mk-err"; msg.textContent = "Wpisz treść prośby."; return; }
-    save((db) => db.collection("prosby").add(Object.assign({ tekst: t, status: "nowa", odpowiedz: "" }, stamp())), msg).then((ok) => { if (ok) $("#pr-tekst").value = ""; });
-  });
-
-  function renderUstawienia() {
-    const p = S.ov.profil;
-    resolveNames([p && p.by, ...S.ov.prosby.map((x) => x.by)]);
-    $("#st-meta").textContent = p && p.at ? "Zapisane przez " + nameOf(p.by) + ", " + when(p.at) + "." : "Jeszcze nikt nie zapisał ustawień.";
-    ["#st-kmin", "#st-kmax", "#st-nogi", "#st-noga", "#st-pod", "#st-ligi", "#st-uwagi", "#st-save"].forEach((s) => { $(s).disabled = !S.canWrite; });
-  }
-
-  // ------------------------------------------------------------------ charts (d3)
-  function tipFor(box) {
-    let t = box.querySelector(".mk-tip");
-    if (!t) { t = el("div", "mk-tip"); t.hidden = true; box.append(t); }
-    return {
-      show(ev, lines) {
-        t.replaceChildren(...lines.map((l, i) => el("div", i === 0 ? "t" : "", l)));
-        t.hidden = false;
-        const r = box.getBoundingClientRect();
-        let x = ev.clientX - r.left + 12, y = ev.clientY - r.top + 12;
-        if (x + t.offsetWidth > r.width) x = Math.max(0, ev.clientX - r.left - t.offsetWidth - 12);
-        if (y + t.offsetHeight > r.height) y = Math.max(0, ev.clientY - r.top - t.offsetHeight - 12);
-        t.style.left = x + "px"; t.style.top = y + "px";
-      },
-      hide() { t.hidden = true; },
-    };
-  }
-  function prep(box) {
-    box.querySelectorAll("svg, .mk-note").forEach((n) => n.remove());
-    if (!window.d3) { box.append(el("p", "mk-note", "Wykres niedostępny (biblioteka się nie wczytała).")); return null; }
-    return Math.max(280, box.clientWidth || 320);
-  }
-  function axis(g) {
-    g.attr("font-size", null).attr("font-family", null);
-    g.selectAll("text").style("fill", "var(--muted)").style("font-size", "0.75rem");
-    g.selectAll("line").style("stroke", "var(--line)");
-    g.select(".domain").style("stroke", "var(--line)");
-  }
-  const textW = (svg, t) => { const n = svg.append("text").style("font-size", "0.75rem").text(t); const w = n.node().getComputedTextLength(); n.remove(); return w; };
-
-  function profitChart(box, list) {
-    const W = prep(box); if (!W) return;
-    const items = list.filter((r) => (r.kupony_rozliczone || 0) > 0);
-    if (!items.length) { box.append(el("p", "mk-note", "Brak rozliczonych kuponów w wybranym źródle.")); return; }
-    const series = [{ k: "zysk_kupony_t088", n: "z podatkiem 12%", c: "var(--pitch)" }, { k: "zysk_kupony_t100", n: "bez podatku", c: "var(--muted)" }];
-    const label = (r) => r.zrodlo.replace(/^MK2 · |^Oskar · /, "") + " · " + r.config_id.slice(0, 5);
-    const svg = d3.select(box).append("svg").attr("width", "100%");
-    const lw = Math.min(W * 0.5, d3.max(items, (r) => textW(svg, label(r))) + 10);
-    const top = 24, bottom = 26, rowH = 30, H = top + bottom + items.length * rowH;
-    svg.attr("viewBox", `0 0 ${W} ${H}`).attr("height", H);
-    const vals = items.flatMap((r) => series.map((s) => r[s.k] || 0));
-    const ext = d3.extent([0, ...vals]); const pad = (ext[1] - ext[0]) * 0.08 || 1;
-    const x = d3.scaleLinear([ext[0] - pad, ext[1] + pad], [lw, W - 12]).nice();
-    const y = d3.scaleBand(items.map((r, i) => i), [top, H - bottom]).padding(0.25);
-    const y2 = d3.scaleBand(series.map((s) => s.k), [0, y.bandwidth()]).padding(0.15);
-    axis(svg.append("g").attr("transform", `translate(0,${H - bottom})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - lw) / 70))).tickFormat((v) => NF0.format(v)).tickSize(-(H - top - bottom))));
-    svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", top - 4).attr("y2", H - bottom).style("stroke", "var(--ink)").style("stroke-width", 1);
-    svg.append("g").selectAll("text").data(items).join("text").attr("x", lw - 8).attr("y", (r, i) => y(i) + y.bandwidth() / 2).attr("dy", "0.35em").attr("text-anchor", "end").style("fill", "var(--ink)").style("font-size", "0.75rem").text(label);
-    const tip = tipFor(box);
-    items.forEach((r, i) => series.forEach((s) => {
-      const v = r[s.k] || 0;
-      svg.append("rect").attr("x", Math.min(x(0), x(v))).attr("width", Math.max(1, Math.abs(x(v) - x(0)))).attr("y", y(i) + y2(s.k)).attr("height", y2.bandwidth()).attr("rx", 3).style("fill", s.c)
-        .on("mousemove", (ev) => tip.show(ev, [r.zrodlo + " · " + r.config_id, s.n + ": " + money(v) + " j.", "rozliczonych kuponów: " + int(r.kupony_rozliczone)])).on("mouseleave", () => tip.hide());
-    }));
-    let off = lw;
-    series.forEach((s) => {
-      svg.append("rect").attr("x", off).attr("y", 6).attr("width", 10).attr("height", 10).attr("rx", 2).style("fill", s.c);
-      const t = svg.append("text").attr("x", off + 14).attr("y", 15).style("fill", "var(--muted)").style("font-size", "0.75rem").text(s.n);
-      off += 14 + t.node().getComputedTextLength() + 16;
-    });
-  }
-
-  function edgeChart(box, list) {
-    const W = prep(box); if (!W) return;
-    const vals = list.map((r) => r.przewaga).filter((v) => typeof v === "number" && Number.isFinite(v));
-    if (!vals.length) { box.append(el("p", "mk-note", "Brak nóg z wartością w wybranym źródle.")); return; }
-    const H = 260, m = { t: 30, r: 12, b: 30, l: 40 };
-    const maxX = Math.min(0.2, Math.max(0.15, d3.max(vals)));
-    const x = d3.scaleLinear([0, maxX], [m.l, W - m.r]);
-    const bins = d3.bin().domain([0, maxX]).thresholds(d3.range(0, maxX + 1e-9, 0.005))(vals.map((v) => Math.min(Math.max(v, 0), maxX - 1e-9)));
-    const y = d3.scaleLinear([0, d3.max(bins, (b) => b.length) || 1], [H - m.b, m.t]).nice();
-    const svg = d3.select(box).append("svg").attr("width", "100%").attr("viewBox", `0 0 ${W} ${H}`).attr("height", H);
-    axis(svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat((v) => NF0.format(v)).tickSize(-(W - m.l - m.r))));
-    axis(svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(3, Math.floor(W / 80))).tickFormat((v) => NF0.format(v * 100) + "%")));
-    const tip = tipFor(box);
-    svg.append("g").selectAll("rect").data(bins).join("rect")
-      .attr("x", (b) => x(b.x0) + 1).attr("width", (b) => Math.max(0, x(b.x1) - x(b.x0) - 2)).attr("y", (b) => y(b.length)).attr("height", (b) => y(0) - y(b.length)).attr("rx", 2)
-      .style("fill", (b) => (b.x0 >= 0.10 ? "var(--warn)" : b.x0 >= 0.066 ? "var(--pitch)" : "var(--line)"))
-      .on("mousemove", (ev, b) => tip.show(ev, ["przewaga " + pct(b.x0) + "–" + pct(b.x1), "nóg: " + int(b.length)])).on("mouseleave", () => tip.hide());
-    const refs = [{ v: 0.066, t: "kupon 2 nogi: zero" }, { v: 0.092, t: "EV +5%" }, { v: 0.10, t: "limit 10%" }, { v: 0.136, t: "singiel: zero" }].filter((r) => r.v < maxX);
-    const placed = [];
-    refs.forEach((r) => {
-      const xx = x(r.v);
-      svg.append("line").attr("x1", xx).attr("x2", xx).attr("y1", m.t - 2).attr("y2", H - m.b).style("stroke", r.v === 0.10 ? "var(--loss)" : "var(--muted)").attr("stroke-dasharray", "4 3");
-      const w = textW(svg, r.t);
-      let row = 0;
-      while (placed.some((p) => p.row === row && Math.abs(p.x - xx) < (p.w + w) / 2 + 6)) row++;
-      placed.push({ x: xx, w, row });
-      svg.append("text").attr("x", Math.min(Math.max(xx, m.l + w / 2), W - m.r - w / 2)).attr("y", 13 - row * 12).attr("text-anchor", "middle").style("fill", "var(--muted)").style("font-size", "0.75rem").text(r.t);
-    });
-    const need = placed.length ? d3.max(placed, (p) => p.row) : 0;
-    if (need > 0) svg.attr("viewBox", `0 ${-need * 12} ${W} ${H + need * 12}`).attr("height", H + need * 12);
-  }
-
-  function scanChart(box, list) {
-    const W = prep(box); if (!W) return;
-    const items = list.filter((r) => r.as_of).slice().sort((a, b) => (a.as_of < b.as_of ? -1 : a.as_of > b.as_of ? 1 : String(a.zrodlo_id).localeCompare(String(b.zrodlo_id))));
-    if (!items.length) { box.append(el("p", "mk-note", "Brak przebiegów w wybranym źródle.")); return; }
-    const H = 260, m = { t: 12, r: 12, b: 46, l: 40 };
-    const x = d3.scaleBand(items.map((r) => r.scan_id), [m.l, W - m.r]).padding(0.2);
-    const y = d3.scaleLinear([0, d3.max(items, (r) => Math.max(r.nogi_t100 || 0, r.nogi_t088 || 0)) || 1], [H - m.b, m.t]).nice();
-    const svg = d3.select(box).append("svg").attr("width", "100%").attr("viewBox", `0 0 ${W} ${H}`).attr("height", H);
-    axis(svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat((v) => NF0.format(v)).tickSize(-(W - m.l - m.r))));
-    const every = Math.max(1, Math.ceil(items.length / Math.max(1, Math.floor((W - m.l) / 72))));
-    const gx = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(items.filter((r, i) => i % every === 0).map((r) => r.scan_id)).tickFormat((id) => when((items.find((r) => r.scan_id === id) || {}).as_of)));
-    axis(gx);
-    gx.selectAll("text").attr("transform", "rotate(-25)").attr("text-anchor", "end").attr("dx", "-0.3em").attr("dy", "0.6em");
-    const tip = tipFor(box);
-    const bw = Math.min(28, x.bandwidth());
-    svg.append("g").selectAll("rect").data(items).join("rect")
-      .attr("x", (r) => x(r.scan_id) + (x.bandwidth() - bw) / 2).attr("width", bw).attr("y", (r) => y(r.nogi_t100 || 0)).attr("height", (r) => y(0) - y(r.nogi_t100 || 0)).attr("rx", Math.min(4, bw / 2))
-      .style("fill", "var(--line)")
-      .on("mousemove", (ev, r) => tip.show(ev, [when(r.as_of) + " · " + r.zrodlo, "nogi bez podatku: " + int(r.nogi_t100), "nogi przy 12%: " + int(r.nogi_t088), "kupony przy 12%: " + int(r.kupony_t088) + ", tylko bez podatku: " + int(r.kupony_t100), "model: " + (r.model || "—"), r.rodzaj || ""])).on("mouseleave", () => tip.hide());
-    svg.append("g").selectAll("rect").data(items.filter((r) => (r.nogi_t088 || 0) > 0)).join("rect")
-      .attr("x", (r) => x(r.scan_id) + (x.bandwidth() - bw) / 2 + bw * 0.25).attr("width", bw * 0.5).attr("y", (r) => y(r.nogi_t088)).attr("height", (r) => y(0) - y(r.nogi_t088)).attr("rx", 2)
-      .style("fill", "var(--pitch)").attr("pointer-events", "none");
-  }
-
-  // ================================================================== statistics model (matches, picks, bets)
-  const STAT = { shots: "Strzały", sot: "Celne strzały", corners: "Rożne", fouls: "Faule", cards: "Kartki", yellow: "Żółte kartki", offsides: "Spalone" };
-  const NOUN = { shots: "strzałów", sot: "celnych strzałów", corners: "rożnych", fouls: "fauli", cards: "kartek", yellow: "żółtych kartek", offsides: "spalonych" };
-  const MAIN_STATS = ["shots", "sot", "corners", "fouls", "cards", "offsides"];
-  const PICKABLE = new Set(["shots", "sot", "corners"]);
-  const SCOPE_PL = { home: "gospodarz", away: "gość", total: "łącznie" };
-  const TAX = 0.88;
-  const st = (k) => S.data["st_" + k];
-  const stMeta = () => st("meta") || {};
-  const NF1 = nf(1);
-  const d1 = (v) => (empty(v) ? "—" : NF1.format(v));
-  const line = (v) => (empty(v) ? "—" : String(v).replace(".", ","));
-  const HM = new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", hour: "2-digit", minute: "2-digit" });
-  const hm = (iso) => { const d = new Date(iso); return isNaN(d) ? "—" : HM.format(d); };
-  const KEYF = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Warsaw", year: "numeric", month: "2-digit", day: "2-digit" });
-  const dayKey = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : KEYF.format(d); };
-  function dayLabel(key) {
-    const today = dayKey(new Date().toISOString());
-    const tomorrow = dayKey(new Date(Date.now() + 864e5).toISOString());
-    if (key === today) return "Dziś";
-    if (key === tomorrow) return "Jutro";
-    const [y, m, d] = key.split("-").map(Number);
-    return new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d, 12)));
-  }
-  const ligaName = (id) => ((stMeta().ligi || {})[String(id)]) || ("rozgrywki " + id);
-  const ligaShort = (id) => ((stMeta().skroty || {})[String(id)]) || String(id);
-  function ligaRank(id) {
-    const m = stMeta();
-    const cups = m.puchary || [], top = m.top15 || [];
-    if (cups.includes(id)) return cups.indexOf(id);
-    if (top.includes(id)) return 10 + top.indexOf(id);
-    return 100 + id;
-  }
-  function alphaOf(stat, scope, ligaId) {
-    const m = (stMeta().model || {})[stat];
-    if (!m) return 0.05;
-    const cup = (stMeta().puchary || []).includes(ligaId);
-    if (cup && m.alpha_puchary !== undefined) return scope === "total" ? m.alpha_total_puchary : m.alpha_puchary;
-    return scope === "total" ? m.alpha_total : m.alpha;
-  }
-  const meanOf = (m, stat, scope) => {
-    const v = m.m[stat];
-    if (!v) return null;
-    return scope === "home" ? v[0] : scope === "away" ? v[1] : v[0] + v[1];
-  };
-  // NB2 (Var = mu + alpha mu^2): P(X > line), P(X = line) for whole lines, P(X < line)
-  function nbTail(mu, alpha, ln) {
-    const a = Math.max(alpha || 0, 1e-6), r = 1 / a, p = r / (r + mu);
-    let pmf = Math.exp(r * Math.log(p)), under = 0, push = 0;
-    for (let k = 0; k <= Math.floor(ln); k++) {
-      if (k > 0) pmf *= ((k - 1 + r) / k) * (1 - p);
-      if (k < ln) under += pmf; else if (k === ln) push = pmf;
-    }
-    return { over: Math.max(0, 1 - under - push), push, under };
-  }
-  const atLeast = (mu, alpha, k) => (k <= 0 ? 1 : nbTail(mu, alpha, k - 0.5).over);
-  const atMost = (mu, alpha, k) => nbTail(mu, alpha, k + 0.5).under;
-  function threshold(mu, alpha, level) {
-    let best = null;
-    for (let k = 1; k < 80; k++) {
-      const p = atLeast(mu, alpha, k);
-      if (p >= level) best = { k, p }; else break;
-    }
-    return best;
-  }
-  const statOrder = (s) => { const i = MAIN_STATS.indexOf(s); return i < 0 ? 99 : i; };
-  const SCOPE_ORDER = { home: 0, away: 1, total: 2 };
-  const minOdds = (p) => (p > 0 ? 1 / (p * TAX) : null);
-  const fairOdds = (p) => (p > 0 ? 1 / p : null);
-  const matches = () => st("mecze") || [];
-  const matchById = (id) => matches().find((m) => String(m.id) === String(id));
-  const teamOf = (id) => (st("druzyny") || {})[String(id)];
-  function pickKeys() {
-    const out = new Set();
-    Object.values(st("typy") || {}).forEach((d) => (d.top || []).forEach((p) => out.add(p.fixture_id + "|" + p.stat + "|" + p.scope + "|" + p.line + "|" + p.side)));
-    return out;
-  }
-  function inLigaFilter(m, f) {
-    const meta = stMeta();
-    if (!f || f === "main") return (meta.puchary || []).includes(m.liga_id) || (meta.top15 || []).includes(m.liga_id);
-    if (f === "all") return true;
-    if (f === "cups") return (meta.puchary || []).includes(m.liga_id);
-    return String(m.liga_id) === f;
-  }
-  function fillLigaSelect(sel, value) {
-    const meta = stMeta();
-    const ids = [...new Set(matches().map((m) => m.liga_id))].sort((a, b) => ligaRank(a) - ligaRank(b));
-    const opts = [new Option("Top 15 lig + puchary", "main"), new Option("Puchary europejskie", "cups"), new Option("Wszystkie (także dodatkowe ligi)", "all")];
-    ids.forEach((id) => opts.push(new Option(ligaName(id), String(id))));
-    if (sel.options.length !== opts.length) sel.replaceChildren(...opts);
-    sel.value = value || "main";
-    if (!meta.ligi) sel.disabled = true; else sel.disabled = false;
-  }
   function chip(label, pressed, onClick, count) {
-    const b = el("button", "mk-chipbtn", label);
+    const b = el("button", "chipbtn", label);
     b.type = "button";
     b.setAttribute("aria-pressed", pressed ? "true" : "false");
-    if (count !== undefined) b.append(el("span", "n", String(count)));
+    if (count !== undefined && count !== null) b.append(el("span", "n", String(count)));
     b.addEventListener("click", onClick);
     return b;
   }
+  function resultChip(w, v) {
+    const val = empty(v) ? "" : " (" + int(v) + ")";
+    if (w === "wygrana") return el("span", "chip c-win", "✓ siadło" + val);
+    if (w === "przegrana") return el("span", "chip c-loss", "✗ nie siadło" + val);
+    if (w === "zwrot") return el("span", "chip c-muted", "zwrot" + val);
+    return el("span", "chip c-warn", "czeka na wynik");
+  }
+  function whyBox(text, title) {
+    if (!text) return null;
+    const d = el("details", "why");
+    d.append(el("summary", null, title || "Dlaczego ten typ?"), el("p", null, text));
+    return d;
+  }
+  function fact(box, label, value, cls) { const s = el("span"); s.append(label ? label + " " : "", el("b", cls || null, value)); box.append(s); }
 
-  // ------------------------------------------------------------------ Mecze
+  // ================================================================== Typy dnia
+  function renderTypy() {
+    const all = st("typy"), wy = st("wyniki");
+    if (!all) { $("#td-picks").replaceChildren(el("div", "card", "Wczytywanie…")); return; }
+    const keys = Object.keys(all).sort();
+    const t = todayKey();
+    if (!S.td || !keys.includes(S.td)) S.td = keys.find((k) => k >= t) || keys[keys.length - 1];
+    const res = new Map(((wy && wy.dni) || []).map((d) => [d.dzien, d]));
+    $("#td-days").replaceChildren(...keys.map((k) => {
+      const r = res.get(k);
+      const cnt = r && r.typy_wynik.rozliczone ? r.typy_wynik.trafione + "/" + r.typy_wynik.rozliczone : (all[k].top || []).length;
+      return chip(dayLabel(k), k === S.td, () => { S.td = k; render(); }, cnt);
+    }));
+    const d = all[S.td] || { top: [], kupon: null, kupony: [] };
+    const r = res.get(S.td);
+    const sum = $("#td-sum");
+    sum.replaceChildren();
+    if (r && r.typy_wynik.rozliczone) {
+      const tw = r.typy_wynik;
+      const a = el("span"); a.append("Typy: ", el("b", null, tw.trafione + " z " + tw.rozliczone), " siadło");
+      const b = el("span"); b.append("zysk na stawkę 1: ", el("b", sign(tw.zysk), money(tw.zysk)), " (z podatkiem ", el("b", sign(tw.zysk_podatek), money(tw.zysk_podatek)), ")");
+      sum.append(a, b);
+      if (r.kupon && r.kupon.wynik) { const c = el("span"); c.append("Kupon dnia: "); c.append(resultChip(r.kupon.wynik)); sum.append(c); }
+      if (tw.rozliczone < tw.n) sum.append(el("span", "c-muted", "pozostałe czekają na statystyki"));
+    } else if (S.td < t) sum.append(el("span", "c-muted", "Czekam na statystyki tych meczów; rozliczenie pojawi się po najbliższej aktualizacji."));
+    else sum.append(el("span", "c-muted", "Typy zapisuję przed meczami, a po meczu pokazuję, co siadło. Graj tylko, gdy kurs u Twojego bukmachera jest co najmniej równy minimalnemu."));
+    $("#td-info").textContent = d.top && d.top.length ? "typy: " + d.top.length : "";
+    const box = $("#td-picks");
+    box.replaceChildren();
+    if (!d.top.length) box.append(el("div", "card", "Na ten dzień model nie znalazł linii wyraźnie lepszych od rynku."));
+    d.top.forEach((p, i) => box.append(pickCard(p, i + 1)));
+    const kb = $("#td-kupon");
+    kb.replaceChildren(couponCard(d.kupon, d.kupony || []));
+    renderResults(wy);
+  }
+  function pickCard(p, n) {
+    const m = matchById(p.fixture_id);
+    const settled = p.wynik === "wygrana" ? " won" : p.wynik === "przegrana" ? " lost" : "";
+    const c = el("article", "pick" + settled);
+    const hd = el("div", "hd");
+    hd.append(el("span", "ti", (n ? n + ". " : "") + p.opis));
+    if ("wynik" in p) hd.append(resultChip(p.wynik, p.wartosc));
+    c.append(hd);
+    const start = (m && m.start) || p.start;
+    c.append(el("div", "mt", p.mecz + (start ? " · " + day(start) + ", " + hm(start) : "") + (m ? " · " + ligaName(m.liga_id) : "")));
+    const f = el("div", "facts");
+    if (!empty(p.oczekiwane)) fact(f, "Model oczekuje", d1(p.oczekiwane) + " (linia " + line(p.line) + ")");
+    fact(f, "Szansa: model", pct(p.p_model));
+    fact(f, "rynek", pct(p.p_rynek));
+    fact(f, "Kurs", dec(p.kurs) + " (" + p.bukmacher + ")");
+    fact(f, "Graj od kursu", dec(p.kurs_min_z_podatkiem || minOdds(p.p_model)), "c-win");
+    c.append(f);
+    const w = whyBox(p.why);
+    if (w) c.append(w);
+    const row = el("div", "row");
+    const add = el("button", "btn ghost sm", "Dodaj do zakładów");
+    add.type = "button";
+    add.addEventListener("click", () => draftBet({ mecz: p.mecz, rozgr: m ? ligaName(m.liga_id) : "", data: start ? dayKey(start) : S.td,
+      opis: p.opis, kurs: p.kurs, szansa: p.p_model, nogi: [{ fixture_id: p.fixture_id, stat: p.stat, scope: p.scope, line: p.line, side: p.side }] }));
+    row.append(add);
+    if (m) { const o = el("button", "btn ghost sm", "Analiza meczu"); o.type = "button"; o.addEventListener("click", () => openMatch(m.id)); row.append(o); }
+    c.append(row);
+    return c;
+  }
+  function couponCard(k, alts) {
+    const card = el("div", "card");
+    card.append(el("h2", null, "Kupon dnia ok. 2,0"));
+    if (!k) { card.append(el("p", "note", "Na ten dzień nie ma kuponu z dwóch zdarzeń o łącznym kursie 1,8–2,5, który model uważa za opłacalny.")); return card; }
+    const c = el("article", "pick" + (k.wynik === "wygrana" ? " won" : k.wynik === "przegrana" ? " lost" : ""));
+    const hd = el("div", "hd");
+    hd.append(el("span", "ti", "Kurs " + dec(k.kurs) + " · szansa wg modelu " + pct(k.p_model)));
+    if ("wynik" in k) hd.append(resultChip(k.wynik));
+    c.append(hd);
+    const ul = el("ul", "legs");
+    (k.legs || []).forEach((l) => {
+      const li = el("li");
+      li.append(el("b", null, l.opis), " · " + (l.mecz || "") + " · kurs " + dec(l.kurs) + " (" + l.bukmacher + "), model " + pct(l.p_model) + " ");
+      if ("wynik" in l) li.append(resultChip(l.wynik, l.wartosc));
+      ul.append(li);
+    });
+    c.append(ul);
+    const f = el("div", "facts");
+    const pm = k.p_rynek !== undefined ? k.p_rynek : (k.legs || []).reduce((a, l) => a * (l.p_rynek || 1), 1);
+    fact(f, "Szansa wg rynku", pct(pm));
+    fact(f, "Zysk z podatkiem (oczekiwany)", spct(k.ev_podatek), sign(k.ev_podatek));
+    fact(f, "Graj od łącznego kursu", dec(minOdds(k.p_model)), "c-win");
+    c.append(f);
+    const w = whyBox(k.why, "Dlaczego ten kupon?");
+    if (w) c.append(w);
+    const add = el("button", "btn ghost sm", "Dodaj do zakładów");
+    add.type = "button";
+    add.addEventListener("click", () => draftBet({ rodzaj: "Kupon " + (k.legs || []).length, opis: (k.legs || []).map((l) => l.opis + " (" + (l.mecz || "") + ")").join("\n"),
+      kurs: k.kurs, szansa: k.p_model, data: S.td, nogi: (k.legs || []).map((l) => ({ fixture_id: l.fixture_id, stat: l.stat, scope: l.scope, line: l.line, side: l.side })) }));
+    c.append(add);
+    card.append(c);
+    const others = (alts || []).filter((a) => Math.abs(a.kurs - k.kurs) > 1e-9 || a.p_model !== k.p_model).slice(0, 2);
+    if (others.length) {
+      const d = el("details", "why");
+      d.append(el("summary", null, "Inne kupony ok. 2,0 na ten dzień"));
+      const ul2 = el("ul", "legs");
+      others.forEach((a) => ul2.append(el("li", null, (a.legs || []).map((l) => l.opis + " (" + (l.mecz || "") + ")").join(" + ") + " · kurs " + dec(a.kurs) + ", szansa " + pct(a.p_model) + ", zysk z podatkiem " + spct(a.ev_podatek))));
+      d.append(ul2);
+      card.append(d);
+    }
+    return card;
+  }
+  function renderResults(wy) {
+    if (!wy) return;
+    const s = $("#wy-sum");
+    s.replaceChildren();
+    const t = wy.razem.typy, k = wy.razem.kupony;
+    const a = el("span"); a.append("Typy: ", el("b", null, t.trafione + " z " + t.rozliczone), " siadło (zapisanych " + t.n + ")");
+    const b = el("span"); b.append("zysk na stawkę 1: ", el("b", sign(t.zysk), money(t.zysk)), ", z podatkiem ", el("b", sign(t.zysk_podatek), money(t.zysk_podatek)));
+    const c = el("span"); c.append("Kupony dnia: ", el("b", null, k.trafione + " z " + k.rozliczone), ", zysk ", el("b", sign(k.zysk_podatek), money(k.zysk_podatek)), " z podatkiem");
+    s.append(a, b, c);
+    const rows = (wy.dni || []).filter((d) => d.dzien <= todayKey()).map((d) => ({ key: d.dzien, dzien: d.dzien, typy: d.typy_wynik, kupon: d.kupon }));
+    table($("#wy-dni"), rows, [
+      { f: "dzien", h: "Dzień", nw: true, fmt: (v) => dayLabel(v) },
+      { f: "typy", h: "Typy: siadło", nosort: true, fmt: (v) => (v.rozliczone ? v.trafione + " z " + v.rozliczone : "czeka") },
+      { f: "typy", h: "Zysk (stawka 1)", nosort: true, num: true, fmt: (v) => (v.rozliczone ? money(v.zysk) : "—"), cls: (v) => sign(v.zysk) },
+      { f: "typy", h: "Z podatkiem", nosort: true, num: true, fmt: (v) => (v.rozliczone ? money(v.zysk_podatek) : "—"), cls: (v) => sign(v.zysk_podatek) },
+      { f: "kupon", h: "Kupon dnia", nosort: true, render: (td, r) => { if (r.kupon) td.append(resultChip(r.kupon.wynik)); else td.textContent = "—"; } },
+      { f: "_o", h: "", nosort: true, render: (td, r) => { const b = el("button", "btn ghost sm", "Pokaż"); b.type = "button"; b.addEventListener("click", () => { S.td = r.dzien; window.scrollTo(0, 0); render(); }); td.append(b); } },
+    ], "key", { nosortAll: true });
+    const pr = wy.prognozy || {};
+    const prow = MAIN.filter((x) => pr[x]).map((x) => Object.assign({ key: x, statL: STAT[x] }, pr[x]));
+    table($("#wy-prog"), prow, [
+      { f: "statL", h: "Statystyka", nw: true },
+      { f: "n", h: "Drużyny × mecze", num: true, fmt: int },
+      { f: "srednia_prognoza", h: "Prognoza średnio", num: true, fmt: d1 },
+      { f: "srednia_fakt", h: "Padło średnio", num: true, fmt: d1 },
+      { f: "progi_70_proc", h: "Progi 70%: trafione", num: true, fmt: (v, r) => (empty(v) ? "—" : pct(v) + " (" + r.progi_70_trafione + "/" + r.progi_70 + ")"), cls: (v) => (empty(v) ? "" : v >= 0.62 ? "c-win" : "c-loss") },
+    ], "key", { nosortAll: true });
+    if (!prow.length) $("#wy-prog").replaceChildren(el("caption", "c-muted", "Porównania pojawią się po pierwszych rozegranych meczach z zapisaną prognozą."));
+  }
+
+  // ================================================================== Mecze
+  function inLiga(m, f) {
+    const mm = meta();
+    if (!f || f === "main") return (mm.puchary || []).includes(m.liga_id) || (mm.top15 || []).includes(m.liga_id);
+    if (f === "all") return true;
+    if (f === "cups") return (mm.puchary || []).includes(m.liga_id);
+    return String(m.liga_id) === f;
+  }
+  function fillLiga(sel, value) {
+    const ids = [...new Set(matches().map((m) => m.liga_id))].sort((a, b) => ligaRank(a) - ligaRank(b));
+    const opts = [new Option("Top 15 lig + puchary", "main"), new Option("Puchary europejskie", "cups"), new Option("Wszystkie, z ligami dodatkowymi", "all")];
+    ids.forEach((id) => opts.push(new Option(ligaName(id), String(id))));
+    if (sel.options.length !== opts.length) sel.replaceChildren(...opts);
+    sel.value = value || "main";
+  }
+  function pickedMatches() {
+    const out = new Set();
+    Object.values(st("typy") || {}).forEach((d) => { (d.top || []).forEach((p) => out.add(String(p.fixture_id))); ((d.kupon && d.kupon.legs) || []).forEach((l) => out.add(String(l.fixture_id))); });
+    return out;
+  }
   function renderMecze() {
     const box = $("#m-list");
-    if (!st("mecze")) { box.replaceChildren(el("div", "mk-card", "Wczytywanie meczów…")); return; }
-    fillLigaSelect($("#m-liga"), S.mz.liga);
-    const all = matches().filter((m) => inLigaFilter(m, S.mz.liga));
+    if (!st("mecze")) { box.replaceChildren(el("div", "card", "Wczytywanie meczów…")); return; }
+    fillLiga($("#m-liga"), S.mz.liga);
+    const all = matches().filter((m) => inLiga(m, S.mz.liga));
     const keys = [...new Set(all.map((m) => dayKey(m.start)))].sort();
-    if (!S.mz.day || !keys.includes(S.mz.day)) S.mz.day = keys.find((k) => k >= dayKey(new Date().toISOString())) || keys[0] || "";
-    $("#m-days").replaceChildren(...keys.map((k) => chip(dayLabel(k), k === S.mz.day, () => { S.mz.day = k; render(); },
-      all.filter((m) => dayKey(m.start) === k).length)));
+    if (!S.mz.day || !keys.includes(S.mz.day)) S.mz.day = keys.find((k) => k >= todayKey()) || keys[0] || "";
+    $("#m-days").replaceChildren(...keys.map((k) => chip(dayLabel(k), k === S.mz.day, () => { S.mz.day = k; render(); }, all.filter((m) => dayKey(m.start) === k).length)));
     const q = (S.mz.q || "").trim().toLowerCase();
-    const list = all.filter((m) => dayKey(m.start) === S.mz.day && (!q || (m.gosp + " " + m.gosc).toLowerCase().includes(q)))
-      .sort((a, b) => ligaRank(a.liga_id) - ligaRank(b.liga_id) || a.start.localeCompare(b.start));
-    const picks = pickKeys();
-    const pickFix = new Set([...picks].map((k) => k.split("|")[0]));
+    const list = all.filter((m) => dayKey(m.start) === S.mz.day && (!q || (m.gosp + " " + m.gosc).toLowerCase().includes(q))).sort(byOrder);
+    const picked = pickedMatches();
     box.replaceChildren();
-    if (!list.length) { box.append(el("div", "mk-card", q ? "Brak meczów pasujących do wyszukiwania." : "Brak meczów w tym dniu.")); return; }
-    let group = null, groupBox = null;
+    if (!list.length) { box.append(el("div", "card", q ? "Brak meczów pasujących do wyszukiwania." : "Brak meczów w tym dniu.")); return; }
+    let group = null, gb = null;
     list.forEach((m) => {
-      if (m.liga_id !== group) {
-        group = m.liga_id;
-        groupBox = el("div", "mk-card mk-group");
-        groupBox.append(el("h3", null, ligaName(m.liga_id)));
-        box.append(groupBox);
-      }
-      const b = el("button", "mk-match");
+      if (m.liga_id !== group) { group = m.liga_id; gb = el("div", "card group"); gb.append(el("h3", null, ligaName(m.liga_id))); box.append(gb); }
+      const b = el("button", "match");
       b.type = "button";
       b.append(el("span", "tm", hm(m.start)));
       const mid = el("span");
       mid.append(el("span", "tt", m.gosp + " – " + m.gosc));
-      mid.append(el("span", "st", " " + ["shots", "corners"].map((s) => STAT[s] + " " + d1(m.m[s][0]) + "–" + d1(m.m[s][1])).join(" · ")));
+      mid.append(el("span", "st", ["shots", "corners", "cards"].map((s) => STAT[s] + " " + d1(m.m[s][0]) + "–" + d1(m.m[s][1])).join(" · ")));
       b.append(mid);
       const bd = el("span", "bd");
-      if (pickFix.has(String(m.id))) bd.append(el("span", "mk-chip c-win", "typ dnia"));
-      if (m.kursy && m.kursy.length) bd.append(el("span", "mk-chip", "kursy"));
-      if (m.wyr && m.wyr.length) bd.append(el("span", "mk-chip", "sygnały: " + m.wyr.length));
-      if (m.status && !["NS", "TBD"].includes(m.status)) bd.append(el("span", "mk-chip c-warn", m.status === "FT" ? "koniec" : "trwa"));
+      if (picked.has(String(m.id))) bd.append(el("span", "chip c-win", "typ dnia"));
+      if (m.status && !["NS", "TBD"].includes(m.status)) bd.append(el("span", "chip c-warn", m.status === "FT" ? "koniec" : "trwa"));
       b.append(bd);
       b.addEventListener("click", () => openMatch(m.id));
-      groupBox.append(b);
+      gb.append(b);
     });
   }
-  function openMatch(id) { S.mecz = String(id); S.calc = null; show("mecz", true); }
   $("#m-liga").addEventListener("change", (e) => { S.mz.liga = e.target.value; S.mz.day = ""; render(); });
   $("#m-q").addEventListener("input", (e) => { S.mz.q = e.target.value; render(); });
   $("#mz-back").addEventListener("click", () => show("mecze", true));
 
-  // ------------------------------------------------------------------ Mecz
+  // ================================================================== Mecz
   function renderMecz() {
     const m = matchById(S.mecz);
     if (!m) {
-      $("#mz-title").textContent = st("mecze") ? "Nie znaleziono meczu (może już się odbył)." : "Wczytywanie…";
-      ["#mz-meta", "#mz-stats", "#mz-why", "#c-out", "#mz-teams"].forEach((s) => $(s).replaceChildren());
+      $("#mz-title").textContent = st("mecze") ? "Nie znaleziono meczu (mógł się już odbyć)." : "Wczytywanie…";
+      ["#mz-meta", "#mz-stats", "#mz-why", "#c-out", "#mz-teams", "#mz-picks"].forEach((s) => $(s).replaceChildren());
       return;
     }
     const facts = $("#mz-meta");
     facts.replaceChildren();
-    const fact = (label, value) => { const s = el("span"); s.append(label + " ", el("b", null, value)); facts.append(s); };
-    fact("", ligaName(m.liga_id));
-    fact("", day(m.start) + ", " + hm(m.start));
-    if (m.runda) fact("Runda:", m.runda.replace("League Stage", "faza ligowa").replace("Regular Season", "kolejka"));
-    if (m.sedzia) fact("Sędzia:", m.sedzia);
-    if (m.n && Math.min(m.n[0] || 0, m.n[1] || 0) < 10) {
-      const w = el("span", "c-warn", "Mało danych: " + (m.n[0] < 10 ? m.gosp + " ma " + (m.n[0] || 0) : m.gosc + " ma " + (m.n[1] || 0)) +
-        " meczów ze statystykami w ostatnim roku, prognoza opiera się głównie na średniej jej ligi.");
-      facts.append(w);
-    }
+    fact(facts, "", ligaName(m.liga_id));
+    fact(facts, "", day(m.start) + ", " + hm(m.start));
+    if (m.sedzia) fact(facts, "Sędzia:", m.sedzia);
+    if (m.n && Math.min(m.n[0] || 0, m.n[1] || 0) < 10) facts.append(el("span", "c-warn", "Mało danych o " + (m.n[0] < 10 ? m.gosp : m.gosc) + ": prognoza opiera się głównie na średniej jej ligi."));
     $("#mz-title").textContent = m.gosp + " – " + m.gosc;
     const cards = $("#mz-stats");
     cards.replaceChildren();
-    MAIN_STATS.forEach((s) => {
+    MAIN.forEach((s) => {
       const v = m.m[s];
       if (!v) return;
-      const c = el("div", "mk-stat");
+      const c = el("div", "stat");
       c.append(el("span", "l", STAT[s]));
       const val = el("div", "v");
       val.append(el("span", null, d1(v[0])), el("span", null, d1(v[1])));
-      const bar = el("div", "mk-bar");
-      const h = el("span", "h"), a = el("span", "a");
-      const tot = v[0] + v[1] || 1;
-      h.style.width = (100 * v[0] / tot).toFixed(1) + "%";
-      a.style.width = (100 * v[1] / tot).toFixed(1) + "%";
+      const bar = el("div", "bar"), h = el("span", "h"), a = el("span", "a"), tot = v[0] + v[1] || 1;
+      h.style.width = (100 * v[0] / tot).toFixed(1) + "%"; a.style.width = (100 * v[1] / tot).toFixed(1) + "%";
       bar.append(h, a);
       c.append(val, bar, el("span", "s", "łącznie " + d1(v[0] + v[1])));
       cards.append(c);
     });
+    // picks of this match: logged picks first, then other candidates of its day
+    const mp = $("#mz-picks");
+    mp.replaceChildren();
+    const shown = new Set();
+    Object.values(st("typy") || {}).forEach((d) => {
+      (d.top || []).filter((p) => String(p.fixture_id) === String(m.id)).forEach((p) => { shown.add(p.stat + p.scope); mp.append(pickCard(p)); });
+      (d.kandydaci || []).filter((p) => String(p.fixture_id) === String(m.id) && !shown.has(p.stat + p.scope)).slice(0, 3).forEach((p) => { shown.add(p.stat + p.scope); mp.append(pickCard(p)); });
+    });
+    $("#mz-picks-card").hidden = !mp.children.length;
     const why = $("#mz-why");
-    why.replaceChildren(...(m.wyr && m.wyr.length ? m.wyr : ["Brak wyraźnych sygnałów: żadna drużyna nie jest skrajna w swojej lidze w tym, co tworzy i na co pozwala rywalom."]).map((t) => el("li", null, t)));
+    why.replaceChildren(...(m.wyr || []).map((t) => el("li", null, t)));
+    $("#mz-why-card").hidden = !(m.wyr && m.wyr.length);
     renderCalc(m);
     renderProgi(m);
-    renderKursy(m);
     renderTeams(m);
+    renderKursy(m);
   }
   function renderCalc(m) {
     const ss = $("#c-stat"), sc = $("#c-scope"), ln = $("#c-line");
-    if (!S.calc || S.calc.id !== m.id) {
-      S.calc = { id: m.id, stat: "shots", scope: "home", line: null };
-      ss.replaceChildren(...MAIN_STATS.map((s) => new Option(STAT[s], s)));
-    }
+    if (!S.calc || S.calc.id !== m.id) { S.calc = { id: m.id, stat: "shots", scope: "home", line: null }; ss.replaceChildren(...MAIN.map((s) => new Option(STAT[s], s))); }
     sc.replaceChildren(new Option(m.gosp, "home"), new Option(m.gosc, "away"), new Option("łącznie w meczu", "total"));
-    ss.value = S.calc.stat;
-    sc.value = S.calc.scope;
+    ss.value = S.calc.stat; sc.value = S.calc.scope;
     const mu = meanOf(m, S.calc.stat, S.calc.scope);
     if (S.calc.line === null) S.calc.line = Math.floor(mu) + 0.5;
     if (document.activeElement !== ln) ln.value = S.calc.line;
-    const a = alphaOf(S.calc.stat, S.calc.scope, m.liga_id);
-    const t = nbTail(mu, a, S.calc.line);
+    const t = nbTail(mu, alphaOf(S.calc.stat, S.calc.scope, m.liga_id), S.calc.line);
     const offer = (m.kursy || []).find((k) => k[0] === S.calc.stat && k[1] === S.calc.scope && k[2] === S.calc.line);
     const out = $("#c-out");
     out.replaceChildren();
+    const who = S.calc.scope === "total" ? "W meczu" : (S.calc.scope === "home" ? m.gosp : m.gosc);
     const box = (title, p, odd, bm) => {
-      const c = el("div", "mk-stat");
-      c.append(el("span", "l", title), el("span", "mk-big", pct(p, 0)));
-      c.append(el("span", "s", "kurs uczciwy " + dec(fairOdds(p)) + " · min. kurs z podatkiem " + dec(minOdds(p))));
-      if (odd) {
-        const ev = p * odd * TAX + t.push * TAX - 1;
-        const s = el("span", "s");
-        s.append("najlepszy kurs " + dec(odd) + " (" + bm + "), zysk z podatkiem ", el("b", sign(ev), spct(ev)));
-        c.append(s);
-      }
+      const c = el("div", "stat");
+      c.append(el("span", "l", title), el("span", "big", pct(p)));
+      c.append(el("span", "s", "kurs uczciwy " + dec(fairOdds(p)) + " · graj od kursu " + dec(minOdds(p))));
+      if (odd) { const s = el("span", "s"); const ev = p * odd * TAX + t.push * TAX - 1; s.append("w serwisie " + dec(odd) + " (" + bm + "), zysk z podatkiem ", el("b", sign(ev), spct(ev))); c.append(s); }
       return c;
     };
-    const who = S.calc.scope === "total" ? "W meczu" : (S.calc.scope === "home" ? m.gosp : m.gosc);
     out.append(box(who + ": " + STAT[S.calc.stat].toLowerCase() + " powyżej " + line(S.calc.line), t.over, offer && offer[3], offer && offer[4]));
     out.append(box(who + ": " + STAT[S.calc.stat].toLowerCase() + " poniżej " + line(S.calc.line), t.under, offer && offer[5], offer && offer[6]));
-    const info = el("div", "mk-stat");
-    info.append(el("span", "l", "Średnio wg modelu"), el("span", "mk-big", d1(mu)));
-    if (t.push > 0) info.append(el("span", "s", "dokładnie " + line(S.calc.line) + ": " + pct(t.push, 0) + " (zwrot)"));
-    if (offer && offer[7] !== null) info.append(el("span", "s", "rynek: powyżej " + pct(offer[7], 0)));
-    const add = el("button", "mk-btn ghost", "Dodaj do zakładów");
+    const info = el("div", "stat");
+    info.append(el("span", "l", "Średnio wg modelu"), el("span", "big", d1(mu)));
+    if (t.push > 0) info.append(el("span", "s", "dokładnie " + line(S.calc.line) + ": " + pct(t.push) + " (zwrot)"));
+    const add = el("button", "btn ghost sm", "Dodaj „powyżej” do zakładów");
     add.type = "button";
-    add.addEventListener("click", () => draftBet({
-      mecz: m.gosp + " – " + m.gosc, rozgr: ligaName(m.liga_id), data: dayKey(m.start), szansa: t.over,
-      opis: who + ": " + NOUN[S.calc.stat] + " powyżej " + line(S.calc.line),
-      kurs: offer ? offer[3] : null, nogi: [{ fixture_id: m.id, stat: S.calc.stat, scope: S.calc.scope, line: S.calc.line, side: "over" }],
-    }));
+    add.addEventListener("click", () => draftBet({ mecz: m.gosp + " – " + m.gosc, rozgr: ligaName(m.liga_id), data: dayKey(m.start), szansa: t.over,
+      opis: who + ": " + NOUN[S.calc.stat] + " powyżej " + line(S.calc.line), kurs: offer ? offer[3] : null,
+      nogi: [{ fixture_id: m.id, stat: S.calc.stat, scope: S.calc.scope, line: S.calc.line, side: "over" }] }));
     info.append(add);
     out.append(info);
   }
-  $("#mz-all").addEventListener("change", (e) => { S.allLines = e.target.checked; render(); });
   $("#c-stat").addEventListener("change", (e) => { if (S.calc) { S.calc.stat = e.target.value; S.calc.line = null; } render(); });
   $("#c-scope").addEventListener("change", (e) => { if (S.calc) { S.calc.scope = e.target.value; S.calc.line = null; } render(); });
-  $("#c-line").addEventListener("input", (e) => {
-    const v = parseFloat(e.target.value);
-    if (S.calc && Number.isFinite(v) && v > 0) { S.calc.line = Math.round(v * 2) / 2; render(); }
-  });
+  $("#c-line").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (S.calc && Number.isFinite(v) && v > 0) { S.calc.line = Math.round(v * 2) / 2; render(); } });
   function renderProgi(m) {
-    const rowsP = [];
-    [["home", m.gosp], ["away", m.gosc], ["total", "łącznie"]].forEach(([scope, who]) => {
-      MAIN_STATS.forEach((s) => {
+    const rows = [];
+    [["home", m.gosp], ["away", m.gosc], ["total", "Łącznie w meczu"]].forEach(([scope, who]) => {
+      rows.push({ _grp: who });
+      MAIN.forEach((s) => {
         const mu = meanOf(m, s, scope);
         if (mu === null) return;
-        const a = alphaOf(s, scope, m.liga_id);
-        const t70 = threshold(mu, a, 0.70), t55 = threshold(mu, a, 0.55);
-        rowsP.push({ key: scope + s, kto: who, stat: STAT[s], mu,
-          k70: t70 && t70.k, p70: t70 && t70.p, o70: t70 && minOdds(t70.p),
-          k55: t55 && t55.k, p55: t55 && t55.p, o55: t55 && minOdds(t55.p) });
+        const a = alphaOf(s, scope, m.liga_id), t70 = threshold(mu, a, 0.70), t55 = threshold(mu, a, 0.55);
+        rows.push({ key: scope + s, stat: STAT[s], mu, k70: t70 && t70.k, p70: t70 && t70.p, o70: t70 && minOdds(t70.p), k55: t55 && t55.k, p55: t55 && t55.p, o55: t55 && minOdds(t55.p) });
       });
     });
-    table($("#mz-progi"), rowsP, [
-      { f: "kto", h: "Kto", nw: true },
+    table($("#mz-progi"), rows, [
       { f: "stat", h: "Statystyka", nw: true },
       { f: "mu", h: "Średnio", num: true, fmt: d1 },
-      { f: "k70", h: "≥ (70%)", num: true, fmt: (v, r) => (v ? "co najmniej " + v : "—") },
-      { f: "p70", h: "Szansa", num: true, fmt: (v) => pct(v, 0) },
-      { f: "o70", h: "Min. kurs", num: true, fmt: dec },
-      { f: "k55", h: "≥ (55%)", num: true, fmt: (v) => (v ? "co najmniej " + v : "—") },
-      { f: "p55", h: "Szansa", num: true, fmt: (v) => pct(v, 0) },
-      { f: "o55", h: "Min. kurs", num: true, fmt: dec },
+      { f: "k70", h: "Co najmniej (70%)", num: true, fmt: (v) => (v ? String(v) : "—") },
+      { f: "p70", h: "Szansa", num: true, fmt: (v) => pct(v) },
+      { f: "o70", h: "Graj od kursu", num: true, fmt: dec },
+      { f: "k55", h: "Co najmniej (55%)", num: true, fmt: (v) => (v ? String(v) : "—") },
+      { f: "p55", h: "Szansa", num: true, fmt: (v) => pct(v) },
+      { f: "o55", h: "Graj od kursu", num: true, fmt: dec },
     ], "key", { nosortAll: true });
-  }
-  function renderKursy(m) {
-    const picks = pickKeys();
-    const rowsK = (m.kursy || []).map((k) => {
-      const [stat, scope, ln, oOver, bOver, oUnder, bUnder, qOver, nBm] = k;
-      const mu = meanOf(m, stat, scope);
-      const t = nbTail(mu, alphaOf(stat, scope, m.liga_id), ln);
-      const evO = oOver ? t.over * oOver * TAX + t.push * TAX - 1 : null;
-      const evU = oUnder ? t.under * oUnder * TAX + t.push * TAX - 1 : null;
-      return { key: stat + scope + ln, stat, scope, ln, statL: STAT[stat] || stat, kto: scope === "home" ? m.gosp : scope === "away" ? m.gosc : "łącznie",
-        pO: t.over, q: qOver, oOver, bOver, oUnder, bUnder, evO, evU, nBm,
-        typ: picks.has(m.id + "|" + stat + "|" + scope + "|" + ln + "|over") ? "powyżej" : picks.has(m.id + "|" + stat + "|" + scope + "|" + ln + "|under") ? "poniżej" : "" };
-    }).sort((a, b) => statOrder(a.stat) - statOrder(b.stat) || SCOPE_ORDER[a.scope] - SCOPE_ORDER[b.scope] || a.ln - b.ln);
-    // by default only the lines near the middle of the market (where its probability is 20-80%)
-    const shown = S.allLines ? rowsK : rowsK.filter((r) => r.q === null || (r.q >= 0.2 && r.q <= 0.8));
-    $("#mz-all").checked = !!S.allLines;
-    $("#mz-lines").textContent = "Pokazano " + shown.length + " z " + rowsK.length + " linii.";
-    table($("#mz-kursy"), shown, [
-      { f: "statL", h: "Statystyka", nw: true },
-      { f: "kto", h: "Kto", nw: true },
-      { f: "ln", h: "Linia", num: true, fmt: line },
-      { f: "pO", h: "Model: powyżej", num: true, fmt: (v) => pct(v, 0) },
-      { f: "q", h: "Rynek: powyżej", num: true, fmt: (v) => pct(v, 0) },
-      { f: "oOver", h: "Powyżej: kurs", num: true, render: (td, r) => { td.textContent = r.oOver ? dec(r.oOver) + " " : "—"; if (r.bOver) td.append(el("span", "c-muted", r.bOver)); } },
-      { f: "evO", h: "Zysk (z podatkiem)", num: true, fmt: (v) => spct(v, 0), cls: (v, r) => (v > 0 && PICKABLE.has(r.stat) ? "c-win" : v > 0 ? "c-warn" : "c-muted") },
-      { f: "oUnder", h: "Poniżej: kurs", num: true, render: (td, r) => { td.textContent = r.oUnder ? dec(r.oUnder) + " " : "—"; if (r.bUnder) td.append(el("span", "c-muted", r.bUnder)); } },
-      { f: "evU", h: "Zysk (z podatkiem)", num: true, fmt: (v) => spct(v, 0), cls: (v, r) => (v > 0 && PICKABLE.has(r.stat) ? "c-win" : v > 0 ? "c-warn" : "c-muted") },
-      { f: "typ", h: "Typ dnia", render: (td, r) => { if (r.typ) td.append(el("span", "mk-chip c-win", r.typ)); } },
-      { f: "_add", h: "", nosort: true, nw: true, render: (td, r) => {
-        [["over", "powyżej", r.pO, r.oOver], ["under", "poniżej", 1 - r.pO, r.oUnder]].forEach(([side, word, p, odd]) => {
-          const b = el("button", "mk-btn ghost sm", "+ " + (side === "over" ? "pow." : "pon."));
-          b.title = "Dodaj do zakładów: " + word + " " + line(r.ln);
-          b.type = "button";
-          b.addEventListener("click", (ev) => { ev.stopPropagation(); draftBet({
-            mecz: m.gosp + " – " + m.gosc, rozgr: ligaName(m.liga_id), data: dayKey(m.start), szansa: p, kurs: odd,
-            opis: r.kto + ": " + NOUN[r.stat] + " " + word + " " + line(r.ln),
-            nogi: [{ fixture_id: m.id, stat: r.stat, scope: r.scope, line: r.ln, side }] }); });
-          td.append(b);
-        });
-      } },
-    ], "key");
-    if (!rowsK.length) $("#mz-kursy").replaceChildren(el("caption", "c-muted", "Brak kursów na statystyki dla tego meczu (pobieram je na 3 dni przed meczem)."));
   }
   function renderTeams(m) {
     const box = $("#mz-teams");
     box.replaceChildren();
     [[m.gosp_id, m.gosp], [m.gosc_id, m.gosc]].forEach(([id, name]) => {
       const t = teamOf(id);
-      const c = el("div", "mk-card");
+      const c = el("div", "card");
       c.append(el("h2", null, name));
-      if (!t) { c.append(el("p", "mk-note", "Brak danych o drużynie.")); box.append(c); return; }
-      c.append(el("p", "mk-note", ligaName(t.liga_id) + (t.mecze_w_sezonie ? " · mecze ligowe w tym sezonie: " + t.mecze_w_sezonie : "")));
-      const seasonRows = MAIN_STATS.filter((s) => t.sezon[s]).map((s) => ({ key: s, stat: STAT[s], za: t.sezon[s][0], przeciw: t.sezon[s][1],
-        mz: t.miejsce[s] ? t.miejsce[s][0] : null, mp: t.miejsce[s] ? t.miejsce[s][1] : null, n: t.miejsce[s] ? t.miejsce[s][2] : null }));
-      const w1 = el("div", "mk-wrap short");
-      const t1 = el("table", "mk-tbl");
+      if (!t) { c.append(el("p", "note", "Brak danych o drużynie.")); box.append(c); return; }
+      c.append(el("p", "note", ligaName(t.liga_id) + (t.sezon_nazwa ? " · sezon " + t.sezon_nazwa : "") + (t.mecze_w_sezonie ? " · meczów ze statystykami: " + t.mecze_w_sezonie : "")));
+      const rank = (r, n) => (r ? (r <= (n + 1) / 2 ? r + ". najwięcej" : (n - r + 1) + ". najmniej") : "");
+      const srows = MAIN.filter((s) => t.sezon[s]).map((s) => ({ key: s, stat: STAT[s], za: t.sezon[s][0], przeciw: t.sezon[s][1],
+        rz: t.miejsce[s] ? rank(t.miejsce[s][0], t.miejsce[s][2]) : "", rp: t.miejsce[s] ? rank(t.miejsce[s][1], t.miejsce[s][2]) : "" }));
+      const w1 = el("div", "wrap short"), t1 = el("table", "tbl");
       w1.append(t1);
-      c.append(el("h3", null, "Sezon w lidze: średnio na mecz"), w1);
-      table(t1, seasonRows, [
+      c.append(el("h3", null, "Liga, średnio na mecz"), w1);
+      table(t1, srows, [
         { f: "stat", h: "Statystyka", nw: true },
         { f: "za", h: "Sami", num: true, fmt: d1 },
-        { f: "mz", h: "Miejsce", num: true, fmt: (v, r) => (v ? v + "/" + r.n : "—") },
+        { f: "rz", h: "w lidze", nw: true, cls: () => "c-muted" },
         { f: "przeciw", h: "Rywale", num: true, fmt: d1 },
-        { f: "mp", h: "Miejsce", num: true, fmt: (v, r) => (v ? v + "/" + r.n : "—") },
+        { f: "rp", h: "w lidze", nw: true, cls: () => "c-muted" },
       ], "key", { nosortAll: true });
-      c.append(el("p", "mk-note", "Miejsce 1 = najwięcej w lidze (dla „Rywale”: rywale tej drużyny mają tego najwięcej)."));
-      const w2 = el("div", "mk-wrap short");
-      const t2 = el("table", "mk-tbl");
+      const w2 = el("div", "wrap short"), t2 = el("table", "tbl");
       w2.append(t2);
-      c.append(el("h3", null, "Ostatnie 5 meczów (sami – rywale)"), w2);
+      c.append(el("h3", null, "Ostatnie 5 meczów (sami–rywale)"), w2);
       table(t2, (t.ost5 || []).map((g, i) => Object.assign({ key: i }, g)), [
         { f: "data", h: "Data", nw: true, fmt: (v) => (v ? v.split("-").reverse().slice(0, 2).join(".") : "—") },
         { f: "rywal", h: "Rywal", render: (td, r) => { td.textContent = r.rywal + " "; td.append(el("span", "c-muted", (r.dom ? "(d) " : "(w) ") + r.rozgr)); } },
-        ...["shots", "sot", "corners", "fouls", "cards"].map((s) => ({ f: s, h: STAT[s], num: true, nosort: true,
-          fmt: (v, r) => (r.s && r.s[s] ? int(r.s[s][0]) + "–" + int(r.s[s][1]) : "—") })),
+        ...["shots", "sot", "corners", "cards"].map((s) => ({ f: s, h: STAT[s], num: true, fmt: (v, r) => (r.s && r.s[s] ? int(r.s[s][0]) + "–" + int(r.s[s][1]) : "—") })),
       ], "key", { nosortAll: true });
       box.append(c);
     });
   }
-
-  // ------------------------------------------------------------------ Typy dnia
-  function renderTypyDnia() {
-    const all = st("typy");
-    if (!all) { $("#td-top").replaceChildren(el("div", "mk-card", "Wczytywanie…")); return; }
-    const keys = Object.keys(all).sort();
-    const today = dayKey(new Date().toISOString());
-    if (!S.td || !keys.includes(S.td)) S.td = keys.find((k) => k >= today) || keys[keys.length - 1];
-    $("#td-days").replaceChildren(...keys.map((k) => chip(dayLabel(k), k === S.td, () => { S.td = k; render(); }, (all[k].top || []).length)));
-    const d = all[S.td] || { top: [], kupony2: [], kupony3: [], kandydaci: [] };
-    const box = $("#td-top");
-    box.replaceChildren();
-    if (!d.top.length) box.append(el("div", "mk-card", "Na ten dzień model nie znalazł linii wyraźnie lepszych od rynku."));
-    d.top.forEach((p, i) => {
-      const m = matchById(p.fixture_id);
-      const c = el("div", "mk-pick");
-      const hd = el("div", "hd");
-      const ti = el("span", "ti", (i + 1) + ". " + p.opis);
-      hd.append(ti);
-      if (p.wynik) hd.append(el("span", "mk-chip " + (p.wynik === "wygrana" ? "c-win" : p.wynik === "przegrana" ? "c-loss" : "c-muted"), p.wynik + (p.wartosc !== null && p.wartosc !== undefined ? " (" + int(p.wartosc) + ")" : "")));
-      c.append(hd);
-      const sub = el("div", "mk-facts");
-      const fact = (label, value, cls) => { const s = el("span"); s.append(label + " ", el("b", cls || null, value)); sub.append(s); };
-      fact("", p.mecz + (m ? ", " + day(m.start) + " " + hm(m.start) : ""));
-      if (!empty(p.oczekiwane)) fact("Model oczekuje", d1(p.oczekiwane) + " przy linii " + line(p.line));
-      fact("Szansa wg modelu", pct(p.p_model, 0));
-      fact("wg rynku", pct(p.p_rynek, 0));
-      fact("Kurs", dec(p.kurs) + " (" + p.bukmacher + ")");
-      fact("Min. kurs z podatkiem", dec(p.kurs_min_z_podatkiem), "c-win");
-      fact("Zysk z podatkiem przy tym kursie", spct(p.ev_podatek, 0), sign(p.ev_podatek));
-      c.append(sub);
-      const row = el("div", "mk-row");
-      const add = el("button", "mk-btn ghost", "Dodaj do zakładów");
-      add.type = "button";
-      add.addEventListener("click", () => draftBet({ mecz: p.mecz, rozgr: m ? ligaName(m.liga_id) : "", data: m ? dayKey(m.start) : S.td,
-        opis: p.opis, kurs: p.kurs, szansa: p.p_model, nogi: [{ fixture_id: p.fixture_id, stat: p.stat, scope: p.scope, line: p.line, side: p.side }] }));
-      row.append(add);
-      if (m) {
-        const open = el("button", "mk-btn ghost", "Analiza meczu");
-        open.type = "button";
-        open.addEventListener("click", () => openMatch(m.id));
-        row.append(open);
-      }
-      c.append(row);
-      box.append(c);
-    });
-    const kb = $("#td-kupony");
-    kb.replaceChildren();
-    const coupons = [...(d.kupony2 || []), ...(d.kupony3 || [])];
-    if (!coupons.length) kb.append(el("p", "mk-note", "Brak kombinacji o łącznym kursie 1,8–2,5 z kandydatów tego dnia."));
-    coupons.slice(0, 6).forEach((k) => {
-      const c = el("div", "mk-pick");
-      const hd = el("div", "hd");
-      hd.append(el("span", "ti", "Kupon " + k.nogi.length + " nogi · kurs " + dec(k.kurs)), el("span", "mk-chip", "szansa " + pct(k.p_model, 0)));
-      c.append(hd);
-      const ul = el("ul", "mk-why");
-      k.nogi.forEach((n) => ul.append(el("li", null, n)));
-      c.append(ul);
-      const f = el("div", "mk-facts");
-      const s1 = el("span"); s1.append("Zysk z podatkiem ", el("b", sign(k.ev_podatek), spct(k.ev_podatek, 0)));
-      const s2 = el("span"); s2.append("Min. łączny kurs ", el("b", "c-win", dec(minOdds(k.p_model))));
-      f.append(s1, s2);
-      c.append(f);
-      const add = el("button", "mk-btn ghost", "Dodaj do zakładów");
-      add.type = "button";
-      add.addEventListener("click", () => draftBet({ rodzaj: "Kupon " + k.nogi.length, opis: k.nogi.join("\n"), kurs: k.kurs, szansa: k.p_model, data: S.td }));
-      c.append(add);
-      kb.append(c);
-    });
-    table($("#td-kand"), (d.kandydaci || []).map((p, i) => Object.assign({ key: i }, p)), [
-      { f: "mecz", h: "Mecz", wide: true },
-      { f: "opis", h: "Zdarzenie", wide: true },
-      { f: "p_model", h: "Model", num: true, fmt: (v) => pct(v, 0) },
-      { f: "p_rynek", h: "Rynek", num: true, fmt: (v) => pct(v, 0) },
-      { f: "kurs", h: "Kurs", num: true, fmt: dec },
-      { f: "bukmacher", h: "U kogo", nw: true },
-      { f: "kurs_min_z_podatkiem", h: "Min. kurs", num: true, fmt: dec },
-      { f: "ev_podatek", h: "Zysk z podatkiem", num: true, fmt: (v) => spct(v, 0), cls: sign },
-    ], "key", { sort: { f: "ev_podatek", dir: "desc" } });
+  function renderKursy(m) {
+    const order = (s) => { const i = MAIN.indexOf(s); return i < 0 ? 99 : i; };
+    const SC = { home: 0, away: 1, total: 2 };
+    const rows = (m.kursy || []).filter((k) => MAIN.includes(k[0])).map((k) => {
+      const [stat, scope, ln, oOver, bOver, oUnder, bUnder, qOver] = k;
+      const t = nbTail(meanOf(m, stat, scope), alphaOf(stat, scope, m.liga_id), ln);
+      return { key: stat + scope + ln, stat, scope, ln, statL: STAT[stat], kto: scope === "home" ? m.gosp : scope === "away" ? m.gosc : "łącznie",
+        pO: t.over, q: qOver, oOver, bOver, oUnder, bUnder,
+        evO: oOver ? t.over * oOver * TAX + t.push * TAX - 1 : null, evU: oUnder ? t.under * oUnder * TAX + t.push * TAX - 1 : null };
+    }).sort((a, b) => order(a.stat) - order(b.stat) || SC[a.scope] - SC[b.scope] || a.ln - b.ln);
+    const shown = S.allLines ? rows : rows.filter((r) => r.q === null || (r.q >= 0.2 && r.q <= 0.8));
+    $("#mz-all").checked = !!S.allLines;
+    $("#mz-lines").textContent = rows.length ? "Pokazano " + shown.length + " z " + rows.length + " linii." : "";
+    table($("#mz-kursy"), shown, [
+      { f: "statL", h: "Statystyka", nw: true },
+      { f: "kto", h: "Kto", nw: true },
+      { f: "ln", h: "Linia", num: true, fmt: line },
+      { f: "pO", h: "Model: powyżej", num: true, fmt: (v) => pct(v) },
+      { f: "q", h: "Rynek: powyżej", num: true, fmt: (v) => pct(v) },
+      { f: "oOver", h: "Powyżej", num: true, render: (td, r) => { td.textContent = r.oOver ? dec(r.oOver) + " " : "—"; if (r.bOver) td.append(el("span", "c-muted", r.bOver)); } },
+      { f: "evO", h: "zysk", num: true, fmt: (v) => spct(v), cls: (v, r) => (v > 0 && PICKABLE.has(r.stat) ? "c-win" : "c-muted") },
+      { f: "oUnder", h: "Poniżej", num: true, render: (td, r) => { td.textContent = r.oUnder ? dec(r.oUnder) + " " : "—"; if (r.bUnder) td.append(el("span", "c-muted", r.bUnder)); } },
+      { f: "evU", h: "zysk", num: true, fmt: (v) => spct(v), cls: (v, r) => (v > 0 && PICKABLE.has(r.stat) ? "c-win" : "c-muted") },
+    ], "key", { nosortAll: true });
+    if (!rows.length) $("#mz-kursy").replaceChildren(el("caption", "c-muted", "Brak kursów na statystyki dla tego meczu (pobieram je na 3 dni przed meczem)."));
   }
+  $("#mz-all").addEventListener("change", (e) => { S.allLines = e.target.checked; render(); });
 
-  // ------------------------------------------------------------------ Szukaj
+  // ================================================================== Szukaj
   function renderSzukaj() {
     if (!st("mecze")) return;
-    fillLigaSelect($("#sz-liga"), S.sz.liga);
+    fillLiga($("#sz-liga"), S.sz.liga);
     const ss = $("#sz-stat");
-    if (!ss.options.length) ss.replaceChildren(...MAIN_STATS.map((s) => new Option(STAT[s], s)));
-    ss.value = S.sz.stat;
-    $("#sz-kto").value = S.sz.kto;
-    $("#sz-typ").value = S.sz.typ;
-    $("#sz-dni").value = String(S.sz.dni);
-    const now = Date.now();
-    const lastDay = dayKey(new Date(now + (S.sz.dni - 1) * 864e5).toISOString());
-    const today = dayKey(new Date(now).toISOString());
+    if (!ss.options.length) ss.replaceChildren(...MAIN.map((s) => new Option(STAT[s], s)));
+    ss.value = S.sz.stat; $("#sz-kto").value = S.sz.kto; $("#sz-typ").value = S.sz.typ; $("#sz-dni").value = String(S.sz.dni);
+    const t = todayKey(), last = dayKey(new Date(Date.now() + (S.sz.dni - 1) * 864e5).toISOString());
     const pmin = Math.min(0.99, Math.max(0.01, (parseFloat($("#sz-p").value) || 70) / 100));
     const kFixed = parseInt($("#sz-k").value, 10);
     const res = [];
-    matches().forEach((m) => {
+    matches().slice().sort(byOrder).forEach((m) => {
       const dk = dayKey(m.start);
-      if (dk < today || dk > lastDay || !inLigaFilter(m, S.sz.liga)) return;
+      if (dk < t || dk > last || !inLiga(m, S.sz.liga)) return;
       if (S.sz.kursy && !(m.kursy && m.kursy.length)) return;
       if (m.status && !["NS", "TBD"].includes(m.status)) return;
-      const scopes = S.sz.kto === "any" ? ["home", "away"] : [S.sz.kto];
-      scopes.forEach((scope) => {
+      (S.sz.kto === "any" ? ["home", "away"] : [S.sz.kto]).forEach((scope) => {
         const mu = meanOf(m, S.sz.stat, scope);
         if (mu === null) return;
         const a = alphaOf(S.sz.stat, scope, m.liga_id);
         let k = null, p = null;
-        if (Number.isFinite(kFixed)) {
-          k = kFixed;
-          p = S.sz.typ === "min" ? atLeast(mu, a, k) : atMost(mu, a, k);
-        } else if (S.sz.typ === "min") {
-          const t = threshold(mu, a, pmin);
-          if (t) { k = t.k; p = t.p; }
-        } else {
-          for (let x = 0; x < 80; x++) { const q = atMost(mu, a, x); if (q >= pmin) { k = x; p = q; break; } }
-        }
+        if (Number.isFinite(kFixed)) { k = kFixed; p = S.sz.typ === "min" ? atLeast(mu, a, k) : atMost(mu, a, k); }
+        else if (S.sz.typ === "min") { const th = threshold(mu, a, pmin); if (th) { k = th.k; p = th.p; } }
+        else { for (let x = 0; x < 80; x++) { const q = atMost(mu, a, x); if (q >= pmin) { k = x; p = q; break; } } }
         if (k === null || p < pmin) return;
         const who = scope === "home" ? m.gosp : scope === "away" ? m.gosc : "łącznie";
         const ln = S.sz.typ === "min" ? k - 0.5 : k + 0.5;
@@ -1822,8 +987,7 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
         const odd = offer ? (S.sz.typ === "min" ? offer[3] : offer[5]) : null;
         res.push({ key: m.id + scope, m, start: m.start, mecz: m.gosp + " – " + m.gosc, liga: ligaShort(m.liga_id),
           opis: who + ": " + (S.sz.typ === "min" ? "co najmniej " : "co najwyżej ") + k + " " + NOUN[S.sz.stat],
-          mu, p, fair: fairOdds(p), min: minOdds(p), odd, bm: offer ? (S.sz.typ === "min" ? offer[4] : offer[6]) : null,
-          ev: odd ? p * odd * TAX - 1 : null, scope, ln, k });
+          mu, p, min: minOdds(p), odd, bm: offer ? (S.sz.typ === "min" ? offer[4] : offer[6]) : null, scope, ln });
       });
     });
     $("#sz-count").textContent = "Wyniki: " + int(res.length);
@@ -1833,54 +997,39 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
       { f: "mecz", h: "Mecz", wide: true },
       { f: "opis", h: "Zdarzenie", wide: true },
       { f: "mu", h: "Średnio", num: true, fmt: d1 },
-      { f: "p", h: "Szansa", num: true, fmt: (v) => pct(v, 0) },
-      { f: "fair", h: "Kurs uczciwy", num: true, fmt: dec },
-      { f: "min", h: "Min. kurs z podatkiem", num: true, fmt: dec, cls: () => "c-win" },
+      { f: "p", h: "Szansa", num: true, fmt: (v) => pct(v) },
+      { f: "min", h: "Graj od kursu", num: true, fmt: dec, cls: () => "c-win" },
       { f: "odd", h: "Kurs w serwisie", num: true, render: (td, r) => { td.textContent = r.odd ? dec(r.odd) + " " : "—"; if (r.bm) td.append(el("span", "c-muted", r.bm)); } },
-      { f: "ev", h: "Zysk z podatkiem", num: true, fmt: (v) => spct(v, 0), cls: sign },
-      { f: "_a", h: "", nosort: true, render: (td, r) => {
-        const b = el("button", "mk-btn ghost sm", "Analiza");
-        b.type = "button";
-        b.addEventListener("click", (ev) => { ev.stopPropagation(); openMatch(r.m.id); });
-        const add = el("button", "mk-btn ghost sm", "+ zakład");
-        add.type = "button";
-        add.addEventListener("click", (ev) => { ev.stopPropagation(); draftBet({ mecz: r.mecz, rozgr: ligaName(r.m.liga_id), data: dayKey(r.start),
-          opis: r.opis, kurs: r.odd, szansa: r.p, nogi: [{ fixture_id: r.m.id, stat: S.sz.stat, scope: r.scope, line: r.ln, side: S.sz.typ === "min" ? "over" : "under" }] }); });
+      { f: "_a", h: "", nosort: true, nw: true, render: (td, r) => {
+        const b = el("button", "btn ghost sm", "Analiza"); b.type = "button"; b.addEventListener("click", () => openMatch(r.m.id));
+        const add = el("button", "btn ghost sm", "+ zakład"); add.type = "button";
+        add.addEventListener("click", () => draftBet({ mecz: r.mecz, rozgr: ligaName(r.m.liga_id), data: dayKey(r.start), opis: r.opis, kurs: r.odd, szansa: r.p,
+          nogi: [{ fixture_id: r.m.id, stat: S.sz.stat, scope: r.scope, line: r.ln, side: S.sz.typ === "min" ? "over" : "under" }] }));
         td.append(b, add);
       } },
-    ], "key", { sort: { f: "p", dir: "desc" } });
+    ], "key", { sort: null });
   }
-  [["#sz-liga", "liga"], ["#sz-stat", "stat"], ["#sz-kto", "kto"], ["#sz-typ", "typ"]].forEach(([sel, k]) =>
-    $(sel).addEventListener("change", (e) => { S.sz[k] = e.target.value; render(); }));
+  [["#sz-liga", "liga"], ["#sz-stat", "stat"], ["#sz-kto", "kto"], ["#sz-typ", "typ"]].forEach(([sel, k]) => $(sel).addEventListener("change", (e) => { S.sz[k] = e.target.value; render(); }));
   $("#sz-dni").addEventListener("change", (e) => { S.sz.dni = parseInt(e.target.value, 10) || 3; render(); });
   ["#sz-k", "#sz-p"].forEach((s) => $(s).addEventListener("input", () => render()));
   $("#sz-kursy").addEventListener("change", (e) => { S.sz.kursy = e.target.checked; render(); });
 
-  // ------------------------------------------------------------------ Moje zakłady
-  const ZK_FIELDS = ["data", "mecz", "rozgr", "rodzaj", "opis", "buk", "kurs", "stawka", "tryb", "szansa", "wynik", "notatki"];
+  // ================================================================== Moje zakłady
   function draftBet(d) {
     S.zkEdit = null;
-    S.zkDraft = Object.assign({ rodzaj: "Singiel", tryb: "Realny", stawka: 10, data: dayKey(new Date().toISOString()) }, d);
+    S.zkDraft = Object.assign({ rodzaj: "Singiel", tryb: "Realny", stawka: 10, data: todayKey() }, d);
     fillBetForm(S.zkDraft);
     show("zaklady", true);
     setTimeout(() => { const f = $("#zk-kurs"); if (f) f.focus(); }, 50);
   }
   function fillBetForm(d) {
     $("#zk-form-title").textContent = S.zkEdit ? "Edytuj zakład" : "Dodaj zakład";
-    $("#zk-data").value = d.data || "";
-    $("#zk-mecz").value = d.mecz || "";
-    $("#zk-rozgr").value = d.rozgr || "";
-    $("#zk-rodzaj").value = d.rodzaj || "Singiel";
-    $("#zk-opis").value = d.opis || "";
-    $("#zk-buk").value = d.buk || "";
-    $("#zk-kurs").value = d.kurs ? Number(d.kurs).toFixed(2) : "";
-    $("#zk-stawka").value = d.stawka || 10;
-    $("#zk-tryb").value = d.tryb || "Realny";
-    $("#zk-szansa").value = d.szansa ? Math.round(d.szansa * 100) : "";
-    $("#zk-wynik").value = d.wynik || "";
-    $("#zk-notatki").value = d.notatki || "";
-    const hint = $("#zk-hint");
-    hint.textContent = d.szansa ? "Według modelu szansa " + pct(d.szansa, 0) + ": zakład opłaca się po podatku od kursu " + dec(minOdds(d.szansa)) + ". Wpisz kurs ze swojego bukmachera." : "";
+    $("#zk-data").value = d.data || ""; $("#zk-mecz").value = d.mecz || ""; $("#zk-rozgr").value = d.rozgr || "";
+    $("#zk-rodzaj").value = d.rodzaj || "Singiel"; $("#zk-opis").value = d.opis || ""; $("#zk-buk").value = d.buk || "";
+    $("#zk-kurs").value = d.kurs ? Number(d.kurs).toFixed(2) : ""; $("#zk-stawka").value = d.stawka || 10;
+    $("#zk-tryb").value = d.tryb || "Realny"; $("#zk-szansa").value = d.szansa ? Math.round(d.szansa * 100) : "";
+    $("#zk-wynik").value = d.wynik || ""; $("#zk-notatki").value = d.notatki || "";
+    $("#zk-hint").textContent = d.szansa ? "Według modelu szansa " + pct(d.szansa) + ": zakład opłaca się po podatku od kursu " + dec(minOdds(d.szansa)) + ". Wpisz kurs ze swojego bukmachera." : "";
   }
   function betPayout(b) {
     const s = Number(b.stawka) || 0, k = Number(b.kurs) || 0;
@@ -1904,160 +1053,99 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
     return { r: out.every((x) => x.r === "Z") ? "Z" : "W", v: out.map((x) => x.v) };
   }
   function renderZaklady() {
-    const all = S.ov.zaklady || [];
-    const f = $("#zk-filtr").value;
+    const all = S.ov.zaklady || [], f = $("#zk-filtr").value;
     const list = all.filter((b) => !f || (f === "open" ? !b.wynik : b.tryb === f));
     const sum = $("#zk-sum");
     sum.replaceChildren();
     ["Realny", "Papier"].forEach((tryb) => {
       const bs = all.filter((b) => b.tryb === tryb);
       if (!bs.length) return;
-      const done = bs.filter((b) => b.wynik);
-      const staked = done.reduce((a, b) => a + (Number(b.stawka) || 0), 0);
-      const paid = done.reduce((a, b) => a + (betPayout(b) || 0), 0);
-      const prof = paid - staked;
+      const done = bs.filter((b) => b.wynik), staked = done.reduce((a, b) => a + (Number(b.stawka) || 0), 0), paid = done.reduce((a, b) => a + (betPayout(b) || 0), 0), prof = paid - staked;
       const s = el("span");
-      s.append((tryb === "Realny" ? "Realne" : "Na papierze") + ": " + bs.length + " zakł., rozliczone " + done.length + ", zysk ",
-        el("b", sign(prof), zl(prof)), done.length ? " (ROI " + spct(staked ? prof / staked : 0) + ")" : "");
+      s.append((tryb === "Realny" ? "Realne" : "Na papierze") + ": " + bs.length + ", rozliczone " + done.length + ", zysk ", el("b", sign(prof), zl(prof)), done.length && staked ? " (ROI " + spct(prof / staked, 1) + ")" : "");
       sum.append(s);
     });
-    if (!all.length) sum.append(el("span", "c-muted", "Brak zakładów. Dodaj pierwszy z formularza powyżej albo przyciskiem „Dodaj do zakładów” przy typie lub meczu."));
+    if (!all.length) sum.append(el("span", "c-muted", "Brak zakładów. Dodaj pierwszy z formularza albo przyciskiem „Dodaj do zakładów” przy typie."));
     resolveNames(all.map((b) => b.by));
-    table($("#zk-tbl"), list.map((b) => Object.assign({ key: b.id, wyplata: betPayout(b), zysk: betPayout(b) === null ? null : betPayout(b) - (Number(b.stawka) || 0), prop: suggestResult(b) }, b)), [
+    table($("#zk-tbl"), list.map((b) => Object.assign({ key: b.id, zysk: betPayout(b) === null ? null : betPayout(b) - (Number(b.stawka) || 0), prop: suggestResult(b) }, b)), [
       { f: "data", h: "Data", nw: true, fmt: (v) => (v ? v.split("-").reverse().join(".") : "—") },
       { f: "mecz", h: "Mecz", wide: true, render: (td, r) => { td.textContent = r.mecz || "—"; if (r.rozgr) td.append(el("div", "c-muted", r.rozgr)); } },
-      { f: "opis", h: "Zakład", wide: true, render: (td, r) => { td.textContent = r.opis || "—"; td.style.whiteSpace = "pre-line"; if (r.rodzaj && r.rodzaj !== "Singiel") td.prepend(el("span", "mk-chip", r.rodzaj), " "); } },
+      { f: "opis", h: "Zakład", wide: true, render: (td, r) => { td.textContent = r.opis || "—"; td.style.whiteSpace = "pre-line"; if (r.rodzaj && r.rodzaj !== "Singiel") td.prepend(el("span", "chip", r.rodzaj), " "); } },
       { f: "kurs", h: "Kurs", num: true, fmt: dec },
       { f: "stawka", h: "Stawka", num: true, fmt: (v) => (empty(v) ? "—" : NF2.format(v) + " zł") },
       { f: "tryb", h: "Tryb", fmt: (v) => (v === "Papier" ? "papier" : "realny") },
       { f: "wynik", h: "Wynik", render: (td, r) => {
-        if (r.wynik) td.append(el("span", "mk-chip " + ({ W: "c-win", P: "c-loss", Z: "c-muted" }[r.wynik]), { W: "wygrana", P: "przegrana", Z: "zwrot" }[r.wynik]));
+        if (r.wynik) td.append(el("span", "chip " + ({ W: "c-win", P: "c-loss", Z: "c-muted" }[r.wynik]), { W: "✓ wygrana", P: "✗ przegrana", Z: "zwrot" }[r.wynik]));
         else if (r.prop) {
-          const b = el("button", "mk-btn ghost sm", "Wg danych: " + { W: "wygrana", P: "przegrana", Z: "zwrot" }[r.prop.r] + " (" + r.prop.v.join(", ") + ") – zatwierdź");
-          b.type = "button";
-          b.disabled = !S.canWrite;
+          const b = el("button", "btn ghost sm", "Wg danych: " + { W: "wygrana", P: "przegrana", Z: "zwrot" }[r.prop.r] + " (" + r.prop.v.join(", ") + ") – zatwierdź");
+          b.type = "button"; b.disabled = !S.canWrite;
           const msg = el("span");
-          b.addEventListener("click", (ev) => { ev.stopPropagation(); save((db) => db.collection("zaklady").doc(r.id).update({ wynik: r.prop.r, at: new Date().toISOString() }), msg); });
+          b.addEventListener("click", () => save((db) => db.collection("zaklady").doc(r.id).update({ wynik: r.prop.r, at: new Date().toISOString() }), msg));
           td.append(b, msg);
         } else td.append(el("span", "c-muted", "czeka"));
       } },
       { f: "zysk", h: "Zysk", num: true, fmt: zl, cls: sign },
       { f: "buk", h: "Bukmacher", nw: true },
-      { f: "_x", h: "", nosort: true, render: (td, r) => {
-        const e = el("button", "mk-btn ghost sm", "Edytuj");
-        e.type = "button";
-        e.disabled = !S.canWrite;
-        e.addEventListener("click", (ev) => { ev.stopPropagation(); S.zkEdit = r.id; fillBetForm(r); window.scrollTo({ top: 0, behavior: "smooth" }); });
-        const d = el("button", "mk-btn danger sm", "Usuń");
-        d.type = "button";
-        d.disabled = !S.canWrite;
+      { f: "_x", h: "", nosort: true, nw: true, render: (td, r) => {
+        const e = el("button", "btn ghost sm", "Edytuj"); e.type = "button"; e.disabled = !S.canWrite;
+        e.addEventListener("click", () => { S.zkEdit = r.id; fillBetForm(r); window.scrollTo({ top: 0, behavior: "smooth" }); });
+        const d = el("button", "btn danger sm", "Usuń"); d.type = "button"; d.disabled = !S.canWrite;
         const m = el("span");
-        d.addEventListener("click", (ev) => { ev.stopPropagation(); if (window.confirm("Usunąć ten zakład?")) save((db) => db.collection("zaklady").doc(r.id).delete(), m); });
+        d.addEventListener("click", () => { if (window.confirm("Usunąć ten zakład?")) save((db) => db.collection("zaklady").doc(r.id).delete(), m); });
         td.append(e, d, m);
       } },
     ], "key", { sort: { f: "data", dir: "desc" } });
     ["#zk-save", "#zk-clear"].forEach((s) => { $(s).disabled = !S.canWrite; });
   }
   $("#zk-filtr").addEventListener("change", () => render());
-  $("#zk-clear").addEventListener("click", () => { S.zkEdit = null; S.zkDraft = null; fillBetForm({ data: dayKey(new Date().toISOString()), stawka: 10 }); $("#zk-msg").textContent = ""; });
+  $("#zk-clear").addEventListener("click", () => { S.zkEdit = null; S.zkDraft = null; fillBetForm({ data: todayKey(), stawka: 10 }); $("#zk-msg").textContent = ""; });
   $("#zk-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const msg = $("#zk-msg");
     const num = (s) => { const v = parseFloat($(s).value); return Number.isFinite(v) ? v : null; };
-    const d = {
-      data: $("#zk-data").value, mecz: $("#zk-mecz").value.trim(), rozgr: $("#zk-rozgr").value.trim(), rodzaj: $("#zk-rodzaj").value,
-      opis: $("#zk-opis").value.trim(), buk: $("#zk-buk").value.trim(), kurs: num("#zk-kurs"), stawka: num("#zk-stawka"),
-      tryb: $("#zk-tryb").value, szansa: num("#zk-szansa") !== null ? num("#zk-szansa") / 100 : null, wynik: $("#zk-wynik").value,
-      notatki: $("#zk-notatki").value.trim(),
-    };
-    if (!d.opis) { msg.className = "mk-err"; msg.textContent = "Opisz zakład."; return; }
-    if (!(d.kurs > 1)) { msg.className = "mk-err"; msg.textContent = "Podaj kurs (większy niż 1)."; return; }
-    if (!(d.stawka > 0)) { msg.className = "mk-err"; msg.textContent = "Podaj stawkę."; return; }
+    const d = { data: $("#zk-data").value, mecz: $("#zk-mecz").value.trim(), rozgr: $("#zk-rozgr").value.trim(), rodzaj: $("#zk-rodzaj").value,
+      opis: $("#zk-opis").value.trim(), buk: $("#zk-buk").value.trim(), kurs: num("#zk-kurs"), stawka: num("#zk-stawka"), tryb: $("#zk-tryb").value,
+      szansa: num("#zk-szansa") !== null ? num("#zk-szansa") / 100 : null, wynik: $("#zk-wynik").value, notatki: $("#zk-notatki").value.trim() };
+    if (!d.opis) { msg.className = "err"; msg.textContent = "Opisz zakład."; return; }
+    if (!(d.kurs > 1)) { msg.className = "err"; msg.textContent = "Podaj kurs (większy niż 1)."; return; }
+    if (!(d.stawka > 0)) { msg.className = "err"; msg.textContent = "Podaj stawkę."; return; }
     const prev = S.zkEdit ? (S.ov.zaklady || []).find((b) => b.id === S.zkEdit) : null;
     const nogi = prev ? prev.nogi || [] : (S.zkDraft && S.zkDraft.nogi) || [];
     const body = Object.assign(d, { nogi }, stamp(), prev ? { by: prev.by, at: prev.at, zmieniono: new Date().toISOString() } : {});
-    const ref = (db) => (S.zkEdit ? db.collection("zaklady").doc(S.zkEdit).set(body) : db.collection("zaklady").add(body));
-    save(ref, msg).then((ok) => { if (ok) { S.zkEdit = null; S.zkDraft = null; fillBetForm({ data: dayKey(new Date().toISOString()), stawka: 10 }); } });
+    save((db) => (S.zkEdit ? db.collection("zaklady").doc(S.zkEdit).set(body) : db.collection("zaklady").add(body)), msg)
+      .then((ok) => { if (ok) { S.zkEdit = null; S.zkDraft = null; fillBetForm({ data: todayKey(), stawka: 10 }); } });
   });
-  function csvCell(v) {
-    if (v === null || v === undefined) return "";
-    const s = typeof v === "number" ? String(v).replace(".", ",") : String(v);
-    return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }
+  const csvCell = (v) => { if (v === null || v === undefined) return ""; const s = typeof v === "number" ? String(v).replace(".", ",") : String(v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   $("#zk-csv").addEventListener("click", async () => {
     const msg = $("#zk-csv-msg");
     const list = [...(S.ov.zaklady || [])].sort((a, b) => (a.data || "").localeCompare(b.data || ""));
-    if (!list.length) { msg.className = "mk-err"; msg.textContent = "Brak zakładów do pobrania."; return; }
-    const head = ["Lp", "Data", "Godzina", "Rozgrywki", "Mecz", "Rodzaj", "Zakład", "Bukmacher", "Kurs", "Stawka (zł)", "Podatek 12% (zł)",
-      "Stawka po podatku (zł)", "Wynik", "Wypłata (zł)", "Podatek od wygranej (zł)", "Zysk (zł)", "Saldo (zł)", "Szansa wg modelu (%)",
-      "Min. kurs wg modelu", "Źródło", "Tryb", "Notatki"];
+    if (!list.length) { msg.className = "err"; msg.textContent = "Brak zakładów do pobrania."; return; }
+    const head = ["Lp", "Data", "Godzina", "Rozgrywki", "Mecz", "Rodzaj", "Zakład", "Bukmacher", "Kurs", "Stawka (zł)", "Podatek 12% (zł)", "Stawka po podatku (zł)", "Wynik",
+      "Wypłata (zł)", "Podatek od wygranej (zł)", "Zysk (zł)", "Saldo (zł)", "Szansa wg modelu (%)", "Min. kurs wg modelu", "Źródło", "Tryb", "Notatki"];
     let saldo = 0;
     const lines = [head.join(";")];
     list.forEach((b, i) => {
       const s = Number(b.stawka) || 0, k = Number(b.kurs) || 0;
       const gross = b.wynik === "W" ? s * TAX * k : null;
-      const wTax = gross !== null && gross > 2280 ? gross * 0.1 : (b.wynik === "W" ? 0 : null);
-      const pay = betPayout(b);
-      const prof = pay === null ? null : pay - s;
+      const wTax = gross !== null ? (gross > 2280 ? gross * 0.1 : 0) : null;
+      const pay = betPayout(b), prof = pay === null ? null : pay - s;
       if (prof !== null) saldo += prof;
-      lines.push([i + 1, b.data || "", "", b.rozgr || "", b.mecz || "", b.rodzaj || "", (b.opis || "").replace(/\n/g, " + "), b.buk || "",
-        k || "", s || "", +(s * 0.12).toFixed(2), +(s * TAX).toFixed(2), b.wynik || "", pay === null ? "" : +pay.toFixed(2),
-        wTax === null ? "" : +wTax.toFixed(2), prof === null ? "" : +prof.toFixed(2), prof === null ? "" : +saldo.toFixed(2),
-        b.szansa ? Math.round(b.szansa * 100) : "", b.szansa ? +minOdds(b.szansa).toFixed(2) : "", b.nogi && b.nogi.length ? "Model" : "Własny",
-        b.tryb || "", b.notatki || ""].map(csvCell).join(";"));
+      lines.push([i + 1, b.data || "", "", b.rozgr || "", b.mecz || "", b.rodzaj || "", (b.opis || "").replace(/\n/g, " + "), b.buk || "", k || "", s || "",
+        +(s * 0.12).toFixed(2), +(s * TAX).toFixed(2), b.wynik || "", pay === null ? "" : +pay.toFixed(2), wTax === null ? "" : +wTax.toFixed(2),
+        prof === null ? "" : +prof.toFixed(2), prof === null ? "" : +saldo.toFixed(2), b.szansa ? Math.round(b.szansa * 100) : "",
+        b.szansa ? +minOdds(b.szansa).toFixed(2) : "", b.nogi && b.nogi.length ? "Model" : "Własny", b.tryb || "", b.notatki || ""].map(csvCell).join(";"));
     });
-    const data = "﻿" + lines.join("\r\n");
-    const dl = S.downloads;
-    if (!dl) { msg.className = "mk-err"; msg.textContent = "Pobieranie nie jest dostępne w tym widoku."; return; }
-    try {
-      await dl.save({ filename: "zaklady-mk2-" + dayKey(new Date().toISOString()) + ".csv", data });
-      msg.className = "mk-saved"; msg.textContent = "Gotowe";
-    } catch (e) {
-      msg.className = e && e.code === "declined" ? "c-muted" : "mk-err";
-      msg.textContent = e && e.code === "declined" ? "Anulowano." : "Nie udało się pobrać (" + ((e && e.code) || "błąd") + ").";
-    }
+    if (!S.downloads) { msg.className = "err"; msg.textContent = "Pobieranie nie jest dostępne w tym widoku."; return; }
+    try { await S.downloads.save({ filename: "typometr-zaklady-" + todayKey() + ".csv", data: "﻿" + lines.join("\r\n") }); msg.className = "saved"; msg.textContent = "Gotowe"; }
+    catch (e) { msg.className = e && e.code === "declined" ? "c-muted" : "err"; msg.textContent = e && e.code === "declined" ? "Anulowano." : "Nie udało się pobrać (" + ((e && e.code) || "błąd") + ")."; }
   });
 
-  // ------------------------------------------------------------------ Skuteczność
-  function renderSkutecznosc() {
-    const w = st("wyniki");
-    if (!w) return;
-    const s = w.podsumowanie || {};
-    const sum = $("#sk-sum");
-    sum.replaceChildren();
-    const add = (label, value, cls) => { const x = el("span"); x.append(label + " ", el("b", cls || null, value)); sum.append(x); };
-    add("Typów:", int(s.typy));
-    add("Rozliczone:", int(s.rozliczone));
-    add("Trafione:", int(s.wygrane) + " z " + int(s.rozliczone));
-    add("Zysk na stawkę 1:", money(s.zysk), sign(s.zysk));
-    add("Z podatkiem 12%:", money(s.zysk_podatek), sign(s.zysk_podatek));
-    table($("#sk-tbl"), (w.typy || []).map((p, i) => Object.assign({ key: i }, p)), [
-      { f: "day", h: "Dzień", nw: true, fmt: (v) => (v ? v.split("-").reverse().join(".") : "—") },
-      { f: "fixture_id", h: "Mecz", wide: true, fmt: (v) => { const m = matchById(v) || (st("rozliczenia") || {})[String(v)]; return m ? m.gosp + " – " + m.gosc : String(v); } },
-      { f: "stat", h: "Zdarzenie", wide: true, fmt: (v, r) => SCOPE_PL[r.scope] + ": " + NOUN[r.stat] + " " + (r.side === "over" ? "powyżej " : "poniżej ") + line(r.line) },
-      { f: "p_model", h: "Model", num: true, fmt: (v) => pct(v, 0) },
-      { f: "p_market", h: "Rynek", num: true, fmt: (v) => pct(v, 0) },
-      { f: "odd", h: "Kurs", num: true, fmt: dec },
-      { f: "wartosc", h: "Padło", num: true, fmt: int },
-      { f: "wynik", h: "Wynik", chip: true, fmt: (v) => v || "czeka", cls: (v) => (v === "wygrana" ? "c-win" : v === "przegrana" ? "c-loss" : "c-muted") },
-      { f: "zysk_podatek", h: "Zysk z podatkiem", num: true, fmt: money, cls: sign },
-    ], "key", { sort: { f: "day", dir: "desc" } });
-    const pr = w.prognozy || {};
-    table($("#sk-prog"), Object.keys(pr).filter((s) => STAT[s]).map((s) => Object.assign({ key: s, statL: STAT[s] }, pr[s])), [
-      { f: "statL", h: "Statystyka", nw: true },
-      { f: "n", h: "Drużyny × mecze", num: true, fmt: int },
-      { f: "srednia_prognoza", h: "Prognoza średnio", num: true, fmt: dec },
-      { f: "srednia_fakt", h: "Padło średnio", num: true, fmt: dec },
-      { f: "blad_sredni", h: "Średni błąd", num: true, fmt: dec },
-      { f: "progi_70_proc", h: "Progi 70%: trafione", num: true, fmt: (v, r) => (empty(v) ? "—" : pct(v, 0) + " (" + r.progi_70_trafione + "/" + r.progi_70 + ")"),
-        cls: (v) => (empty(v) ? "" : v >= 0.62 ? "c-win" : "c-loss") },
-    ], "key", { nosortAll: true });
-    if (!Object.keys(pr).length) $("#sk-prog").replaceChildren(el("caption", "c-muted", "Pierwsze porównania pojawią się po rozegraniu meczów, dla których model zapisał prognozy."));
-  }
-
-  // ------------------------------------------------------------------ Prośby
-  function renderProsby() {
-    resolveNames(S.ov.prosby.map((x) => x.by));
+  // ================================================================== Projekt
+  const STATUS_PL = { gotowe: "gotowe", w_toku: "w toku", brakuje: "do zrobienia", problem: "problem", decyzja: "do decyzji" };
+  const STATUS_C = { gotowe: "c-win", w_toku: "c-warn", brakuje: "c-loss", problem: "c-loss", decyzja: "c-warn" };
+  const STATUS_ORDER = { decyzja: 0, brakuje: 1, problem: 2, w_toku: 3, gotowe: 4 };
+  function renderProjekt() {
+    resolveNames([...S.ov.prosby.map((x) => x.by), ...Object.values(S.ov.plan).map((x) => x.by)]);
     ["#pr-tekst", "#pr-add"].forEach((s) => { $(s).disabled = !S.canWrite; });
     table($("#tb-prosby"), S.ov.prosby, [
       { f: "at", h: "Kiedy", fmt: when, nw: true },
@@ -2066,31 +1154,66 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
       { f: "status", h: "Stan", chip: true, cls: (v) => ({ nowa: "c-warn", "w toku": "c-warn", zrobione: "c-win", odrzucona: "c-loss" }[v] || "") },
       { f: "odpowiedz", h: "Odpowiedź Claude", wide: true },
     ], "id", { sort: { f: "at", dir: "desc" } });
+    if (!S.ov.prosby.length) $("#tb-prosby").replaceChildren(el("caption", "c-muted", "Brak próśb."));
+    const items = (st("plan") || []).map((p) => { const o = S.ov.plan[p.id] || {}; return Object.assign({}, p, { status: o.status || p.status, notatka: o.notatka || "", by: o.by, at: o.at }); });
+    const f = $("#pl-filtr").value;
+    const list = items.filter((p) => (f === "open" ? p.status !== "gotowe" : !f || p.status === f)).sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9));
+    const box = $("#pl-list");
+    const active = document.activeElement && box.contains(document.activeElement) ? document.activeElement.id : null;
+    box.replaceChildren();
+    list.forEach((p) => {
+      const card = el("article", "pi " + p.status);
+      const hd = el("div", "hd");
+      hd.append(el("span", "ti", p.rzecz), el("span", "chip " + (STATUS_C[p.status] || ""), STATUS_PL[p.status] || p.status));
+      card.append(hd, el("p", "note", p.szczegoly || ""));
+      const form = el("div", "form");
+      const sl = el("label"); sl.htmlFor = "ps-" + p.id; sl.textContent = "Stan";
+      const sel = el("select", "ctrl"); sel.id = "ps-" + p.id;
+      Object.entries(STATUS_PL).forEach(([k, v]) => sel.append(new Option(v, k)));
+      sel.value = p.status; sl.append(sel);
+      const nl = el("label"); nl.htmlFor = "pn-" + p.id; nl.textContent = p.status === "decyzja" ? "Twoja decyzja / notatka" : "Notatka"; nl.style.gridColumn = "span 2";
+      const ta = el("textarea", "ta"); ta.id = "pn-" + p.id;
+      ta.value = S.drafts[p.id] !== undefined ? S.drafts[p.id] : p.notatka;
+      ta.addEventListener("input", () => { S.drafts[p.id] = ta.value; });
+      nl.append(ta);
+      const act = el("div", "row"), b = el("button", "btn", "Zapisz"), m = el("span");
+      b.type = "button";
+      b.addEventListener("click", async () => { const ok = await save((db) => db.collection("plan").doc(p.id).set(Object.assign({ status: sel.value, notatka: ta.value.trim() }, stamp())), m); if (ok) delete S.drafts[p.id]; });
+      [sel, ta, b].forEach((x) => { x.disabled = !S.canWrite; });
+      act.append(b, m);
+      form.append(sl, nl, act);
+      card.append(form);
+      if (p.at) card.append(el("div", "meta", "Ostatnia zmiana: " + nameOf(p.by) + ", " + when(p.at)));
+      box.append(card);
+    });
+    if (!list.length) box.append(el("p", "note", "Brak pozycji."));
+    if (active) { const a = document.getElementById(active); if (a) a.focus(); }
   }
+  $("#pl-filtr").addEventListener("change", () => render());
+  $("#pr-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const t = $("#pr-tekst").value.trim(), msg = $("#pr-msg");
+    if (!t) { msg.className = "err"; msg.textContent = "Wpisz treść prośby."; return; }
+    save((db) => db.collection("prosby").add(Object.assign({ tekst: t, status: "nowa", odpowiedz: "" }, stamp())), msg).then((ok) => { if (ok) $("#pr-tekst").value = ""; });
+  });
 
-  // ------------------------------------------------------------------ render
+  // ================================================================== render
   let pending = false;
   function render() {
     if (pending) return;
     pending = true;
     Promise.resolve().then(() => {
       pending = false;
-      $("#n-typy").textContent = String(Object.keys(S.ov.typy).length);
       $("#n-zak").textContent = String((S.ov.zaklady || []).filter((b) => !b.wynik).length);
       $("#n-prosby").textContent = String(S.ov.prosby.filter((x) => x.status === "nowa" || x.status === "w toku").length);
-      $("#who").textContent = S.db ? (S.canWrite ? "Zmiany zapisują się dla wszystkich z dostępem do tej strony." : "") : "";
-      const fn = { mecze: renderMecze, mecz: renderMecz, typydnia: renderTypyDnia, szukaj: renderSzukaj, zaklady: renderZaklady,
-        skutecznosc: renderSkutecznosc, prosby: renderProsby, start: renderStart, kupony: renderKupony, typy: renderTypy, single: renderSingle, przebiegi: renderPrzebiegi, eksperymenty: renderEksperymenty, dane: renderDane, plan: renderPlan, ustawienia: renderUstawienia }[S.page];
+      const fn = { typy: renderTypy, mecze: renderMecze, mecz: renderMecz, szukaj: renderSzukaj, zaklady: renderZaklady, projekt: renderProjekt }[S.page];
       if (fn) fn();
     });
   }
-  let lastW = 0;
-  window.addEventListener("resize", () => { const w = window.innerWidth; if (Math.abs(w - lastW) > 40) { lastW = w; render(); } });
-
   function route(h) {
     const [p, arg] = (h || "").split("/");
     if (p === "mecz" && arg) { S.mecz = arg; S.calc = null; show("mecz", false); return; }
-    show(PAGES.includes(p) || p === "skaner" ? p : "mecze", false);
+    show(PAGES.includes(p) ? p : "typy", false);
   }
   route(location.hash.slice(1));
   window.addEventListener("hashchange", () => route(location.hash.slice(1)));

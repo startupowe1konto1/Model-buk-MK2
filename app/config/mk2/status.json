@@ -1,247 +1,109 @@
 {
- "_comment": "Stan projektu MK2 pokazywany w panelu (zakładka Plan). Edytuj tutaj, potem scripts/mk2/export_dashboard.py. status: gotowe | w_toku | brakuje | decyzja | problem; kto: MK2 (Claude), Ty, Oskar.",
+ "_comment": "Plan Typometru pokazywany w zakładce Projekt (eksport: scripts/mk2/stats_daily.py -> st_plan.json). status: gotowe | w_toku | brakuje | decyzja | problem; kto: Claude albo Ty.",
  "updated": "2026-10-14",
  "items": [
   {
-   "id": "repo",
-   "obszar": "Kod",
-   "status": "gotowe",
-   "rzecz": "Kopia robocza repo na gałęzi mk/praca",
-   "szczegoly": "Cała praca Oskara do 1.10 (skaner v1.1, kolektory, Railway) plus nasze skrypty MK2. Wysyłanie do repo Oskara zablokowane (push = DISABLED).",
-   "kto": "MK2"
-  },
-  {
-   "id": "dane-paczka",
+   "id": "dane",
    "obszar": "Dane",
    "status": "gotowe",
-   "rzecz": "Paczka danych Oskara z 12.10 rozpakowana i sprawdzona",
-   "szczegoly": "Osobny folder z paczką: 18 729 plików, 7,25 GB, zgodność z zipem plik po pliku; wszystkie bazy przechodzą test spójności. Używamy jej tylko do odczytu.",
-   "kto": "MK2"
+   "rzecz": "Historia statystyk meczów",
+   "szczegoly": "Strzały, celne, rożne, faule, kartki i spalone z meczów od 2015 r. (paczka danych historycznych) oraz codzienne uzupełnianie nowych meczów z API-Football.",
+   "kto": "Claude"
   },
   {
-   "id": "import",
+   "id": "model",
+   "obszar": "Model",
+   "status": "gotowe",
+   "rzecz": "Model statystyk drużyn",
+   "szczegoly": "Sprawdzony na całym sezonie 2025/26 na meczach, których nie znał: we wszystkich statystykach przewiduje lepiej niż średnie ligowe, najmocniej w Lidze Mistrzów (strzały, faule, rożne). Prawdopodobieństwa dobrze skalibrowane.",
+   "kto": "Claude"
+  },
+  {
+   "id": "test-typow",
+   "obszar": "Typy",
+   "status": "w_toku",
+   "rzecz": "Test typów dnia i kuponu dnia na papierze",
+   "szczegoly": "Typy i kupon zapisuję przed meczem i rozliczam po meczu; wyniki są w zakładce Typy dnia. Wiarygodną ocenę da ok. 200–300 rozliczonych typów.",
+   "kto": "Claude"
+  },
+  {
+   "id": "kursy",
+   "obszar": "Dane",
+   "status": "w_toku",
+   "rzecz": "Archiwum kursów na statystyki (od 14.10)",
+   "szczegoly": "Historycznych kursów na strzały i rożne nie ma nigdzie, więc zbieramy je sami przy każdej aktualizacji. Po kilku tygodniach sprawdzę, czy typy wygrywają z rynkiem po podatku.",
+   "kto": "Claude"
+  },
+  {
+   "id": "auto",
+   "obszar": "Aktualizacja",
+   "status": "gotowe",
+   "rzecz": "Automatyczna aktualizacja 3 razy dziennie",
+   "szczegoly": "Wyniki, kursy, prognozy, nowe typy i rozliczenie poprzednich. Działa, gdy komputer i aplikacja Claude są włączone.",
+   "kto": "Claude"
+  },
+  {
+   "id": "excel",
+   "obszar": "Zakłady",
+   "status": "gotowe",
+   "rzecz": "Arkusz Excel zakładów",
+   "szczegoly": "„Zaklady MK2.xlsx” liczy podatek 12% i 10% od wygranych powyżej 2280 zł, osobno zakłady realne i na papierze. Zakładka Moje zakłady eksportuje CSV w tej samej kolejności kolumn.",
+   "kto": "Claude"
+  },
+  {
+   "id": "ligi",
    "obszar": "Dane",
    "status": "gotowe",
-   "rzecz": "Przyjmowanie kolejnych paczek (import_data.py)",
-   "szczegoly": "Pokazuje różnice, podmienia tylko zmienione pliki, robi kopię zastąpionych, nie kasuje naszych plików, odmawia przy otwartej bazie. Testy: 6.",
-   "kto": "MK2"
-  },
-  {
-   "id": "podzial",
-   "obszar": "Dane",
-   "status": "gotowe",
-   "rzecz": "Nasze wyniki osobno od danych Oskara",
-   "szczegoly": "Rejestr skanera, nasze kursy, kalendarz, fit modeli i logi są w osobnym folderze MK2; nowa paczka ich nie nadpisze.",
-   "kto": "MK2"
-  },
-  {
-   "id": "skaner-powtorki",
-   "obszar": "Skaner",
-   "status": "gotowe",
-   "rzecz": "Skaner Oskara działa u nas: powtórki i tryb na żywo",
-   "szczegoly": "Powtórki z modelami możliwe 30.09 od 16:10 do ok. 02:00 UTC 1.10 (po 23:05 już tylko mecze odległe o ponad 48 h); bez modeli także 29.09 wieczorem i 1.10 od 16:20 do ok. 23:20. Tryb na żywo sprawdzony 13.10 na kluczu Free.",
-   "kto": "MK2"
-  },
-  {
-   "id": "porownanie",
-   "obszar": "Strategia",
-   "status": "gotowe",
-   "rzecz": "Porównanie: ustawienia domyślne skanera vs 2 nogi do kursu 2,00",
-   "szczegoly": "Ustawienia domyślne to ostatnia konfiguracja Oskara z limitami kursu 2,00 (noga) i 3,00 (kupon), dodanymi 1.10. 5 momentów 30.09–1.10 plus przebieg rozliczający. W obu: 0 kuponów przy podatku 12%. Mediana przewagi wiarygodnych nóg 4,2%, żadna nie przebija 6,6% na dolnej granicy.",
-   "kto": "MK2"
-  },
-  {
-   "id": "panel",
-   "obszar": "Panel",
-   "status": "gotowe",
-   "rzecz": "Ta aplikacja",
-   "szczegoly": "Kupony, single, przebiegi, eksperymenty, dane i plan z eksportu rejestrów (export_dashboard.py). Twoje typy, notatki, stany planu, ustawienia strategii i prośby zapisują się we wspólnej bazie aplikacji.",
-   "kto": "MK2"
-  },
-  {
-   "id": "testy",
-   "obszar": "Kod",
-   "status": "gotowe",
-   "rzecz": "Testy przechodzą",
-   "szczegoly": "1672 zaliczone, 1 pominięty (w tym 13 testów MK2: import, skaner MK2, eksport do aplikacji).",
-   "kto": "MK2"
-  },
-  {
-   "id": "import-ochrona",
-   "obszar": "Dane",
-   "status": "gotowe",
-   "rzecz": "Import nie zgubi danych, których nowa paczka nie ma",
-   "szczegoly": "Paczka z serwera Oskara może mieć przycięte dane (kursy tylko z 7 dni, historia bez tabel zawodników). Import odmawia, gdy w którejś bazie ubyłoby wierszy (chyba że świadomie --allow-shrink), odmawia też przy niedokończonych zapisach w zipie i nie kopiuje plików przesuniętych tylko o godzinę (zmiana czasu).",
-   "kto": "MK2"
+   "rzecz": "Lista lig",
+   "szczegoly": "Pierwsza piętnastka rankingu UEFA 2026 bez Cypru (zamiast niego Szwajcaria): Anglia, Włochy, Hiszpania, Niemcy, Francja, Portugalia, Holandia, Belgia, Turcja, Czechy, Grecja, Polska, Dania, Norwegia, Szwajcaria oraz Liga Mistrzów, Liga Europy i Liga Konferencji.",
+   "kto": "Ty"
   },
   {
    "id": "klucz",
    "obszar": "API",
-   "status": "gotowe",
-   "rzecz": "Klucz API-Football z planu Pro",
-   "szczegoly": "Ustawiony 14.10 (zmienna użytkownika Windows). Plan Pro aktywny do 28.10.2026 – trzeba go przedłużyć. Limit 7 500 zapytań dziennie jest wspólny z serwerem Oskara (14.10 rano zużył ok. 1 300); nasze skrypty zostawiają mu zawsze co najmniej 3 000.",
-   "kto": "MK2"
+   "status": "brakuje",
+   "rzecz": "Przedłużyć plan Pro API-Football (ważny do 28.10)",
+   "szczegoly": "Bez planu Pro nie ma kursów, terminarza ani statystyk nowych meczów.",
+   "kto": "Ty"
   },
   {
    "id": "push",
    "obszar": "Kod",
    "status": "brakuje",
-   "rzecz": "Wypchnięcie mk/praca do Twojego repo Model-buk-MK2",
-   "szczegoly": "Automatyczna kontrola sesji zablokowała mi push; jedna komenda po Twojej stronie.",
-   "kto": "Ty",
-   "jak": "git push -u origin mk/praca (w folderze kopii roboczej; dokładną komendę podaje Claude w rozmowie)"
+   "rzecz": "Kopia kodu w Twoim repozytorium GitHub",
+   "szczegoly": "Jedna komenda po Twojej stronie (podaje ją Claude w rozmowie).",
+   "kto": "Ty"
   },
   {
-   "id": "zadania",
-   "obszar": "Zbieranie",
+   "id": "sedzia",
+   "obszar": "Model",
    "status": "brakuje",
-   "rzecz": "Zadania w Harmonogramie Windows (kursy, zamknięcia, skaner, fit)",
-   "szczegoly": "Klucz Pro już jest. Do harmonogramu: codzienne uruchamianie modelu statystyk (stats_daily.py, 2–3 razy dziennie) oraz zadania skanera Oskara. Komputer musi być włączony; decyzja, gdzie to ma działać, jest niżej.",
-   "kto": "Ty",
-   "jak": "register_tasks.ps1 (albo napisz „zarejestruj”)"
+   "rzecz": "Sędzia w modelu kartek i fauli",
+   "szczegoly": "Kartki i faule mocno zależą od sędziego. Po dodaniu go i sprawdzeniu na historii można będzie dawać typy także na kartki.",
+   "kto": "Claude"
   },
   {
-   "id": "railway",
-   "obszar": "Dane",
+   "id": "nb2",
+   "obszar": "Model",
    "status": "brakuje",
-   "rzecz": "Nowsze dane od Oskara (po 1.10)",
-   "szczegoly": "Paczka kończy się 1.10 17:42 UTC; o tej porze Oskar zbudował paczkę „seed” do przenosin na Railway, więc dalsze zbieranie jest najpewniej na jego serwerze. Poprosić o nową paczkę albo eksport z Railway.",
-   "kto": "Oskar"
+   "rzecz": "Połączenie z drugim modelem w ligach krajowych",
+   "szczegoly": "W ligach krajowych drugi model (NB2 z formą drużyn) jest minimalnie dokładniejszy przy celnych i rożnych; średnia z obu powinna być lepsza od każdego z osobna.",
+   "kto": "Claude"
   },
   {
-   "id": "historia",
-   "obszar": "Modele",
-   "status": "problem",
-   "rzecz": "Historia meczów kończy się 30.09",
-   "szczegoly": "Ostatni zakończony mecz 30.09 01:05 UTC. Fit modeli jest blokowany przy historii starszej niż 3 dni, więc skaner liczy tylko z rynku. Naprawi to nowa paczka od Oskara albo odświeżenie na kluczu Pro do kopii historii w folderze MK2 (nigdy do paczki), plus przebudowa tabel.",
-   "kto": "Oskar / MK2"
-  },
-  {
-   "id": "statystyki",
-   "obszar": "Rozliczenia",
-   "status": "problem",
-   "rzecz": "Rozliczanie rożnych i kartek",
-   "szczegoly": "Katalog meczów ma statystyki tylko 32 meczów, więc nogi z rożnymi i kartkami zostają otwarte. Statystyki pobiera skaner przez API (klucz Pro).",
-   "kto": "MK2"
-  },
-  {
-   "id": "clv",
-   "obszar": "Ocena",
-   "status": "problem",
-   "rzecz": "CLV na razie niewiarygodne",
-   "szczegoly": "W 263 z 455 pomiarów u Oskara kurs zamknięcia równa się cenie z chwili decyzji, bo kursów nie zbierano do pierwszego gwizdka (komputer chodził 15–21 UTC). Potrzebny kolektor zamknięć co 15 min działający całą dobę.",
-   "kto": "MK2"
-  },
-  {
-   "id": "pasmo",
-   "obszar": "Strategia",
-   "status": "w_toku",
-   "rzecz": "Dolna granica pasma 1,30 jako ustawienie skanera",
-   "szczegoly": "Dziś profil ogranicza kupony do 2 nóg i kursu ≤ 2,00; kupony 1,06–1,30 jeszcze przechodzą. Dodać pole min_coupon_odds do ScanConfig (nowy config_id).",
-   "kto": "MK2"
-  },
-  {
-   "id": "polskie",
-   "obszar": "Dane",
-   "status": "brakuje",
+   "id": "d-polskie",
+   "obszar": "Kursy",
+   "status": "decyzja",
    "rzecz": "Kursy polskich bukmacherów",
-   "szczegoly": "Feed API-Football ma 9–11 zagranicznych (Bet365, Pinnacle, Betano…). Polskie wymagają osobnego feedu (np. odds-api.io, £49–99/mies.). Decyzja po miesiącu pomiaru.",
+   "szczegoly": "Serwis kursowy nie ma STS, Betclic, Fortuny ani Superbetu, więc przy typach podaję kurs minimalny do porównania. Osobny serwis z polskimi kursami kosztuje ok. 50–100 £ miesięcznie. Decyzja po miesiącu testu.",
    "kto": "Ty"
   },
   {
-   "id": "j1",
-   "obszar": "Dane",
-   "status": "problem",
-   "rzecz": "Drobne braki w historii",
-   "szczegoly": "Brak J1 League 2026/27; football-data bez sezonu 2026/27 dla głównych lig (brak u źródła); 5 meczów z 30.09–1.10 nie wbudowanych do tabeli. Niski priorytet.",
-   "kto": "MK2"
-  },
-  {
-   "id": "d-single",
-   "obszar": "Strategia",
+   "id": "d-ocena",
+   "obszar": "Typy",
    "status": "decyzja",
-   "rzecz": "Single przy podatku 12% nie przejdą",
-   "szczegoly": "Singiel potrzebuje kursu o 13,6% wyższego od uczciwego, a skaner odrzuca przewagi powyżej 10% jako błąd danych. Propozycja: single tylko dla Betclic bez podatku (τ 0,94/1,00), kupony dla 12%.",
-   "kto": "Ty"
-  },
-  {
-   "id": "d-ligi",
-   "obszar": "Strategia",
-   "status": "decyzja",
-   "rzecz": "Wszystkie ligi czy top 10 + puchary",
-   "szczegoly": "Wartości jest mało, a w topowych ligach rynek jest najbardziej efektywny. W powtórkach tylko ok. 5,5% nóg z wartością było w ligach objętych modelami i ok. 30% na rynkach płynnych; reszta to puchary, rozgrywki młodzieżowe i niższe ligi, gdzie ceny są najmniej pewne. Propozycja: skanować wszystko, ale oceniać osobno rynki płynne i słabe.",
-   "kto": "Ty"
-  },
-  {
-   "id": "d-promocja",
-   "obszar": "Ocena",
-   "status": "decyzja",
-   "rzecz": "Kiedy uznać strategię za działającą",
-   "szczegoly": "200 kuponów to za mało (przedział ±10% przy kursie 1,7); dolna granica ROI > 0 wymaga ok. 800. Szybszy sygnał: mediana CLV i odsetek pobitych zamknięć po 100–200 nogach — gdy CLV będzie wiarygodne.",
-   "kto": "Ty"
-  },
-  {
-   "id": "d-serwer",
-   "obszar": "Zbieranie",
-   "status": "decyzja",
-   "rzecz": "Gdzie skaner ma działać na stałe",
-   "szczegoly": "Twój komputer (musi być włączony całą dobę) albo serwer jak u Oskara (Railway ok. $3–4/mies.). Bez pracy 24/7 nie będzie zamknięć ani ciągłości.",
-   "kto": "Ty"
-  },
-  {
-   "id": "d-udostepnij",
-   "obszar": "Panel",
-   "status": "decyzja",
-   "rzecz": "Komu pokazać aplikację",
-   "szczegoly": "Aplikacja jest prywatna; udostępnia się ją z menu Udostępnij na stronie. Kto ma prawo zmian, może zapisywać typy, notatki i prośby.",
-   "kto": "Ty"
-  },
-  {
-   "id": "st-model",
-   "obszar": "Statystyki",
-   "status": "w_toku",
-   "rzecz": "Model statystyk drużyn: strzały, celne, rożne, faule, kartki, spalone",
-   "szczegoly": "Pierwsza wersja działa od 14.10: jeden model dla 15 lig z rankingu UEFA, 8 lig dodatkowych i trzech pucharów (puchary łączą ligi). Na meczach od połowy sierpnia przewiduje lepiej niż średnie ligowe. Poziom dopasowany do rynku. Typy tylko ze strzałów, celnych i rożnych.",
-   "kto": "MK2"
-  },
-  {
-   "id": "st-test",
-   "obszar": "Statystyki",
-   "status": "w_toku",
-   "rzecz": "Sprawdzian modelu na historii (sezon 2025/26) i porównanie z modelem Oskara",
-   "szczegoly": "Test krok po kroku: co miesiąc nowe dopasowanie i prognoza kolejnych meczów, porównanie z częstościami ligowymi i z prognozami NB2 Oskara. Wynik zdecyduje o ustawieniach (zapominanie starszych meczów, siła wygładzania).",
-   "kto": "MK2"
-  },
-  {
-   "id": "st-kursy",
-   "obszar": "Statystyki",
-   "status": "w_toku",
-   "rzecz": "Archiwum kursów na statystyki (od 14.10)",
-   "szczegoly": "Historii kursów na strzały i rożne nie ma nigdzie, więc zbieramy je sami: przy każdym uruchomieniu kursy meczów z 3 najbliższych dni. Po kilku tygodniach da się sprawdzić, czy typy modelu wygrywają z rynkiem.",
-   "kto": "MK2"
-  },
-  {
-   "id": "st-excel",
-   "obszar": "Zakłady",
-   "status": "gotowe",
-   "rzecz": "Arkusz Excel do zakładów i zakładka Moje zakłady",
-   "szczegoly": "Zakłady wpisuje się w aplikacji (także jednym kliknięciem z typu albo meczu); rozliczenie podpowiada się samo, gdy są statystyki meczu. Eksport do CSV w kolejności kolumn arkusza „Zaklady MK2.xlsx” (podatek 12% i 10% od wygranych powyżej 2280 zł).",
-   "kto": "MK2"
-  },
-  {
-   "id": "d-fbref",
-   "obszar": "Dane",
-   "status": "gotowe",
-   "rzecz": "FBref i Betwatch: sprawdzone",
-   "szczegoly": "FBref: regulamin zabrania używania danych do modeli przewidujących i scrapowania, a od stycznia 2026 nie ma tam już danych Opta (xG). Nie używamy, zostają tylko do ręcznego podglądu. Betwatch (przepływ pieniędzy na Betfair): legalnie tylko przez płatne API (100 €/mies.), bez rynków na strzały. Opcjonalnie później jako sygnał rynku.",
-   "kto": "MK2"
-  },
-  {
-   "id": "d-ligi15",
-   "obszar": "Statystyki",
-   "status": "decyzja",
-   "rzecz": "Lista „top 15 lig”",
-   "szczegoly": "Wg rankingu UEFA 2026: Anglia, Włochy, Hiszpania, Niemcy, Francja, Portugalia, Holandia, Belgia, Turcja, Czechy, Grecja, Polska, Dania, Norwegia, Cypr. Cypr ma w API mało statystyk. Szwajcaria, Austria i Szkocja są w modelu jako ligi dodatkowe. Zamienić Cypr na którąś z nich?",
+   "rzecz": "Kiedy uznać, że typy działają",
+   "szczegoly": "Propozycja: po 200–300 rozliczonych typach z zyskiem po podatku i lepszym wynikiem niż rynek. Do tego czasu stawki testowe albo papier.",
    "kto": "Ty"
   }
  ]
