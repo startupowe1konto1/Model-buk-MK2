@@ -1380,9 +1380,11 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
     if (top.includes(id)) return 10 + top.indexOf(id);
     return 100 + id;
   }
-  function alphaOf(stat, scope) {
+  function alphaOf(stat, scope, ligaId) {
     const m = (stMeta().model || {})[stat];
     if (!m) return 0.05;
+    const cup = (stMeta().puchary || []).includes(ligaId);
+    if (cup && m.alpha_puchary !== undefined) return scope === "total" ? m.alpha_total_puchary : m.alpha_puchary;
     return scope === "total" ? m.alpha_total : m.alpha;
   }
   const meanOf = (m, stat, scope) => {
@@ -1552,7 +1554,7 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
     const mu = meanOf(m, S.calc.stat, S.calc.scope);
     if (S.calc.line === null) S.calc.line = Math.floor(mu) + 0.5;
     if (document.activeElement !== ln) ln.value = S.calc.line;
-    const a = alphaOf(S.calc.stat, S.calc.scope);
+    const a = alphaOf(S.calc.stat, S.calc.scope, m.liga_id);
     const t = nbTail(mu, a, S.calc.line);
     const offer = (m.kursy || []).find((k) => k[0] === S.calc.stat && k[1] === S.calc.scope && k[2] === S.calc.line);
     const out = $("#c-out");
@@ -1599,7 +1601,7 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
       MAIN_STATS.forEach((s) => {
         const mu = meanOf(m, s, scope);
         if (mu === null) return;
-        const a = alphaOf(s, scope);
+        const a = alphaOf(s, scope, m.liga_id);
         const t70 = threshold(mu, a, 0.70), t55 = threshold(mu, a, 0.55);
         rowsP.push({ key: scope + s, kto: who, stat: STAT[s], mu,
           k70: t70 && t70.k, p70: t70 && t70.p, o70: t70 && minOdds(t70.p),
@@ -1623,7 +1625,7 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
     const rowsK = (m.kursy || []).map((k) => {
       const [stat, scope, ln, oOver, bOver, oUnder, bUnder, qOver, nBm] = k;
       const mu = meanOf(m, stat, scope);
-      const t = nbTail(mu, alphaOf(stat, scope), ln);
+      const t = nbTail(mu, alphaOf(stat, scope, m.liga_id), ln);
       const evO = oOver ? t.over * oOver * TAX + t.push * TAX - 1 : null;
       const evU = oUnder ? t.under * oUnder * TAX + t.push * TAX - 1 : null;
       return { key: stat + scope + ln, stat, scope, ln, statL: STAT[stat] || stat, kto: scope === "home" ? m.gosp : scope === "away" ? m.gosc : "łącznie",
@@ -1802,7 +1804,7 @@ th[aria-sort="descending"] .mk-th::after { content: " ↓"; }
       scopes.forEach((scope) => {
         const mu = meanOf(m, S.sz.stat, scope);
         if (mu === null) return;
-        const a = alphaOf(S.sz.stat, scope);
+        const a = alphaOf(S.sz.stat, scope, m.liga_id);
         let k = null, p = null;
         if (Number.isFinite(kFixed)) {
           k = kFixed;

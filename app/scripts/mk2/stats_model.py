@@ -53,6 +53,8 @@ STATS: dict[str, str] = {
 STAT_PL = {"shots": "strzały", "sot": "strzały celne", "corners": "rożne", "fouls": "faule",
            "cards": "kartki", "yellow": "żółte kartki", "offsides": "spalone"}
 
+MIN_CUP_ROWS = 300
+
 COLUMNS = ["total_shots", "shots_on_goal", "corners", "fouls", "yellow_cards", "red_cards", "offsides"]
 
 
@@ -135,6 +137,14 @@ class StatFit:
     leagues: dict[int, int] = field(default_factory=dict)
     b_home_cup: float = 0.0
     period_effects: dict[str, float] = field(default_factory=dict)
+    alpha_cup: float | None = None        # dispersion of team counts in UEFA cup matches
+    alpha_total_cup: float | None = None  # and of their match totals
+
+    def dispersion(self, scope: str, cup: bool) -> float:
+        """NB2 alpha for a team count (scope home/away) or a match total, in a cup match or not."""
+        if scope == "total":
+            return self.alpha_total_cup if cup and self.alpha_total_cup is not None else self.alpha_total
+        return self.alpha_cup if cup and self.alpha_cup is not None else self.alpha
 
     def mean(self, team: int, opp: int, home: bool, cup: bool) -> float:
         lt, lo = self.leagues.get(team, 0), self.leagues.get(opp, 0)
@@ -243,11 +253,19 @@ def fit_stat(df: pd.DataFrame, stat: str, asof: pd.Timestamp, half_life_days: fl
     x = res.x
     mu = np.exp(eta_of(x))
     alpha = _fit_alpha(y, mu, w)
+    # Cup matches spread more around their mean (rotation, mismatches): their own dispersion when
+    # there are enough of them, the league one otherwise.
+    cup_rows = cup == 1
+    alpha_cup = _fit_alpha(y[cup_rows], mu[cup_rows], w[cup_rows]) if cup_rows.sum() >= MIN_CUP_ROWS else None
     # totals: one row per match (home row + away row)
     d = d.assign(mu=mu, w=w)
-    tot = d.groupby("fixture_id").agg(y=(col, "sum"), mu=("mu", "sum"), w=("w", "first"), n=("mu", "size"))
+    tot = d.groupby("fixture_id").agg(y=(col, "sum"), mu=("mu", "sum"), w=("w", "first"), n=("mu", "size"),
+                                      cup=("cup", "first"))
     tot = tot[tot["n"] == 2]
     alpha_total = _fit_alpha(tot["y"].to_numpy(float), tot["mu"].to_numpy(float), tot["w"].to_numpy(float))
+    tc = tot[tot["cup"] == 1]
+    alpha_total_cup = (_fit_alpha(tc["y"].to_numpy(float), tc["mu"].to_numpy(float), tc["w"].to_numpy(float))
+                       if len(tc) >= MIN_CUP_ROWS // 2 else None)
     return StatFit(
         stat=stat, b0=float(x[0]), b_home=float(x[1]), b_cup=float(x[2]), b_season=float(x[o_s + ns - 1]),
         b_home_cup=float(x[3]),
@@ -257,6 +275,7 @@ def fit_stat(df: pd.DataFrame, stat: str, asof: pd.Timestamp, half_life_days: fl
         team_for={int(t): float(x[o_tf + i]) for t, i in t_idx.items()},
         team_against={int(t): float(x[o_ta + i]) for t, i in t_idx.items()},
         alpha=alpha, alpha_total=alpha_total, n_rows=len(d), leagues=leagues,
+        alpha_cup=alpha_cup, alpha_total_cup=alpha_total_cup,
     )
 
 

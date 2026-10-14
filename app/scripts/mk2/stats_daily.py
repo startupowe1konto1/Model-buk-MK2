@@ -252,7 +252,9 @@ def analysis_for(fixtures: list[sqlite3.Row], fits: dict, odds: dict[int, list[d
                  team_n: dict[int, int] | None = None) -> dict:
     """The same structure stats_today.py writes, for all upcoming fixtures at once."""
     out = {"mecze": [], "model": {s: {"home": math.exp(f.b_home), "alpha": f.alpha, "alpha_total": f.alpha_total}
-                                  for s, f in fits.items()}}
+                                  for s, f in fits.items()},
+           "model_puchary": {s: {"home": math.exp(f.b_home), "alpha": f.dispersion("home", True),
+                                 "alpha_total": f.dispersion("total", True)} for s, f in fits.items()}}
     for f in fixtures:
         cup = f["league_id"] in CUPS
         means = {}
@@ -266,7 +268,7 @@ def analysis_for(fixtures: list[sqlite3.Row], fits: dict, odds: dict[int, list[d
             for (stat, scope, line), g in frame.groupby(["stat", "scope", "line"]):
                 fit = fits[stat]
                 mu = means[stat][scope]
-                p_over, p_push, p_under = sm.nb_over(mu, fit.alpha_total if scope == "total" else fit.alpha, line)
+                p_over, p_push, p_under = sm.nb_over(mu, fit.dispersion(scope, cup), line)
                 piv = g.pivot_table(index="bookmaker", columns="side", values="odd", aggfunc="max")
                 fair = []
                 for bm, r in piv.iterrows():
@@ -325,7 +327,8 @@ def group_factors(analysis: dict, pooled: dict) -> dict[str, dict[tuple[str, str
     """
     out = {}
     for g in ("puchary", "ligi"):
-        sub = {"mecze": [m for m in analysis["mecze"] if group_of(m["liga_id"]) == g], "model": analysis["model"]}
+        sub = {"mecze": [m for m in analysis["mecze"] if group_of(m["liga_id"]) == g],
+               "model": analysis["model_puchary" if g == "puchary" else "model"]}
         raw = sp.level_factors(sub)
         count: dict[tuple[str, str], int] = {}
         for m in sub["mecze"]:
@@ -582,7 +585,8 @@ def main() -> None:
     fac = lambda m: factors[group_of(m["liga_id"])]  # noqa: E731
     made = iso(now)
     pr.executemany("insert or replace into predictions values (?,?,?,?,?,?,?,?,?,?)", [
-        (made, m["fixture_id"], s, m["srednie"][s]["home"], m["srednie"][s]["away"], fits[s].alpha, fits[s].alpha_total,
+        (made, m["fixture_id"], s, m["srednie"][s]["home"], m["srednie"][s]["away"],
+         fits[s].dispersion("home", m["liga_id"] in CUPS), fits[s].dispersion("total", m["liga_id"] in CUPS),
          fac(m)[(s, "home")], fac(m)[(s, "away")], fac(m)[(s, "total")])
         for m in analysis["mecze"] for s in sm.STATS])
     pr.commit()
@@ -592,7 +596,7 @@ def main() -> None:
     cands = []
     for g, gf in factors.items():
         cands += sp.candidates({"mecze": [m for m in analysis["mecze"] if group_of(m["liga_id"]) == g],
-                                "model": analysis["model"]}, gf)
+                                "model": analysis["model_puchary" if g == "puchary" else "model"]}, gf)
     for c in cands:
         c["day"] = next(m["start"] for m in analysis["mecze"] if m["fixture_id"] == c["fixture_id"])[:10]
     good = [c for c in cands if c["do_typow"] and sp.MIN_EDGE <= c["przewaga"] <= sp.MAX_EDGE and c["ev"] >= sp.MIN_EV]
@@ -693,6 +697,8 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         "skroty": {str(k): v for k, v in SHORT.items()},
         "top15": list(TOP15), "puchary": list(CUPS),
         "model": {s: {"alpha": round(f.alpha, 5), "alpha_total": round(f.alpha_total, 5),
+                      "alpha_puchary": round(f.dispersion("home", True), 5),
+                      "alpha_total_puchary": round(f.dispersion("total", True), 5),
                       "dom": round(math.exp(f.b_home), 3), "puchar": round(math.exp(f.b_cup), 3),
                       "k": {g: [round(gf[(s, "home")], 3), round(gf[(s, "away")], 3), round(gf[(s, "total")], 3)]
                             for g, gf in factors.items()}}

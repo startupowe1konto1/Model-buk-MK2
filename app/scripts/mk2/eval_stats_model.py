@@ -186,7 +186,11 @@ def predict(df: pd.DataFrame, test: pd.DataFrame, stat: str, hl: float, rt: floa
                           ridge_league=DEFAULT["ridge_league"], leagues=leagues_m[a])
         mu = [fit.mean(int(t), int(o), bool(h), bool(c))
               for t, o, h, c in zip(rows["team_id"], rows["opp_id"], rows["home"], rows["cup"])]
-        parts.append(pd.DataFrame({"mu": mu, "alpha": fit.alpha, "alpha_total": fit.alpha_total},
+        # cup matches use the model's cup dispersion when it has one (StatFit.dispersion)
+        cups = rows["cup"].astype(bool).to_numpy()
+        parts.append(pd.DataFrame({"mu": mu,
+                                   "alpha": np.where(cups, fit.dispersion("home", True), fit.dispersion("home", False)),
+                                   "alpha_total": np.where(cups, fit.dispersion("total", True), fit.dispersion("total", False))},
                                   index=rows.index))
         log.append({"variant": variant, "stat": stat, "half_life_days": hl, "ridge_team": rt,
                     "ridge_league": DEFAULT["ridge_league"], "asof": a.strftime("%Y-%m-%d"),
