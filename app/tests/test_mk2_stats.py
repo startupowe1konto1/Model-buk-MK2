@@ -32,6 +32,22 @@ def test_nb_over_matches_scipy_and_handles_whole_lines():
     assert over + push + under == pytest.approx(1.0)
 
 
+def test_missing_shots_stay_missing_but_empty_cards_are_zero():
+    df = pd.DataFrame([
+        # full block, no cards or offsides reported -> zeros
+        {"total_shots": 12, "shots_on_goal": 4, "corners": 5, "fouls": 10, "yellow_cards": None, "red_cards": None, "offsides": None},
+        # cup qualifier: corners known, shots unknown -> shots, fouls stay missing; cards zero; offsides unknown
+        {"total_shots": None, "shots_on_goal": None, "corners": 3, "fouls": None, "yellow_cards": 2, "red_cards": None, "offsides": None},
+        # no statistics block at all -> nothing filled
+        {"total_shots": None, "shots_on_goal": None, "corners": None, "fouls": None, "yellow_cards": None, "red_cards": None, "offsides": None},
+    ], dtype=float)
+    out = sm.fill_known_zeros(df)
+    assert out.loc[0, ["yellow_cards", "red_cards", "offsides", "cards"]].tolist() == [0, 0, 0, 0]
+    assert out.loc[1, ["total_shots", "shots_on_goal", "fouls", "offsides"]].isna().all()
+    assert out.loc[1, "cards"] == 2
+    assert out.loc[2].isna().all()
+
+
 def synthetic_rows(seed: int = 7) -> pd.DataFrame:
     """Ten teams, double round robin over two seasons; team 0 shoots most, team 9 concedes most."""
     rng = np.random.default_rng(seed)

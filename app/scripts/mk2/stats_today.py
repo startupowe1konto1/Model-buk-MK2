@@ -92,7 +92,7 @@ def main() -> None:
     p.add_argument("--league", type=int, required=True)
     p.add_argument("--date", default=dt.date.today().isoformat())
     p.add_argument("--season", type=int, default=2026)
-    p.add_argument("--half-life", type=float, default=365.0)
+    p.add_argument("--half-life", type=float, default=180.0)
     args = p.parse_args()
 
     client = Client(api_key(), max_requests=40, reserve=3000)

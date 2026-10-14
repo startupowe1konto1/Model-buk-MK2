@@ -33,6 +33,11 @@ MIN_EV = 0.02        # expected value per unit stake at the best price, before t
 PICK_STATS = {"shots", "sot", "corners"}
 MARKET_BAND = (0.30, 0.80)   # lines far in the tails are where a count model is least reliable
 MAX_PRICE_OVER_MEDIAN = 1.08  # a price far above the other bookmakers' is more likely stale than a gift
+# A model that disagrees with the whole market by more than this is far more often wrong than right
+# (lopsided cup ties between clubs of very different leagues are where it extrapolates most).
+MAX_EDGE = 0.15
+# Teams with fewer matches with statistics in the last year are mostly guesses from their league.
+MIN_TEAM_MATCHES = 10
 SCOPE_PL = {"home": "gospodarz", "away": "gość", "total": "łącznie"}
 
 
@@ -87,7 +92,8 @@ def candidates(analysis: dict, factors: dict) -> list[dict]:
                     "opis": describe(m, l["stat"], l["scope"], side, l["line"]),
                     "p_model": round(p, 4), "p_model_surowe": round(l[f"p_{side}"], 4), "p_rynek": round(q, 4),
                     "kurs": odd, "bukmacher": bm_best, "kurs_mediana": round(median, 2),
-                    "do_typow": l["stat"] in PICK_STATS and MARKET_BAND[0] <= q <= MARKET_BAND[1],
+                    "do_typow": l["stat"] in PICK_STATS and MARKET_BAND[0] <= q <= MARKET_BAND[1]
+                                and m.get("min_n", MIN_TEAM_MATCHES) >= MIN_TEAM_MATCHES,
                     "kurs_uczciwy": round(1 / p, 2) if p > 0 else None,
                     "kurs_min_z_podatkiem": round(1 / (p * TAX), 2) if p > 0 else None,
                     "ev": round(ev, 4), "ev_podatek": round(p * odd * TAX + p_push * TAX - 1, 4),
@@ -125,7 +131,7 @@ def main() -> None:
     analysis = json.loads(path.read_text(encoding="utf-8"))
     factors = level_factors(analysis)
     rows = candidates(analysis, factors)
-    good = [r for r in rows if r["do_typow"] and r["przewaga"] >= MIN_EDGE and r["ev"] >= MIN_EV]
+    good = [r for r in rows if r["do_typow"] and MIN_EDGE <= r["przewaga"] <= MAX_EDGE and r["ev"] >= MIN_EV]
     good.sort(key=lambda r: -r["ev"])
     # one pick per (match, statistic, scope): the best line
     seen, top = set(), []

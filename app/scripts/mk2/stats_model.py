@@ -3,12 +3,12 @@
 For every statistic one ridge-penalised Poisson regression is fitted on all team-rows (two per
 match) of the European top flights and the UEFA cups::
 
-    log mu(team vs opp) = b0 + b_home * home + b_cup * cup + b_season[season]
+    log mu(team vs opp) = b0 + b_home * home + b_cup * cup + b_home_cup * home * cup + level[half-year]
                           + league_for[league of team] + league_against[league of opp]
                           + team_for[team] + team_against[opp]
 
-``b_season`` follows the level of the statistic from season to season (the provider's shot counts
-rose by about a tenth in 2026); forecasts use the latest season's level.
+``level`` follows the level of the statistic from half-year to half-year (the provider's shot counts
+rose by about a tenth in 2026), with a penalty on each change; forecasts use the latest half-year.
 ``team_for`` is how much a team produces of the statistic (shots it takes, fouls it commits),
 ``team_against`` how much it concedes to opponents.  League effects let a cup match compare teams
 from different leagues; team effects are shrunk towards their league (ridge), more strongly when
@@ -17,9 +17,9 @@ mean is a negative binomial (NB2) with one dispersion per statistic for team cou
 match totals, both fitted by maximum likelihood on the same weighted rows.
 
 Data: the read-only snapshot history plus ``<mk2>/stats/gap.sqlite`` (newer matches).  Missing
-values: API-Football reports some zero counts as null, so in a league where a statistic is
-mostly present a null in a row that has other statistics is read as 0; in a league where the
-statistic is mostly absent the rows are skipped.
+values: API-Football leaves yellow/red cards and offsides empty when there were none, so those
+nulls are read as 0 in a row that has its statistics block; a missing shot, shot-on-target,
+corner or foul count is skipped (never read as 0).
 """
 
 from __future__ import annotations
@@ -89,13 +89,21 @@ def load_rows(league_ids: list[int], first_season: int = 2024) -> pd.DataFrame:
     df["opp"] = np.where(df["side"] == "home", df["away_team"], df["home_team"])
     df["home"] = (df["side"] == "home").astype(float)
     df["cup"] = df["league_id"].isin(list(CUPS)).astype(float)
-    # zero counts reported as null: fill where the league usually has the statistic
-    has_any = df[["total_shots", "corners"]].notna().any(axis=1)
-    for c in COLUMNS:
-        share = df.groupby("league_id")[c].transform(lambda s: s.notna().mean())
-        # cards: a null is the normal way the provider reports none (most matches have no red card)
-        fill = df[c].isna() & has_any & ((share >= 0.7) | (c in ("yellow_cards", "red_cards")))
-        df.loc[fill, c] = 0
+    return fill_known_zeros(df)
+
+
+def fill_known_zeros(df: pd.DataFrame) -> pd.DataFrame:
+    """Read the provider's empty card and offside counts as zeros; leave every other gap missing.
+
+    The provider leaves cards and offsides empty when there were none (checked against card events
+    and players' offsides), so those nulls are zeros in a row whose statistics block is there.  A
+    null shot, corner or foul count means the statistic is missing (cup qualifiers often have
+    corners but no shots): such rows are skipped for that statistic, never read as zero.
+    """
+    has_block = df[["total_shots", "corners"]].notna().any(axis=1)
+    for c in ("yellow_cards", "red_cards"):
+        df.loc[df[c].isna() & has_block, c] = 0
+    df.loc[df["offsides"].isna() & df["total_shots"].notna(), "offsides"] = 0
     df["cards"] = df["yellow_cards"] + df["red_cards"]
     return df
 
@@ -116,7 +124,7 @@ class StatFit:
     b0: float
     b_home: float
     b_cup: float
-    b_season: float
+    b_season: float  # level of the latest half-year with data: the one forecasts use
     league_for: dict[int, float]
     league_against: dict[int, float]
     team_for: dict[int, float]
@@ -125,10 +133,12 @@ class StatFit:
     alpha_total: float
     n_rows: int
     leagues: dict[int, int] = field(default_factory=dict)
+    b_home_cup: float = 0.0
+    period_effects: dict[str, float] = field(default_factory=dict)
 
     def mean(self, team: int, opp: int, home: bool, cup: bool) -> float:
         lt, lo = self.leagues.get(team, 0), self.leagues.get(opp, 0)
-        eta = (self.b0 + self.b_home * home + self.b_cup * cup + self.b_season
+        eta = (self.b0 + self.b_home * home + self.b_cup * cup + self.b_home_cup * (home and cup) + self.b_season
                + self.league_for.get(lt, 0.0) + self.league_against.get(lo, 0.0)
                + self.team_for.get(team, 0.0) + self.team_against.get(opp, 0.0))
         return float(math.exp(eta))
@@ -147,8 +157,24 @@ def _fit_alpha(y: np.ndarray, mu: np.ndarray, w: np.ndarray) -> float:
     return float(math.exp(res.x))
 
 
-def fit_stat(df: pd.DataFrame, stat: str, asof: pd.Timestamp, half_life_days: float = 365.0,
-             ridge_team: float = 30.0, ridge_league: float = 3.0, leagues: dict[int, int] | None = None) -> StatFit:
+def period_of(kickoff: pd.Series) -> pd.Series:
+    """Half-year index (year * 2 + 0 for January-June, 1 for July-December)."""
+    return kickoff.dt.year * 2 + (kickoff.dt.month >= 7).astype(int)
+
+
+def fit_stat(df: pd.DataFrame, stat: str, asof: pd.Timestamp, half_life_days: float = 180.0,
+             ridge_team: float = 300.0, ridge_league: float = 3.0, leagues: dict[int, int] | None = None,
+             fuse_periods: float = 50.0) -> StatFit:
+    """Fit one statistic on the matches before ``asof``.
+
+    Defaults from the 2025/26 walk-forward backtest (scripts/mk2/eval_stats_model.py): half-life
+    180 days and team ridge 300 had the best log-loss and removed the over-confidence of the
+    earlier 365/30.  The level is one effect per half-year with a penalty on the change from one
+    half-year to the next (``fuse_periods``), so a half-year that has barely started stays at the
+    previous level instead of jumping on a few rounds of one league (the old per-season effect
+    took the level from Norway's calendar-year season every spring).  ``b_home_cup`` lets the
+    home advantage differ in the UEFA cups.
+    """
     col = STATS[stat]
     d = df[df[col].notna() & (df["kickoff"] < asof)].copy()
     leagues = leagues or home_league(df)
@@ -164,42 +190,51 @@ def fit_stat(df: pd.DataFrame, stat: str, asof: pd.Timestamp, half_life_days: fl
     ol = np.array([l_idx[leagues.get(int(t), 0)] for t in d["opp_id"]])
     home = d["home"].to_numpy()
     cup = d["cup"].to_numpy()
-    seasons = np.array(sorted(d["season"].unique()))
-    s_idx = {int(s): i for i, s in enumerate(seasons)}
-    si = d["season"].map(lambda s: s_idx[int(s)]).to_numpy()
-    ns = len(seasons)
+    home_cup = home * cup
+    per = period_of(d["kickoff"]).to_numpy()
+    periods = np.array(sorted(set(per)))
+    p_idx = {int(p): i for i, p in enumerate(periods)}
+    si = np.array([p_idx[int(p)] for p in per])
+    ns = len(periods)
     y = d[col].to_numpy(dtype=float)
     age = (asof - d["kickoff"]).dt.total_seconds().to_numpy() / 86400.0
     w = 0.5 ** (age / half_life_days)
     w = w / w.mean()
 
-    # parameter layout: b0, b_home, b_cup, lf[nl], la[nl], tf[nt], ta[nt], season[ns]
-    o_lf, o_la, o_tf, o_ta = 3, 3 + nl, 3 + 2 * nl, 3 + 2 * nl + nt
-    o_s = 3 + 2 * nl + 2 * nt
+    # parameter layout: b0, b_home, b_cup, b_home_cup, lf[nl], la[nl], tf[nt], ta[nt], period[ns]
+    o_lf, o_la, o_tf, o_ta = 4, 4 + nl, 4 + 2 * nl, 4 + 2 * nl + nt
+    o_s = 4 + 2 * nl + 2 * nt
     npar = o_s + ns
     pen = np.zeros(npar)
+    pen[3] = 10.0
     pen[o_lf:o_tf] = ridge_league
     pen[o_tf:o_s] = ridge_team
     pen[o_s:] = 1.0
 
     def eta_of(x):
-        return (x[0] + x[1] * home + x[2] * cup + x[o_lf + tl] + x[o_la + ol] + x[o_tf + ti] + x[o_ta + oi]
-                + x[o_s + si])
+        return (x[0] + x[1] * home + x[2] * cup + x[3] * home_cup + x[o_lf + tl] + x[o_la + ol]
+                + x[o_tf + ti] + x[o_ta + oi] + x[o_s + si])
 
     def fun(x):
         eta = eta_of(x)
         mu = np.exp(eta)
-        f = np.sum(w * (mu - y * eta)) + 0.5 * np.sum(pen * x * x)
+        e = x[o_s:o_s + ns]
+        step = np.diff(e)
+        f = np.sum(w * (mu - y * eta)) + 0.5 * np.sum(pen * x * x) + 0.5 * fuse_periods * np.sum(step * step)
         g_eta = w * (mu - y)
         g = pen * x
         g[0] += g_eta.sum()
         g[1] += (g_eta * home).sum()
         g[2] += (g_eta * cup).sum()
+        g[3] += (g_eta * home_cup).sum()
         g[o_lf:o_lf + nl] += np.bincount(tl, g_eta, nl)
         g[o_la:o_la + nl] += np.bincount(ol, g_eta, nl)
         g[o_tf:o_tf + nt] += np.bincount(ti, g_eta, nt)
         g[o_ta:o_ta + nt] += np.bincount(oi, g_eta, nt)
         g[o_s:o_s + ns] += np.bincount(si, g_eta, ns)
+        if ns > 1:
+            g[o_s + 1:o_s + ns] += fuse_periods * step
+            g[o_s:o_s + ns - 1] -= fuse_periods * step
         return f, g
 
     x0 = np.zeros(npar)
@@ -215,6 +250,8 @@ def fit_stat(df: pd.DataFrame, stat: str, asof: pd.Timestamp, half_life_days: fl
     alpha_total = _fit_alpha(tot["y"].to_numpy(float), tot["mu"].to_numpy(float), tot["w"].to_numpy(float))
     return StatFit(
         stat=stat, b0=float(x[0]), b_home=float(x[1]), b_cup=float(x[2]), b_season=float(x[o_s + ns - 1]),
+        b_home_cup=float(x[3]),
+        period_effects={f"{int(p) // 2}H{int(p) % 2 + 1}": float(x[o_s + i]) for p, i in p_idx.items()},
         league_for={int(l): float(x[o_lf + i]) for l, i in l_idx.items()},
         league_against={int(l): float(x[o_la + i]) for l, i in l_idx.items()},
         team_for={int(t): float(x[o_tf + i]) for t, i in t_idx.items()},

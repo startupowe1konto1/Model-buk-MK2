@@ -160,6 +160,11 @@
     fact("", day(m.start) + ", " + hm(m.start));
     if (m.runda) fact("Runda:", m.runda.replace("League Stage", "faza ligowa").replace("Regular Season", "kolejka"));
     if (m.sedzia) fact("Sędzia:", m.sedzia);
+    if (m.n && Math.min(m.n[0] || 0, m.n[1] || 0) < 10) {
+      const w = el("span", "c-warn", "Mało danych: " + (m.n[0] < 10 ? m.gosp + " ma " + (m.n[0] || 0) : m.gosc + " ma " + (m.n[1] || 0)) +
+        " meczów ze statystykami w ostatnim roku, prognoza opiera się głównie na średniej jej ligi.");
+      facts.append(w);
+    }
     $("#mz-title").textContent = m.gosp + " – " + m.gosc;
     const cards = $("#mz-stats");
     cards.replaceChildren();
@@ -366,8 +371,9 @@
       const sub = el("div", "mk-facts");
       const fact = (label, value, cls) => { const s = el("span"); s.append(label + " ", el("b", cls || null, value)); sub.append(s); };
       fact("", p.mecz + (m ? ", " + day(m.start) + " " + hm(m.start) : ""));
-      fact("Model", pct(p.p_model, 0));
-      fact("Rynek", pct(p.p_rynek, 0));
+      if (!empty(p.oczekiwane)) fact("Model oczekuje", d1(p.oczekiwane) + " przy linii " + line(p.line));
+      fact("Szansa wg modelu", pct(p.p_model, 0));
+      fact("wg rynku", pct(p.p_rynek, 0));
       fact("Kurs", dec(p.kurs) + " (" + p.bukmacher + ")");
       fact("Min. kurs z podatkiem", dec(p.kurs_min_z_podatkiem), "c-win");
       fact("Zysk z podatkiem przy tym kursie", spct(p.ev_podatek, 0), sign(p.ev_podatek));

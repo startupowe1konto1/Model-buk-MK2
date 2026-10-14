@@ -242,7 +242,14 @@ def latest_odds(od: sqlite3.Connection, fixture_ids: list[int]) -> dict[int, lis
 
 # ---------------------------------------------------------------------------- 4. forecast
 
-def analysis_for(fixtures: list[sqlite3.Row], fits: dict, odds: dict[int, list[dict]]) -> dict:
+def team_match_counts(df: pd.DataFrame, now: dt.datetime, days: int = 365) -> dict[int, int]:
+    """Matches with shot statistics per team in the last ``days`` days."""
+    recent = df[(df["kickoff"] >= pd.Timestamp(now - dt.timedelta(days=days))) & df["total_shots"].notna()]
+    return {int(k): int(v) for k, v in recent.groupby("team_id").size().items()}
+
+
+def analysis_for(fixtures: list[sqlite3.Row], fits: dict, odds: dict[int, list[dict]],
+                 team_n: dict[int, int] | None = None) -> dict:
     """The same structure stats_today.py writes, for all upcoming fixtures at once."""
     out = {"mecze": [], "model": {s: {"home": math.exp(f.b_home), "alpha": f.alpha, "alpha_total": f.alpha_total}
                                   for s, f in fits.items()}}
@@ -277,8 +284,12 @@ def analysis_for(fixtures: list[sqlite3.Row], fits: dict, odds: dict[int, list[d
                         row[f"kursy_{side}"] = prices
                         row[f"p_{side}"] = p_win
                 lines.append(row)
+        n_home = (team_n or {}).get(f["home_id"], 0)
+        n_away = (team_n or {}).get(f["away_id"], 0)
         out["mecze"].append({"fixture_id": f["fixture_id"], "start": f["kickoff_utc"], "gospodarz": f["home"],
-                             "gosc": f["away"], "liga_id": f["league_id"], "srednie": means, "linie": lines})
+                             "gosc": f["away"], "liga_id": f["league_id"], "srednie": means, "linie": lines,
+                             "n_gosp": n_home, "n_gosc": n_away,
+                             "min_n": min(n_home, n_away) if team_n is not None else sp.MIN_TEAM_MATCHES})
     return out
 
 
@@ -539,7 +550,7 @@ def main() -> None:
     p.add_argument("--reserve", type=int, default=3000)
     p.add_argument("--skip", default="", help="comma list: calendar,results,odds,picks,export")
     p.add_argument("--dest", default=str(HERE.parents[1] / "dashboard_mk2" / "app" / "data"))
-    p.add_argument("--half-life", type=float, default=365.0)
+    p.add_argument("--half-life", type=float, default=180.0)
     args = p.parse_args()
     skip = {s.strip() for s in args.skip.split(",") if s.strip()}
 
@@ -565,7 +576,7 @@ def main() -> None:
                           (since, horizon)).fetchall()
     upcoming = [f for f in upcoming if f["league_id"] in MODEL_LEAGUES]
     odds = latest_odds(od, [f["fixture_id"] for f in upcoming])
-    analysis = analysis_for(upcoming, fits, odds)
+    analysis = analysis_for(upcoming, fits, odds, team_match_counts(df, now))
     pooled = factors_with_fallback(analysis)
     factors = group_factors(analysis, pooled)
     fac = lambda m: factors[group_of(m["liga_id"])]  # noqa: E731
@@ -584,7 +595,7 @@ def main() -> None:
                                 "model": analysis["model"]}, gf)
     for c in cands:
         c["day"] = next(m["start"] for m in analysis["mecze"] if m["fixture_id"] == c["fixture_id"])[:10]
-    good = [c for c in cands if c["do_typow"] and c["przewaga"] >= sp.MIN_EDGE and c["ev"] >= sp.MIN_EV]
+    good = [c for c in cands if c["do_typow"] and sp.MIN_EDGE <= c["przewaga"] <= sp.MAX_EDGE and c["ev"] >= sp.MIN_EV]
     good.sort(key=lambda c: -c["ev"])
     days: dict[str, list[dict]] = {}
     seen = set()
@@ -641,6 +652,7 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
                        len(set(l.get("kursy_over", {})) | set(l.get("kursy_under", {})))] for l in m["linie"]],
         }
         rec["wyr"] = highlights(rec, teams)
+        rec["n"] = [m.get("n_gosp"), m.get("n_gosc")]
         for key in ("home_id", "away_id"):
             rec.pop(key)
         matches.append(rec)
@@ -649,13 +661,20 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     finished = finished_results(df, days_back=21)
     track = forecast_track(pr, df, finished)
     settled = settle_picks(pr, df)
+    # aligned expected count per (fixture, stat, scope), shown next to each pick's line
+    expected = {}
+    for m in analysis["mecze"]:
+        gf = factors[group_of(m["liga_id"])]
+        for s in sm.STATS:
+            for scope in ("home", "away", "total"):
+                expected[(m["fixture_id"], s, scope)] = m["srednie"][s][scope] * gf[(s, scope)]
     logged: dict[str, list[dict]] = {}
     for s in settled:
         logged.setdefault(s["day"], []).append(s)
     picks_out = {}
     for day in sorted(set(days) | set(logged)):
         lst = days.get(day, [])
-        top = [_logged_pick(s, by_id, analysis) for s in sorted(logged[day], key=lambda s: s["rank"])]             if day in logged else [_pick(c) for c in lst[:PICK_LIMIT_PER_DAY]]
+        top = [_logged_pick(s, by_id, expected) for s in sorted(logged[day], key=lambda s: s["rank"])]             if day in logged else [_pick(c) for c in lst[:PICK_LIMIT_PER_DAY]]
         picks_out[day] = {"top": top, "kupony2": sp.coupons(lst, 2), "kupony3": sp.coupons(lst, 3),
                           "kandydaci": [_pick(c) for c in lst[:30]]}
     done = [p for p in settled if p.get("wynik")]
@@ -693,7 +712,7 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     print(f"export: {len(matches)} matches, {len(teams)} teams, {sum(len(v['top']) for v in picks_out.values())} picks -> {dest}")
 
 
-def _logged_pick(s: dict, by_id: dict, analysis: dict) -> dict:
+def _logged_pick(s: dict, by_id: dict, expected: dict) -> dict:
     f = by_id.get(s["fixture_id"])
     m = {"gospodarz": f["home"], "gosc": f["away"]} if f else {"gospodarz": "?", "gosc": "?"}
     p = s["p_model"]
@@ -703,7 +722,8 @@ def _logged_pick(s: dict, by_id: dict, analysis: dict) -> dict:
             "p_model": p, "p_rynek": s["p_market"], "kurs": s["odd"], "bukmacher": s["bookmaker"],
             "kurs_uczciwy": round(1 / p, 2), "kurs_min_z_podatkiem": round(1 / (p * 0.88), 2),
             "ev": s["ev"], "ev_podatek": s["ev_tax"], "przewaga": round(p - s["p_market"], 4),
-            "wynik": s.get("wynik"), "wartosc": s.get("wartosc"), "zapisano": s["made_at"]}
+            "wynik": s.get("wynik"), "wartosc": s.get("wartosc"), "zapisano": s["made_at"],
+            "oczekiwane": _r(expected.get((s["fixture_id"], s["stat"], s["scope"])), 2)}
 
 
 def _pick(c: dict) -> dict:
