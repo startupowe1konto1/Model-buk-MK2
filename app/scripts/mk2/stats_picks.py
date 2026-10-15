@@ -39,12 +39,24 @@ MAX_PRICE_OVER_MEDIAN = 1.08  # a price far above the other bookmakers' is more 
 MAX_EDGE = 0.15
 # Teams with fewer matches with statistics in the last year are mostly guesses from their league.
 MIN_TEAM_MATCHES = 10
-# The user's rules (2026-10-14): only "over" bets, only on X.5 lines (never quarter or whole lines),
-# and a single pick priced at most about 1.8.
+# The user's rules: only "over" bets, only on X.5 lines (never quarter or whole lines) (2026-10-14);
+# a single event priced from about 1.25-1.30 up to 2.0, looked at in three odds bands (2026-10-15).
 ONLY_OVER = True
 HALF_LINES_ONLY = True
-MAX_PICK_ODDS = 1.85
-RULES = "v2"
+MIN_PICK_ODDS = 1.25
+MAX_PICK_ODDS = 2.00
+ODDS_BANDS = ((1.25, 1.45), (1.46, 1.65), (1.66, 2.00))
+RULES = "v3"
+
+
+def band_of(odd: float | None) -> int | None:
+    """The odds band (0, 1 or 2) a price falls in; None outside 1.25-2.00."""
+    if odd is None:
+        return None
+    for i, (lo, hi) in enumerate(ODDS_BANDS):
+        if lo - 1e-9 <= odd <= hi + 1e-9:
+            return i
+    return None
 
 # Polish forms for 1, for 2-4 (not 12-14) and for the rest
 FORMS = {
@@ -131,7 +143,8 @@ def candidates(analysis: dict, factors: dict) -> list[dict]:
                     "p_model": round(p, 4), "p_model_surowe": round(l[f"p_{side}"], 4), "p_rynek": round(q, 4),
                     "kurs": odd, "bukmacher": bm_best, "kurs_mediana": round(median, 2),
                     "do_typow": l["stat"] in PICK_STATS and MARKET_BAND[0] <= q <= MARKET_BAND[1]
-                                and m.get("min_n", MIN_TEAM_MATCHES) >= MIN_TEAM_MATCHES and odd <= MAX_PICK_ODDS,
+                                and m.get("min_n", MIN_TEAM_MATCHES) >= MIN_TEAM_MATCHES
+                                and MIN_PICK_ODDS <= odd <= MAX_PICK_ODDS,
                     "kurs_uczciwy": round(1 / p, 2) if p > 0 else None,
                     "kurs_min_z_podatkiem": round(1 / (p * TAX), 2) if p > 0 else None,
                     "ev": round(ev, 4), "ev_podatek": round(p * odd * TAX + p_push * TAX - 1, 4),

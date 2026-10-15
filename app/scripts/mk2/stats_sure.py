@@ -146,6 +146,7 @@ def sure_events(analysis: dict, factors_of, alpha_of, history: dict) -> list[dic
                     "p_model": round(p, 4), "kurs": odd, "bukmacher": bm,
                     "p_rynek": None if q is None else round(q, 4), "kurs_uczciwy": round(1 / p, 3),
                     "p_razy_kurs": None if odd is None else round(p * odd, 4),
+                    "kurs_w_zasadach": odd is not None and sp.MIN_PICK_ODDS <= odd <= sp.MAX_PICK_ODDS,
                     "rekord": [int(hits), int(n)], "ostatnie": [int(x) for x in last], "oczekiwane": round(mu, 2),
                 })
     # how demanding the threshold is: k against the day's average expectation for that count
@@ -166,7 +167,8 @@ def pick_sure(events: list[dict]) -> dict[str, list[dict]]:
         days.setdefault(e["day"], []).append(e)
     out = {}
     for day, lst in days.items():
-        lst = sorted(lst, key=lambda e: (-(e["p_razy_kurs"] or 0) if (e["p_razy_kurs"] or 0) >= 1.0 else 0, -e["sila"]))
+        lst = sorted(lst, key=lambda e: (-(e["p_razy_kurs"] or 0) if e["kurs_w_zasadach"] and (e["p_razy_kurs"] or 0) >= 1.0
+                                         else 0, -e["sila"]))
         chosen, per = [], {}
         for e in lst:
             if per.get(e["fixture_id"], 0) >= SURE_PER_MATCH:
@@ -188,8 +190,10 @@ def sure_coupon(events: list[dict], band: tuple[float, float] = COUPON_BAND) -> 
     every leg priced at least fairly, the most expected profit after tax (which must be positive)."""
     best_per_match: dict[int, dict] = {}
     for e in events:
-        # priced at least fairly, and not further from the market than the picks may be (stats_picks.MAX_EDGE)
-        if e["kurs"] and (e["p_razy_kurs"] or 0) >= 1.0 and (e["p_rynek"] is None or e["p_model"] - e["p_rynek"] <= sp.MAX_EDGE):
+        # within the user's odds range, priced at least fairly, and not further from the market than the
+        # picks may be (stats_picks.MIN_PICK_ODDS, MAX_EDGE)
+        if (e["kurs"] and sp.MIN_PICK_ODDS <= e["kurs"] <= sp.MAX_PICK_ODDS and (e["p_razy_kurs"] or 0) >= 1.0
+                and (e["p_rynek"] is None or e["p_model"] - e["p_rynek"] <= sp.MAX_EDGE)):
             cur = best_per_match.get(e["fixture_id"])
             if cur is None or e["p_razy_kurs"] > cur["p_razy_kurs"]:
                 best_per_match[e["fixture_id"]] = e

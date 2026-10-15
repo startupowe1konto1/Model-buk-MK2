@@ -232,12 +232,17 @@ def test_sure_coupon_takes_fair_legs_from_different_matches():
         return {"fixture_id": fid, "mecz": f"M{fid}", "stat": "corners", "scope": "total", "line": 7.5, "side": "over",
                 "opis": f"leg{fid}", "zaklad": "powyżej 7,5", "kurs": odd, "bukmacher": "A", "p_model": p,
                 "p_rynek": q if q is not None else 1 / odd - 0.02, "p_razy_kurs": round(p * odd, 4)}
-    events = [ev(1, 0.92, 1.18), ev(1, 0.95, 1.12), ev(2, 0.90, 1.20), ev(3, 0.91, 1.17), ev(4, 0.93, 1.15),
-              ev(5, 0.80, 1.10), ev(6, 0.99, 1.30, q=0.70)]     # 5 below fair, 6 too far from the market
+    events = [ev(1, 0.82, 1.30), ev(1, 0.85, 1.25), ev(2, 0.80, 1.32), ev(3, 0.81, 1.30), ev(4, 0.83, 1.28),
+              ev(5, 0.70, 1.30), ev(6, 0.95, 1.40, q=0.70), ev(7, 0.97, 1.10)]
+    # 5 is below the fair price, 6 too far from the market, 7 below the user's minimum odds of 1.25
     k = ss.sure_coupon(events)
     assert k is not None and 1.8 <= k["kurs"] <= 2.6 and k["ev_podatek"] > 0
     fids = [l["fixture_id"] for l in k["legs"]]
-    assert len(fids) == len(set(fids)) and 5 not in fids and 6 not in fids
+    assert len(fids) == len(set(fids)) and not {5, 6, 7} & set(fids)
+
+
+def test_odds_bands_cover_the_users_range():
+    assert [sp.band_of(o) for o in (1.24, 1.25, 1.45, 1.46, 1.65, 1.66, 2.0, 2.01, None)] ==         [None, 0, 0, 1, 1, 2, 2, None, None]
 
 
 def test_goal_means_reproduce_the_market_winner_chances():
