@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -91,7 +92,10 @@ def level_factors(analysis: dict) -> dict[tuple[str, str], float]:
         if len(items) < 6:
             out[key] = 1.0
             continue
-        err = [sum((sm.nb_over(mu * k, a, line)[0] - q) ** 2 for mu, a, line, q in items) for k in grid]
+        # P(X > line) = sf(floor(line)) for whole and half lines alike (sm.nb_over), for all lines at once
+        mu, a, line, q = (np.array(c, dtype=float) for c in zip(*items))
+        r, fl = 1.0 / a, np.floor(line)
+        err = [float(np.sum((stats.nbinom.sf(fl, r, r / (r + mu * k)) - q) ** 2)) for k in grid]
         out[key] = float(grid[int(np.argmin(err))])
     return out
 

@@ -210,3 +210,71 @@ def test_settle_picks_waits_for_statistics():
                 ("2026-10-14T18:00:00Z", "2026-10-14", 5, "corners", "total", 9.5, "over", 0.5, 0.45, 2.0, "X", 0.0, 0.0, 1))
     out = sd.settle_picks(con, pd.DataFrame(columns=["fixture_id", "side", "corners"]))
     assert out[0]["wynik"] is None and "zysk" not in out[0]
+
+
+# ---------------------------------------------------------------------------- near-certain events and builders
+
+import stats_sure as ss  # noqa: E402
+
+
+def test_corrected_chance_and_highest_threshold():
+    assert ss.corrected(0.90) == pytest.approx(0.89)
+    assert ss.corrected(0.40) == 0.40
+    k, p = ss.highest_k(14.0, 0.04, 0.85)
+    r = 1 / 0.04
+    raw = stats.nbinom.sf(k - 1, r, r / (r + 14.0))
+    assert p == pytest.approx(ss.corrected(raw)) and p >= 0.85
+    assert ss.corrected(stats.nbinom.sf(k, r, r / (r + 14.0))) < 0.85   # one more would be below the level
+
+
+def test_sure_coupon_takes_fair_legs_from_different_matches():
+    def ev(fid, p, odd, q=None):
+        return {"fixture_id": fid, "mecz": f"M{fid}", "stat": "corners", "scope": "total", "line": 7.5, "side": "over",
+                "opis": f"leg{fid}", "zaklad": "powyżej 7,5", "kurs": odd, "bukmacher": "A", "p_model": p,
+                "p_rynek": q if q is not None else 1 / odd - 0.02, "p_razy_kurs": round(p * odd, 4)}
+    events = [ev(1, 0.92, 1.18), ev(1, 0.95, 1.12), ev(2, 0.90, 1.20), ev(3, 0.91, 1.17), ev(4, 0.93, 1.15),
+              ev(5, 0.80, 1.10), ev(6, 0.99, 1.30, q=0.70)]     # 5 below fair, 6 too far from the market
+    k = ss.sure_coupon(events)
+    assert k is not None and 1.8 <= k["kurs"] <= 2.6 and k["ev_podatek"] > 0
+    fids = [l["fixture_id"] for l in k["legs"]]
+    assert len(fids) == len(set(fids)) and 5 not in fids and 6 not in fids
+
+
+def test_goal_means_reproduce_the_market_winner_chances():
+    lh, la = ss.goals_from_market(1.5, 1.1, 0.62, 0.15)
+    k = np.arange(16)
+    j = np.outer(stats.poisson.pmf(k, lh), stats.poisson.pmf(k, la))
+    assert np.tril(j, -1).sum() == pytest.approx(0.62, abs=2e-3)
+    assert np.triu(j, 1).sum() == pytest.approx(0.15, abs=2e-3)
+
+
+def test_builder_chance_is_above_the_product_for_related_legs():
+    dims, corr = ss.load_corr()
+    m = {"fixture_id": 7, "gospodarz": "H", "gosc": "A", "start": "2026-10-20T19:00:00+00:00"}
+    means = {"home_shots": 17.0, "home_sot": 6.0, "home_corners": 6.5, "home_goals": 2.0,
+             "away_shots": 9.0, "away_sot": 3.0, "away_corners": 3.8, "away_goals": 0.9}
+    alphas = {d: (1e-4 if d.endswith("goals") else 0.04) for d in dims}
+    out = ss.builders_for_match(m, means, alphas, dims, corr)
+    scm = next(b for b in out if b["scope"] == "home" and b["szablon"] == "SCM")
+    assert scm["p_model"] > scm["p_niezalezne"]
+    assert [l["side"] for l in scm["legs"]] == ["over", "over", "more"]
+
+
+def test_settle_leg_more_than_the_opponent_and_goals():
+    by_fix = {9: pd.DataFrame([{"fixture_id": 9, "side": "home", "total_shots": 14, "goals": 2.0},
+                               {"fixture_id": 9, "side": "away", "total_shots": 14, "goals": 1.0}])}
+    assert sd.settle_leg({"fixture_id": 9, "stat": "shots", "scope": "home", "line": None, "side": "more"}, by_fix)[0] == "przegrana"
+    assert sd.settle_leg({"fixture_id": 9, "stat": "goals", "scope": "home", "line": None, "side": "more"}, by_fix)[0] == "wygrana"
+    assert sd.settle_leg({"fixture_id": 9, "stat": "goals", "scope": "away", "line": 0.5, "side": "over"}, by_fix)[0] == "wygrana"
+
+
+def test_result_odds_become_margin_free_chances():
+    payload = {"response": [{"bookmakers": [
+        {"name": "A", "bets": [{"id": 1, "values": [{"value": "Home", "odd": "1.50"}, {"value": "Draw", "odd": "4.00"},
+                                                     {"value": "Away", "odd": "6.50"}]}]},
+        {"name": "B", "bets": [{"id": 1, "values": [{"value": "Home", "odd": "1.55"}, {"value": "Draw", "odd": "4.20"},
+                                                     {"value": "Away", "odd": "6.00"}]}]}]}]}
+    rows = sd.parse_result_odds(payload)
+    assert len(rows) == 6 and {r["side"] for r in rows} == {"home", "draw", "away"}
+    h, d, a = sd.result_probs(rows)
+    assert h + d + a == pytest.approx(1.0) and 0.6 < h < 0.65 and a < d

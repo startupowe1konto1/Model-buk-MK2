@@ -52,6 +52,9 @@ STATS: dict[str, str] = {
 }
 STAT_PL = {"shots": "strzały", "sot": "strzały celne", "corners": "rożne", "fouls": "faule",
            "cards": "kartki", "yellow": "żółte kartki", "offsides": "spalone"}
+# Counts modelled only for bet builders (scoring and winning); never picked or shown on their own.
+# Goals are the 90-minute score: matches that went to extra time have them missing.
+EXTRA_STATS: dict[str, str] = {"goals": "goals"}
 
 MIN_CUP_ROWS = 300
 
@@ -65,8 +68,8 @@ def _ro(path: Path) -> sqlite3.Connection:
 def load_rows(league_ids: list[int], first_season: int = 2024) -> pd.DataFrame:
     """One row per team per finished match with statistics: snapshot history plus the gap database."""
     cols = ", ".join(f"s.{c}" for c in COLUMNS)
-    q = f"""select m.fixture_id, m.league_id, m.season, m.kickoff_utc, m.referee,
-                   m.home_team_id, m.home_team, m.away_team_id, m.away_team,
+    q = f"""select m.fixture_id, m.league_id, m.season, m.kickoff_utc, m.referee, m.status_short,
+                   m.home_team_id, m.home_team, m.away_team_id, m.away_team, m.home_goals, m.away_goals,
                    s.team_id, s.side, {cols}
             from matches m join team_match_stats s on s.fixture_id = m.fixture_id
             where m.season >= ? and m.status_short in ('FT','AET','PEN')
@@ -91,6 +94,8 @@ def load_rows(league_ids: list[int], first_season: int = 2024) -> pd.DataFrame:
     df["opp"] = np.where(df["side"] == "home", df["away_team"], df["home_team"])
     df["home"] = (df["side"] == "home").astype(float)
     df["cup"] = df["league_id"].isin(list(CUPS)).astype(float)
+    goals = np.where(df["side"] == "home", df["home_goals"], df["away_goals"]).astype(float)
+    df["goals"] = np.where(df["status_short"] == "FT", goals, np.nan)
     return fill_known_zeros(df)
 
 
@@ -185,7 +190,7 @@ def fit_stat(df: pd.DataFrame, stat: str, asof: pd.Timestamp, half_life_days: fl
     took the level from Norway's calendar-year season every spring).  ``b_home_cup`` lets the
     home advantage differ in the UEFA cups.
     """
-    col = STATS[stat]
+    col = STATS.get(stat) or EXTRA_STATS[stat]
     d = df[df[col].notna() & (df["kickoff"] < asof)].copy()
     leagues = leagues or home_league(df)
     teams = np.array(sorted(set(d["team_id"]) | set(d["opp_id"])))

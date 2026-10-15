@@ -27,6 +27,22 @@
    "kto": "Claude"
   },
   {
+   "id": "pewniaczki",
+   "obszar": "Typy",
+   "status": "w_toku",
+   "rzecz": "Pewniaczki i kupon z nich ok. 2,0",
+   "szczegoly": "Zdarzenia, które według modelu wchodzą w co najmniej 85% meczów. Na sezonie 2025/26 model oceniał je trafnie (zdarzenia z 90% wchodziły w ok. 91%), a sama seria 10 z 10 trzymała się w 93% kolejnych meczów. Zapisuję je przed meczem i rozliczam od 15.10.",
+   "kto": "Claude"
+  },
+  {
+   "id": "bet-builder",
+   "obszar": "Typy",
+   "status": "w_toku",
+   "rzecz": "Bet buildery (kilka zdarzeń z jednego meczu)",
+   "szczegoly": "Szansa całości z uwzględnieniem powiązań między strzałami, celnymi i golami; na sezonie 2025/26 zgadzała się z rzeczywistością co do 1–2 punktów. Gol i zwycięstwo według kursów bukmacherów na wynik meczu. Kursów bet builderów nie ma w serwisie: porównaj z „opłaca się od kursu”.",
+   "kto": "Claude"
+  },
+  {
    "id": "kursy",
    "obszar": "Dane",
    "status": "w_toku",

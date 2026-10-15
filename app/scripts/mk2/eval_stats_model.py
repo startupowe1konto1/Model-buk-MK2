@@ -175,7 +175,7 @@ def check_p_over() -> None:
 def predict(df: pd.DataFrame, test: pd.DataFrame, stat: str, hl: float, rt: float, bounds: list,
             leagues_m: dict, log: list, variant: str) -> pd.DataFrame:
     """Expected count of every test team-row from the fit at the start of its period."""
-    col = sm.STATS[stat]
+    col = sm.STATS.get(stat) or sm.EXTRA_STATS[stat]
     parts = []
     for a, b in bounds:
         rows = test[(test["kickoff"] >= a) & (test["kickoff"] < b)]

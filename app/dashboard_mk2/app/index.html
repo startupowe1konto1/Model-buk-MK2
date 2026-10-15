@@ -105,6 +105,17 @@ th[aria-sort="descending"] .th::after { content: " ↓"; }
 .pk3.sm .v { font-size: 1.12rem; }
 .legn { font: 600 0.8rem var(--body); color: var(--muted); letter-spacing: 0.04em; }
 @media (max-width: 560px) { .pk3 { grid-template-columns: 1fr 1fr; } .blk.typ { grid-column: 1 / -1; } }
+/* the three kinds of picks of a day: segmented switch */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; justify-self: start; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--chip); }
+.seg button { font: 600 0.92rem var(--body); border: 0; background: transparent; color: var(--muted); padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px var(--shade); }
+.seg button:focus-visible { outline: 2px solid var(--pitch); outline-offset: 2px; }
+.last10 { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+.last10 .v { min-width: 1.9em; text-align: center; padding: 1px 4px; border-radius: 5px; background: var(--chip); }
+.last10 .v.miss { background: transparent; border: 1px solid var(--loss); color: var(--loss); font-weight: 600; }
+.bblegs { margin: 0; padding-left: 1.3rem; display: grid; gap: 6px; }
+.bblegs li { padding-left: 2px; }
+.bblegs .p { color: var(--muted); font-size: 0.86rem; font-variant-numeric: tabular-nums; }
 details.why summary { cursor: pointer; color: var(--pitch); font-weight: 600; font-size: 0.9rem; }
 details.why p { margin: 6px 0 0; font-size: 0.92rem; max-width: 80ch; }
 /* matches */
@@ -165,8 +176,32 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     <div class="card">
       <div class="row between"><h2>Typy dnia</h2><span class="fresh" id="td-info"></span></div>
       <div class="chips" id="td-days" role="group" aria-label="Dzień"></div>
+      <div class="seg" id="td-seg" role="tablist" aria-label="Rodzaj typów">
+        <button type="button" role="tab" data-v="typy" aria-selected="true">Typy i kupon</button>
+        <button type="button" role="tab" data-v="pewne" aria-selected="false">Pewniaczki</button>
+        <button type="button" role="tab" data-v="bb" aria-selected="false">Bet builder</button>
+      </div>
       <div class="sum" id="td-sum"></div>
-      <details class="why"><summary>Zasady typów i co znaczy „powyżej 9,5”</summary>
+      <details class="why" id="td-rules-pewne" hidden><summary>Co to są pewniaczki i jak ich używać</summary>
+        <ul class="list note">
+          <li>Zdarzenia, które według modelu wchodzą w co najmniej 85% meczów, np. „Bayern: co najmniej 13 strzałów”. Dla każdej drużyny i meczu szukam najwyższego takiego progu dla strzałów, celnych i rożnych.</li>
+          <li>Sprawdziłem to na całym sezonie 2025/26: zdarzenia, którym model dawał ok. 90%, wchodziły w ok. 91% przypadków, a nawet seria „10 z 10 ostatnich meczów” trzymała się w kolejnym meczu w 93% przypadków. Pewne na 100% nie jest nic.</li>
+          <li>Pojedynczo pewniaczek się nie opłaca: przy kursie 1,10 trzeba by 103% szansy, żeby wyjść na plus po podatku 12%. Sens mają w kuponie (podatek płacisz raz) albo w bet builderze.</li>
+          <li>Kupon z pewniaczków: 3–6 zdarzeń z różnych meczów, każde z kursem nie niższym od uczciwego, łączny kurs 1,8–2,6, opłacalny po podatku. Kupon z 5 zdarzeń po ok. 90% wchodził średnio w 57% dni.</li>
+          <li>Uczciwy kurs to 1 podzielone przez szansę. Gdy bukmacher daje więcej, zakład jest wart więcej, niż kosztuje (przed podatkiem).</li>
+          <li>Ostatnie mecze: wartości z ostatnich meczów drużyny, od najstarszego; obwiedzione na czerwono są poniżej progu. Seria jest dla orientacji: przy znanej szansie wg modelu sama prawie nic nie zmienia.</li>
+          <li>Pomijam drużyny, które średnio mają bardzo mało danej statystyki (np. mniej niż 3,5 rożnego): tam model był zbyt pewny siebie.</li>
+        </ul>
+      </details>
+      <details class="why" id="td-rules-bb" hidden><summary>Jak działa bet builder</summary>
+        <ul class="list note">
+          <li>Kilka zdarzeń z jednego meczu na jednym kuponie (u bukmachera: „zbuduj zakład” albo „bet builder”). Wygrywa, gdy wejdą wszystkie.</li>
+          <li>Zdarzenia w jednym meczu są ze sobą powiązane: drużyna, która dużo strzela, ma też więcej celnych i częściej zdobywa gola. Dlatego szansa całości jest wyższa niż pomnożone szanse. Model to uwzględnia: na sezonie 2025/26 jego szanse zgadzały się z rzeczywistością co do 1–2 punktów, a zwykłe mnożenie zaniżało je o 7–9 punktów.</li>
+          <li>Kursów bet builderów nie ma w serwisie kursowym. Sprawdź kurs u swojego bukmachera i graj tylko, gdy jest co najmniej taki jak „opłaca się od kursu”. Na bet builderach bukmacherzy biorą zwykle większą marżę, więc nie zdarza się to często.</li>
+          <li>„Bezpieczniejsze”: strzały, celne, więcej strzałów niż rywal albo gol. „Z wynikiem”: do tego zwycięstwo, więc niższa szansa i wyższy kurs. Zwycięstwo liczy się po 90 minutach.</li>
+        </ul>
+      </details>
+      <details class="why" id="td-rules"><summary>Zasady typów i co znaczy „powyżej 9,5”</summary>
         <ul class="list note">
           <li>Typ to zawsze zdarzenie „co najmniej …”, np. „co najmniej 10 rzutów rożnych”. U bukmachera ten sam zakład nazywa się „powyżej 9,5”: liczba z połówką (tzw. linia) to tylko próg, więc „powyżej 9,5” wygrywa, gdy padnie 10 albo więcej. Nie dajemy typów „poniżej” ani linii bez połówki (np. 9 czy 9,25).</li>
           <li>Kurs pojedynczego typu: do ok. 1,8 (najwyżej 1,85).</li>
@@ -179,6 +214,8 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     </div>
     <div class="page" id="td-picks"></div>
     <div class="page" id="td-kupon"></div>
+    <div class="page" id="td-pewne" hidden></div>
+    <div class="page" id="td-bb" hidden></div>
     <div class="card">
       <h2>Wyniki do tej pory</h2>
       <p class="note">Każdy typ i kupon dnia zapisuję przed meczem, a po meczu sprawdzam z prawdziwą statystyką. Zysk liczę na stawkę 1 przy kursie z listy, bez podatku i z podatkiem 12%.</p>
@@ -280,7 +317,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
         <label for="zk-mecz">Mecz<input class="in" id="zk-mecz" type="text" placeholder="np. Aston Villa – Fenerbahçe"></label>
         <label for="zk-rozgr">Rozgrywki<input class="in" id="zk-rozgr" type="text" placeholder="np. Liga Mistrzów"></label>
         <label for="zk-rodzaj">Rodzaj
-          <select class="ctrl" id="zk-rodzaj"><option>Singiel</option><option>Kupon 2</option><option>Kupon 3</option><option>Kupon 4+</option></select>
+          <select class="ctrl" id="zk-rodzaj"><option>Singiel</option><option>Kupon 2</option><option>Kupon 3</option><option>Kupon 4+</option><option>Bet builder</option></select>
         </label>
         <label for="zk-opis" style="grid-column: 1 / -1">Zakład (przy kuponie wszystkie nogi)<textarea class="ta" id="zk-opis" placeholder="np. Aston Villa: co najmniej 14 strzałów (powyżej 13,5)"></textarea></label>
         <label for="zk-buk">Bukmacher<input class="in" id="zk-buk" type="text" placeholder="np. STS, Betclic, Superbet"></label>
@@ -338,6 +375,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
         <li>Dane: statystyki meczów (strzały, celne, rożne, faule, kartki) z ostatnich sezonów 15 najlepszych lig wg rankingu UEFA, 7 lig dodatkowych i trzech pucharów, uzupełniane codziennie z API-Football. Kursy też z API-Football.</li>
         <li>Model liczy dla każdej drużyny, ile „robi” danej statystyki i na ile pozwala rywalom, z uwzględnieniem poziomu ligi, gospodarza, pucharu i świeżości meczów (starsze ważą mniej).</li>
         <li>Typy dnia: zdarzenia „co najmniej …” z kursem do ok. 1,8, przy których model daje wyraźnie większą szansę niż bukmacherzy (ale nie skrajnie większą) i które opłacają się po podatku. Każdy typ ma opis „Dlaczego”, a po meczu jest rozliczany z prawdziwą statystyką.</li>
+        <li>Pewniaczki: zdarzenia, które według modelu wchodzą w co najmniej 85% meczów (sprawdzone na sezonie 2025/26), i kupon z nich ok. 2,0. Bet buildery: kilka zdarzeń z jednego meczu, z uwzględnieniem tego, jak są ze sobą powiązane; szanse gola i zwycięstwa według kursów bukmacherów na wynik.</li>
         <li>Aktualizacja: kilka razy dziennie (wyniki, kursy, prognozy, typy).</li>
       </ul>
     </div>
@@ -403,6 +441,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     return [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? f[1] : f[2];
   }
   const atLeastText = (k, stat) => "co najmniej " + k + " " + plural(k, stat);
+  const events = (n) => n + " " + (n === 1 ? "zdarzenie" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "zdarzenia" : "zdarzeń");
   // "Aston Villa: co najmniej 14 strzałów" -> ["Aston Villa", "co najmniej 14 strzałów"]
   function splitOpis(opis) {
     const s = opis || "", i = s.indexOf(": ");
@@ -644,15 +683,25 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const t = todayKey();
     if (!S.td || !keys.includes(S.td)) S.td = keys.find((k) => k >= t) || keys[keys.length - 1];
     const res = new Map(((wy && wy.dni) || []).map((d) => [d.dzien, d]));
+    const v = S.tdv || "typy";
+    document.querySelectorAll("#td-seg button").forEach((b) => b.setAttribute("aria-selected", b.dataset.v === v ? "true" : "false"));
+    $("#td-picks").hidden = $("#td-kupon").hidden = $("#td-rules").hidden = v !== "typy";
+    $("#td-pewne").hidden = $("#td-rules-pewne").hidden = v !== "pewne";
+    $("#td-bb").hidden = $("#td-rules-bb").hidden = v !== "bb";
+    // per day: settled/total for what is shown in the current view
+    const hitsOf = (lst) => { const done = lst.filter((x) => x.wynik); return done.length ? done.filter((x) => x.wynik === "wygrana").length + "/" + done.length : lst.length; };
     $("#td-days").replaceChildren(...keys.map((k) => {
-      const r = res.get(k);
-      const cnt = r && r.typy_wynik.rozliczone ? r.typy_wynik.trafione + "/" + r.typy_wynik.rozliczone : (all[k].top || []).length;
+      const r = res.get(k), dk = all[k];
+      const cnt = v === "pewne" ? hitsOf(dk.pewne || []) : v === "bb" ? hitsOf(dk.bb || [])
+        : r && r.typy_wynik.rozliczone ? r.typy_wynik.trafione + "/" + r.typy_wynik.rozliczone : (dk.top || []).length;
       return chip(dayLabel(k), k === S.td, () => { S.td = k; render(); }, cnt);
     }));
     const d = all[S.td] || { top: [], kupon: null, kupony: [] };
     const r = res.get(S.td);
     const sum = $("#td-sum");
     sum.replaceChildren();
+    renderResults(wy);
+    if (v === "pewne" || v === "bb") { renderExtras(d, v, sum); return; }
     if (r && r.typy_wynik.rozliczone) {
       const tw = r.typy_wynik;
       const a = el("span"); a.append("Typy: ", el("b", null, tw.trafione + " z " + tw.rozliczone), " siadło");
@@ -670,7 +719,118 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     d.top.forEach((p, i) => box.append(pickCard(p, i + 1)));
     const kb = $("#td-kupon");
     kb.replaceChildren(couponCard(d.kupon, d.kupony || []));
-    renderResults(wy);
+  }
+  document.querySelectorAll("#td-seg button").forEach((b) => b.addEventListener("click", () => { S.tdv = b.dataset.v; render(); }));
+  // near-certain events and bet builders of the chosen day
+  function renderExtras(d, v, sum) {
+    const lst = (v === "pewne" ? d.pewne : d.bb) || [];
+    const done = lst.filter((x) => x.wynik);
+    if (done.length) {
+      const hit = done.filter((x) => x.wynik === "wygrana").length, exp = done.reduce((a, x) => a + (x.p_model || 0), 0);
+      const a = el("span"); a.append("Weszło ", el("b", null, hit + " z " + done.length), " (model spodziewał się ok. " + NF1.format(exp) + ")");
+      sum.append(a);
+      if (done.length < lst.length) sum.append(el("span", "c-muted", "pozostałe czekają na statystyki"));
+    } else sum.append(el("span", "c-muted", v === "pewne"
+      ? "Zdarzenia, które według modelu wchodzą w co najmniej 85% meczów. Zapisuję je przed meczem i po meczu sprawdzam, ile weszło."
+      : "Kilka zdarzeń z jednego meczu na jednym kuponie. Kurs sprawdź u swojego bukmachera w opcji „zbuduj zakład”."));
+    $("#td-info").textContent = lst.length ? (v === "pewne" ? "pewniaczki: " : "bet buildery: ") + lst.length : "";
+    if (v === "pewne") {
+      const box = $("#td-pewne");
+      box.replaceChildren(couponCard(d.kupon_pewne, [], { title: "Kupon z pewniaczków ok. 2,0",
+        empty: "Na ten dzień nie ma kuponu z pewniaczków (3–6 zdarzeń z kursem nie niższym od uczciwego, łączny kurs 1,8–2,6), który opłaca się po podatku." }));
+      const list = el("div", "card");
+      list.append(el("h2", null, "Pewniaczki"));
+      if (!lst.length) list.append(el("p", "note", "Na ten dzień nie ma jeszcze pewniaczków (potrzebne są prognozy obu drużyn z co najmniej 10 meczami w danych)."));
+      lst.forEach((e) => list.append(sureCard(e)));
+      box.append(list);
+    } else {
+      const box = $("#td-bb");
+      box.replaceChildren();
+      [["bezpieczny", "Bezpieczniejsze"], ["z_wynikiem", "Z wynikiem meczu"]].forEach(([kind, title]) => {
+        const part = lst.filter((b) => (b.rodzaj || "bezpieczny") === kind);
+        const card = el("div", "card");
+        card.append(el("h2", null, title));
+        if (!part.length) card.append(el("p", "note", "Na ten dzień brak takich bet builderów z szansą 45–80%."));
+        if (kind === "z_wynikiem") card.append(el("p", "note", "Strzały i celne drużyny plus jej zwycięstwo (po 90 minutach): niższa szansa, wyższy kurs."));
+        part.forEach((b) => card.append(bbCard(b)));
+        box.append(card);
+      });
+    }
+  }
+  function sureCard(e) {
+    const m = matchById(e.fixture_id);
+    const c = el("article", "pick" + (e.wynik === "wygrana" ? " won" : e.wynik === "przegrana" ? " lost" : ""));
+    const start = (m && m.start) || e.start;
+    const hd = el("div", "hd");
+    hd.append(el("span", "mt", e.mecz + (start ? " · " + day(start) + ", " + hm(start) : "") + (m ? " · " + ligaName(m.liga_id) : "")));
+    const tags = el("span", "row");
+    if (!empty(e.p_razy_kurs) && e.p_razy_kurs >= 1) tags.append(el("span", "chip c-win", "kurs nie niższy niż uczciwy"));
+    if ("wynik" in e) tags.append(resultChip(e.wynik, e.wartosc));
+    hd.append(tags);
+    c.append(hd, pickBlocks(e));
+    const f = el("div", "facts");
+    fact(f, "Uczciwy kurs", dec(e.kurs_uczciwy || fairOf(e.p_model)));
+    if (!empty(e.oczekiwane)) fact(f, "Model oczekuje średnio", d1(e.oczekiwane));
+    if (e.rekord && e.rekord[1]) fact(f, e.scope === "total" ? "W ostatnich meczach obu drużyn co najmniej " + e.k + ":" : "Ostatnie mecze z co najmniej " + e.k + ":",
+      e.rekord[0] + " z " + e.rekord[1]);
+    c.append(f);
+    if (e.ostatnie && e.ostatnie.length) {
+      const row = el("div", "last10");
+      row.append(el("span", "c-muted", "Ostatnie mecze (od najstarszego):"));
+      e.ostatnie.forEach((x) => row.append(el("span", x >= e.k ? "v" : "v miss", String(x))));
+      c.append(row);
+    }
+    const row = el("div", "row");
+    const add = el("button", "btn ghost sm", "Dodaj do zakładów");
+    add.type = "button";
+    add.addEventListener("click", () => draftBet({ mecz: e.mecz, rozgr: m ? ligaName(m.liga_id) : "", data: start ? dayKey(start) : S.td,
+      opis: legText(e), kurs: e.kurs, szansa: e.p_model, nogi: [{ fixture_id: e.fixture_id, stat: e.stat, scope: e.scope, line: e.line, side: e.side }] }));
+    row.append(add);
+    if (m) { const o = el("button", "btn ghost sm", "Analiza meczu"); o.type = "button"; o.addEventListener("click", () => openMatch(m.id)); row.append(o); }
+    c.append(row);
+    return c;
+  }
+  const fairOf = (p) => (p > 0 ? 1 / p : null);
+  function bbCard(b) {
+    const m = matchById(b.fixture_id);
+    const legs = b.legs || [];
+    const c = el("article", "pick" + (b.wynik === "wygrana" ? " won" : b.wynik === "przegrana" ? " lost" : ""));
+    const start = (m && m.start) || b.start;
+    const hd = el("div", "hd");
+    hd.append(el("span", "mt", b.mecz + (start ? " · " + day(start) + ", " + hm(start) : "") + (m ? " · " + ligaName(m.liga_id) : "")));
+    if ("wynik" in b) hd.append(resultChip(b.wynik));
+    c.append(hd);
+    const ol = el("ol", "bblegs");
+    legs.forEach((l) => {
+      const li = el("li");
+      li.append(el("b", null, l.opis), " ", el("span", "p", "(osobno " + pct(l.p_model) + ")"), " ");
+      if (l.wynik) li.append(resultChip(l.wynik, l.side === "more" ? null : l.wartosc));
+      ol.append(li);
+    });
+    c.append(ol);
+    const g = el("div", "pk3");
+    const b1 = el("div", "blk typ");
+    b1.append(el("span", "k", "Typ"), el("span", "v", "Bet builder: " + events(legs.length)), el("span", "s", "jeden mecz, wszystkie muszą wejść"));
+    const b2 = el("div", "blk");
+    b2.append(el("span", "k", "Kurs u bukmachera"), el("span", "v", "?"), el("span", "s", "sprawdź w opcji „zbuduj zakład”"));
+    const b3 = el("div", "blk");
+    b3.append(el("span", "k", "Szansa wg modelu"), el("span", "v", pct(b.p_model)), el("span", "s", "pomnożone osobno: " + pct(b.p_niezalezne)));
+    g.append(b1, b2, b3);
+    c.append(g);
+    const f = el("div", "facts");
+    payFrom(f, b.p_model);
+    fact(f, "Uczciwy kurs", dec(b.kurs_uczciwy || fairOf(b.p_model)));
+    if (b.gole_z_rynku && legs.some((l) => l.stat === "goals")) f.append(el("span", "c-muted", "szanse gola i zwycięstwa ustawione według kursów bukmacherów na wynik meczu"));
+    c.append(f);
+    const w = whyBox(b.why, "Dlaczego ten bet builder?");
+    if (w) c.append(w);
+    const add = el("button", "btn ghost sm", "Dodaj do zakładów");
+    add.type = "button";
+    add.addEventListener("click", () => draftBet({ rodzaj: "Bet builder", mecz: b.mecz, rozgr: m ? ligaName(m.liga_id) : "", data: start ? dayKey(start) : S.td,
+      opis: legs.map((l) => l.opis).join("\n"), kurs: null, szansa: b.p_model,
+      nogi: legs.map((l) => ({ fixture_id: l.fixture_id, stat: l.stat, scope: l.scope, line: l.line, side: l.side })) }));
+    c.append(add);
+    return c;
   }
   // the three blocks every pick and coupon leg shows: what to bet, the bookmaker's price, the model's chance
   function pickBlocks(p, small, label) {
@@ -681,9 +841,11 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     if (who) b1.append(el("span", "s", whoText(who)));
     b1.append(el("span", "v", what), el("span", "s", "u bukmachera: " + bookieText(p)));
     const b2 = el("div", "blk");
-    b2.append(el("span", "k", "Kurs u bukmachera"), el("span", "v", dec(p.kurs)), el("span", "s", p.bukmacher || ""));
+    b2.append(el("span", "k", "Kurs u bukmachera"), el("span", "v", dec(p.kurs)),
+      el("span", "s", p.bukmacher || (empty(p.kurs) ? "brak w serwisie kursowym, sprawdź u bukmachera" : "")));
     const b3 = el("div", "blk");
-    b3.append(el("span", "k", "Szansa wg modelu"), el("span", "v", pct(p.p_model)), el("span", "s", "bukmacherzy: " + pct(p.p_rynek)));
+    b3.append(el("span", "k", "Szansa wg modelu"), el("span", "v", pct(p.p_model)));
+    if (!empty(p.p_rynek)) b3.append(el("span", "s", "bukmacherzy: " + pct(p.p_rynek)));
     g.append(b1, b2, b3);
     return g;
   }
@@ -722,14 +884,15 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
   }
   // one line for the ledger: "Aston Villa: co najmniej 14 strzałów (powyżej 13,5)"
   const legText = (l) => l.opis + " (" + (l.zaklad || ((l.side === "over" ? "powyżej " : "poniżej ") + line(l.line))) + ")";
-  function couponCard(k, alts) {
+  function couponCard(k, alts, opts) {
+    opts = opts || {};
     const card = el("div", "card");
-    card.append(el("h2", null, "Kupon dnia ok. 2,0"));
-    if (!k) { card.append(el("p", "note", "Na ten dzień nie ma kuponu (2 zdarzenia, wyjątkowo 3; łączny kurs 1,8–2,5), który opłaca się po podatku.")); return card; }
+    card.append(el("h2", null, opts.title || "Kupon dnia ok. 2,0"));
+    if (!k) { card.append(el("p", "note", opts.empty || "Na ten dzień nie ma kuponu (2 zdarzenia, wyjątkowo 3; łączny kurs 1,8–2,5), który opłaca się po podatku.")); return card; }
     const legs = k.legs || [];
     const c = el("article", "pick" + (k.wynik === "wygrana" ? " won" : k.wynik === "przegrana" ? " lost" : ""));
     const hd = el("div", "hd");
-    hd.append(el("span", "mt", legs.length + " zdarzenia z różnych meczów"));
+    hd.append(el("span", "mt", events(legs.length) + " z różnych meczów"));
     const tags = el("span", "row");
     if (k.zasady === "v1") tags.append(el("span", "chip c-muted", "stare zasady"));
     if ("wynik" in k) tags.append(resultChip(k.wynik));
@@ -739,7 +902,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       const m = matchById(l.fixture_id);
       const row = el("div", "row between");
       row.append(el("span", "legn", "Zdarzenie " + (i + 1) + " · " + (l.mecz || "") + (m ? " · " + day(m.start) + ", " + hm(m.start) : "")));
-      if ("wynik" in l) row.append(resultChip(l.wynik, l.wartosc));
+      if (l.wynik) row.append(resultChip(l.wynik, l.wartosc));
       c.append(row, pickBlocks(l, true));
     });
     const pm = k.p_rynek !== undefined ? k.p_rynek : legs.reduce((a, l) => a * (l.p_rynek || 1), 1);
@@ -791,6 +954,21 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       o.append("Osobno, typy według starych zasad (do 14.10): " + (old.typy.rozliczone ? old.typy.trafione + " z " + old.typy.rozliczone + " siadło, zysk z podatkiem " + money(old.typy.zysk_podatek) : "czekają na wynik")
         + (old.kupony.rozliczone ? "; kupon: " + (old.kupony.trafione ? "siadł" : "nie siadł") : ""));
       s.append(o);
+    }
+    // near-certain events and bet builders: hits against the model's expectation; their coupon's profit
+    [["pewniaki", "Pewniaczki"], ["bet_buildery", "Bet buildery"]].forEach(([key, label]) => {
+      const h = wy[key];
+      if (!h || !h.n) return;
+      const x = el("span");
+      if (h.rozliczone) x.append(label + ": weszło ", el("b", null, h.trafione + " z " + h.rozliczone), " (model spodziewał się ok. " + NF1.format(h.oczekiwane) + ")");
+      else x.append(label + ": ", el("span", "c-muted", "pierwsze rozliczenia po meczach"));
+      s.append(x);
+    });
+    const kp = wy.kupony_pewne;
+    if (kp && kp.rozliczone) {
+      const x = el("span");
+      x.append("Kupony z pewniaczków: ", el("b", null, kp.trafione + " z " + kp.rozliczone), ", zysk ", el("b", sign(kp.zysk_podatek), money(kp.zysk_podatek)), " z podatkiem");
+      s.append(x);
     }
     const rows = (wy.dni || []).filter((d) => d.dzien <= todayKey()).map((d) => ({ key: d.dzien, dzien: d.dzien, typy: d.typy_wynik, kupon: d.kupon, stare: d.stare_zasady }));
     table($("#wy-dni"), rows, [

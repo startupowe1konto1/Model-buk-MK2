@@ -47,6 +47,7 @@ sys.path.insert(0, str(HERE.parents[1] / "src"))
 
 import stats_model as sm  # noqa: E402
 import stats_picks as sp  # noqa: E402
+import stats_sure as ss  # noqa: E402
 from model_buk.ingestion.api_football_tables import (  # noqa: E402
     MATCH_COLUMNS,
     TEAM_MATCH_STATS_COLUMNS,
@@ -108,11 +109,15 @@ def init_dbs() -> tuple[sqlite3.Connection, sqlite3.Connection, sqlite3.Connecti
         pr.execute("alter table picks add column expected real")
     if "rules" not in cols:
         pr.execute("alter table picks add column rules text")
-    if "rules" not in [r[1] for r in pr.execute("pragma table_info(coupons)")]:
-        pr.execute("alter table coupons add column rules text")
     pr.execute("""create table if not exists coupons (
         made_at text, day text, kind text, legs text, odd real, p_model real, p_market real, ev real,
         ev_tax real, why text, primary key (day, kind))""")
+    if "rules" not in [r[1] for r in pr.execute("pragma table_info(coupons)")]:
+        pr.execute("alter table coupons add column rules text")
+    # near-certain events (kind 'pewniak') and bet builders (kind 'bb'), logged before kick-off
+    pr.execute("""create table if not exists extras (
+        made_at text, day text, kind text, key text, fixture_id integer, start text, legs text,
+        p_model real, odd real, payload text, rules text, primary key (day, kind, key))""")
     for con in (fx, od, pr):
         con.commit()
     return fx, od, pr
@@ -232,7 +237,7 @@ def step_odds(client: Client, fx: sqlite3.Connection, od: sqlite3.Connection, ho
             print(f"odds: {exc}")
             break
         stamp = iso(utcnow())
-        quotes = parse_odds(payload)
+        quotes = parse_odds(payload) + parse_result_odds(payload)
         od.executemany("insert or replace into odds values (?,?,?,?,?,?,?,?)",
                        [(stamp, r["fixture_id"], q["bookmaker"], q["stat"], q["scope"], q["line"], q["side"], q["odd"])
                         for q in quotes])
@@ -241,6 +246,45 @@ def step_odds(client: Client, fx: sqlite3.Connection, od: sqlite3.Connection, ho
         fetched += 1
     print(f"odds: {fetched} fixtures fetched ({len(rows)} upcoming within {hours:g} h)")
     return fetched
+
+
+def parse_result_odds(payload: dict) -> list[dict]:
+    """The match-winner market (API-Football bet 1) as rows of stat 'result': side home, draw or away."""
+    rows = []
+    for block in payload.get("response", []):
+        for bm in block.get("bookmakers", []):
+            for bet in bm.get("bets", []):
+                if bet.get("id") != 1:
+                    continue
+                for v in bet.get("values", []):
+                    side = {"Home": "home", "Draw": "draw", "Away": "away"}.get(str(v.get("value")))
+                    try:
+                        odd = float(v.get("odd"))
+                    except (TypeError, ValueError):
+                        continue
+                    if side and odd > 1.0:
+                        rows.append({"stat": "result", "scope": "match", "line": 0.0, "side": side,
+                                     "bookmaker": bm["name"], "odd": odd})
+    return rows
+
+
+def result_probs(rows: list[dict]) -> tuple[float, float, float] | None:
+    """Margin-free chances of a home win, a draw and an away win: the median over bookmakers."""
+    by_bm: dict[str, dict[str, float]] = {}
+    for r in rows:
+        if r["stat"] == "result":
+            by_bm.setdefault(r["bookmaker"], {})[r["side"]] = r["odd"]
+    probs = []
+    for q in by_bm.values():
+        if len(q) == 3:
+            inv = {s: 1 / q[s] for s in ("home", "draw", "away")}
+            tot = sum(inv.values())
+            probs.append([inv["home"] / tot, inv["draw"] / tot, inv["away"] / tot])
+    if not probs:
+        return None
+    med = np.median(np.array(probs), axis=0)
+    med = med / med.sum()
+    return float(med[0]), float(med[1]), float(med[2])
 
 
 def latest_odds(od: sqlite3.Connection, fixture_ids: list[int]) -> dict[int, list[dict]]:
@@ -279,6 +323,9 @@ def analysis_for(fixtures: list[sqlite3.Row], fits: dict, odds: dict[int, list[d
             means[s] = {"home": mh, "away": ma, "total": mh + ma}
         lines = []
         frame = pd.DataFrame(odds.get(f["fixture_id"], []))
+        result = result_probs(odds.get(f["fixture_id"], []))
+        if not frame.empty:
+            frame = frame[frame["stat"].isin(list(fits))]
         if not frame.empty:
             for (stat, scope, line), g in frame.groupby(["stat", "scope", "line"]):
                 fit = fits[stat]
@@ -306,6 +353,7 @@ def analysis_for(fixtures: list[sqlite3.Row], fits: dict, odds: dict[int, list[d
         out["mecze"].append({"fixture_id": f["fixture_id"], "start": f["kickoff_utc"], "gospodarz": f["home"],
                              "gosc": f["away"], "liga_id": f["league_id"], "srednie": means, "linie": lines,
                              "n_gosp": n_home, "n_gosc": n_away, "home_id": f["home_id"], "away_id": f["away_id"],
+                             "wynik_rynek": result,
                              "min_n": min(n_home, n_away) if team_n is not None else sp.MIN_TEAM_MATCHES})
     return out
 
@@ -635,11 +683,14 @@ def settle_leg(leg: dict, by_fix: dict) -> tuple[str | None, float | None]:
     g = by_fix.get(leg["fixture_id"])
     if g is None or len(g) != 2:
         return None, None
-    col = sm.STATS[leg["stat"]]
+    col = sm.STATS.get(leg["stat"]) or sm.EXTRA_STATS[leg["stat"]]
     h = g[g["side"] == "home"][col].iloc[0]
     a = g[g["side"] == "away"][col].iloc[0]
     if pd.isna(h) or pd.isna(a):
         return None, None
+    if leg["side"] == "more":   # the team's count above the opponent's (a tie loses)
+        mine, theirs = (h, a) if leg["scope"] == "home" else (a, h)
+        return ("wygrana" if mine > theirs else "przegrana"), float(mine)
     val = float({"home": h, "away": a, "total": h + a}[leg["scope"]])
     if val == leg["line"]:
         return "zwrot", val
@@ -664,6 +715,58 @@ def settle_picks(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
             p["zysk"] = p["zysk_podatek"] = 0.0
         out.append(p)
     return out
+
+
+def settle_extras(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
+    """Logged near-certain events and bet builders: in when every leg came in."""
+    rows = [dict(r) for r in pr.execute("select * from extras order by day, kind, p_model desc")]
+    by_fix = {fid: g for fid, g in df.groupby("fixture_id")}
+    for r in rows:
+        legs = json.loads(r["legs"])
+        res = [settle_leg(l, by_fix) for l in legs]
+        for l, (w, v) in zip(legs, res):
+            l["wynik"], l["wartosc"] = w, v
+        r["legs"] = legs
+        r["payload"] = json.loads(r["payload"]) if r.get("payload") else {}
+        r["wynik"] = ("przegrana" if any(w == "przegrana" for w, _ in res)
+                      else "wygrana" if all(w == "wygrana" for w, _ in res) else None)
+    return rows
+
+
+def log_extras(pr: sqlite3.Connection, extra: dict, kickoff: dict, made: str) -> None:
+    """Near-certain events, bet builders and the coupon of near-certain events of matches not started
+    yet: the day's rows are replaced by this run's; rows of started matches stay (they get settled)."""
+    days = (set(extra["pewne"]) | set(extra["bb"]) | set(extra["kupon_pewne"])
+            | {r[0] for r in pr.execute("select distinct day from extras where day >= ?", (made[:10],))}
+            | {r[0] for r in pr.execute("select day from coupons where kind = 'pewne' and day >= ?", (made[:10],))})
+    for day in sorted(days):
+        rows = [dict(r) for r in pr.execute("select key, fixture_id from extras where day = ?", (day,))]
+        for r in rows:
+            if kickoff.get(r["fixture_id"], "") > made:
+                pr.execute("delete from extras where day = ? and key = ?", (day, r["key"]))
+        for kind, lst in (("pewniak", extra["pewne"].get(day, [])), ("bb", extra["bb"].get(day, []))):
+            for e in lst:
+                if kickoff.get(e["fixture_id"], "") <= made:
+                    continue
+                key = (f"{e['fixture_id']}:{e['stat']}:{e['scope']}" if kind == "pewniak"
+                       else f"{e['fixture_id']}:{e['rodzaj']}")
+                legs = ([{k: e[k] for k in ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis")}]
+                        if kind == "pewniak" else e["legs"])
+                pr.execute("insert or ignore into extras values (?,?,?,?,?,?,?,?,?,?,?)", (
+                    made, day, kind, key, e["fixture_id"], e["start"], json.dumps(legs, ensure_ascii=False),
+                    e["p_model"], e.get("kurs"), json.dumps(e, ensure_ascii=False, default=float), sp.RULES))
+        k = extra["kupon_pewne"].get(day)
+        row = pr.execute("select legs from coupons where day = ? and kind = 'pewne'", (day,)).fetchone()
+        started = row is not None and min(kickoff.get(l["fixture_id"], "") for l in json.loads(row[0])) <= made
+        if started:
+            continue
+        if k and min(kickoff.get(l["fixture_id"], "") for l in k["legs"]) > made:
+            pr.execute("insert or replace into coupons (made_at, day, kind, legs, odd, p_model, p_market, ev, ev_tax, "
+                       "why, rules) values (?,?,?,?,?,?,?,?,?,?,?)", (
+                           made, day, "pewne", json.dumps(k["legs"], ensure_ascii=False), k["kurs"], k["p_model"],
+                           k["p_rynek"], k["ev"], k["ev_podatek"], k["why"], sp.RULES))
+        elif row is not None:
+            pr.execute("delete from coupons where day = ? and kind = 'pewne'", (day,))
 
 
 def settle_coupons(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
@@ -719,6 +822,7 @@ def main() -> None:
     leagues = sm.home_league(df)
     asof = pd.Timestamp(now)
     fits = {s: sm.fit_stat(df, s, asof, half_life_days=args.half_life, leagues=leagues) for s in sm.STATS}
+    goals_fit = sm.fit_stat(df, "goals", asof, leagues=leagues, **ss.GOALS_FIT)
     horizon = iso(now + dt.timedelta(days=args.days + 1))
     since = iso(now - dt.timedelta(hours=3))
     upcoming = fx.execute("select * from fixtures where kickoff_utc > ? and kickoff_utc < ? and status not in "
@@ -792,6 +896,11 @@ def main() -> None:
             k["why"] = why_coupon(k, ks[i + 1:i + 3], i + 1 if len(k["legs"]) == 2 else i + 1 - n2)
         coupons_of_day[day] = ks
 
+    # near-certain events, a coupon made of them and same-match bet builders (stats_sure.py)
+    extra = ss.run(analysis, fac, fits, goals_fit, df, set(SHOWN), set(CUPS), made)
+    print(f"pewniaczki: {sum(len(v) for v in extra['pewne'].values())}, bet buildery: "
+          f"{sum(len(v) for v in extra['bb'].values())}, kupony z pewniaczków: {len(extra['kupon_pewne'])}")
+
     if "picks" not in skip:
         kickoff = {m["fixture_id"]: m["start"] for m in analysis["mecze"]}
         logged_days = {r[0] for r in pr.execute("select day from picks union select day from coupons")}
@@ -826,10 +935,11 @@ def main() -> None:
                            "ev_tax, why, rules) values (?,?,?,?,?,?,?,?,?,?,?)", (
                                made, day, "2", json.dumps(k["legs"], ensure_ascii=False), k["kurs"], k["p_model"],
                                math.prod(l["p_rynek"] for l in k["legs"]), k["ev"], k["ev_podatek"], k["why"], sp.RULES))
+        log_extras(pr, extra, kickoff, made)
         pr.commit()
 
     if "export" not in skip:
-        export(Path(args.dest), analysis, factors, fits, df, teams, upcoming, days, coupons_of_day, pr, fx, made)
+        export(Path(args.dest), analysis, factors, fits, df, teams, upcoming, days, coupons_of_day, pr, fx, made, extra)
     print(f"requests used {client.used}, account remaining {client.remaining}")
 
 
@@ -853,7 +963,8 @@ def plan_items() -> list[dict]:
 
 def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFrame, teams: dict,
            upcoming: list, days: dict, coupons_of_day: dict, pr: sqlite3.Connection, fx: sqlite3.Connection,
-           made: str) -> None:
+           made: str, extra: dict | None = None) -> None:
+    extra = extra or {"pewne": {}, "bb": {}, "kupon_pewne": {}}
     dest.mkdir(parents=True, exist_ok=True)
     by_id = {f["fixture_id"]: f for f in upcoming}
     rank_of = {lid: i for i, lid in enumerate([*CUPS, *TOP15, *EXTRA])}
@@ -886,6 +997,7 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     track = forecast_track(pr, df, finished)
     settled = settle_picks(pr, df)
     coupons = settle_coupons(pr, df)
+    extras = settle_extras(pr, df)
     names = fixture_names(fx, {p["fixture_id"] for p in settled}
                           | {l["fixture_id"] for c in coupons for l in c["legs"]})
 
@@ -920,14 +1032,37 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     for s in settled:
         logged.setdefault(s["day"], []).append(s)
     logged_c = {c["day"]: c for c in coupons if c["kind"] == "2"}
+    logged_cp = {c["day"]: c for c in coupons if c["kind"] == "pewne"}
+    logged_x: dict[tuple[str, str], list[dict]] = {}
+    for r in extras:
+        logged_x.setdefault((r["day"], r["kind"]), []).append(r)
+
+    def logged_extra(r: dict) -> dict:
+        """A logged near-certain event or builder as the app shows it, with its result."""
+        out = dict(r["payload"])
+        out.update({"wynik": r["wynik"], "zapisano": r["made_at"]})
+        if r["kind"] == "pewniak":
+            out["wartosc"] = r["legs"][0].get("wartosc")     # what came in, as with the picks
+        else:
+            out["legs"] = r["legs"]
+        return out
+
     picks_out = {}
-    for day in sorted(set(days) | set(logged) | set(logged_c)):
+    for day in sorted(set(days) | set(logged) | set(logged_c) | set(extra["pewne"]) | set(extra["bb"])
+                      | {d for d, _ in logged_x} | set(logged_cp)):
         lst = days.get(day, [])
         top = ([logged_pick(s) for s in sorted(logged[day], key=lambda s: s["rank"])] if day in logged
                else [_pick(c) for c in lst[:PICK_LIMIT_PER_DAY]])
         ks = coupons_of_day.get(day, [])
         kupon = logged_coupon(logged_c[day]) if day in logged_c else (ks[0] if ks else None)
         picks_out[day] = {"top": top, "kupon": kupon, "kupony": ks[:5], "kandydaci": [_pick(c) for c in lst[:30]]}
+        # near-certain events and builders: the logged ones (with results) where there are any
+        picks_out[day]["pewne"] = ([logged_extra(r) for r in logged_x[(day, "pewniak")]] if (day, "pewniak") in logged_x
+                                   else extra["pewne"].get(day, []))
+        picks_out[day]["bb"] = ([logged_extra(r) for r in logged_x[(day, "bb")]] if (day, "bb") in logged_x
+                                else extra["bb"].get(day, []))
+        picks_out[day]["kupon_pewne"] = (logged_coupon(logged_cp[day]) if day in logged_cp
+                                         else extra["kupon_pewne"].get(day))
 
     # results: what came in and what did not, per day and in total
     def tally(items: list[dict]) -> dict:
@@ -946,11 +1081,21 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
                         "kupon_wynik": tally([kc]) if kc else None, "stare_zasady": old})
     current = [s for s in settled if s.get("rules")]
     old_rows = [s for s in settled if not s.get("rules")]
+    day_coupons = [c for c in coupons if c["kind"] == "2"]
+
+    def hits(rows: list[dict]) -> dict:
+        """Logged near-certain events or builders: how many came in, against the model's expectation."""
+        done = [r for r in rows if r["wynik"]]
+        return {"n": len(rows), "rozliczone": len(done), "trafione": sum(r["wynik"] == "wygrana" for r in done),
+                "oczekiwane": round(sum(r["p_model"] for r in done), 2)}
     wyniki = {"dni": results,
               "razem": {"typy": tally([logged_pick(s) for s in current]),
-                        "kupony": tally([logged_coupon(c) for c in coupons if c.get("rules")])},
+                        "kupony": tally([logged_coupon(c) for c in day_coupons if c.get("rules")])},
               "stare_zasady": {"typy": tally([logged_pick(s) for s in old_rows]),
-                               "kupony": tally([logged_coupon(c) for c in coupons if not c.get("rules")])},
+                               "kupony": tally([logged_coupon(c) for c in day_coupons if not c.get("rules")])},
+              "pewniaki": hits([r for r in extras if r["kind"] == "pewniak"]),
+              "bet_buildery": hits([r for r in extras if r["kind"] == "bb"]),
+              "kupony_pewne": tally([logged_coupon(c) for c in coupons if c["kind"] == "pewne"]),
               "prognozy": track}
     meta = {
         "utworzono": made,
