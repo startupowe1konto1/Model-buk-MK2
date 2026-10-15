@@ -128,12 +128,20 @@ details.why p { margin: 6px 0 0; font-size: 0.92rem; max-width: 80ch; }
 /* matches */
 .group { gap: 6px; }
 .group h3 { margin: 0 0 2px; color: var(--muted); letter-spacing: 0.02em; }
-.match { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; }
+.match { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; }
 .match:hover { border-color: var(--pitch); }
 .match .tm { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
 .match .tt { font-weight: 600; }
 .match .st { display: block; color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
 .match .bd { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.match .tm { padding-top: 1px; }
+.mbets { display: grid; gap: 4px; margin-top: 7px; }
+.mbet { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 5px 9px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); font-size: 0.9rem; }
+.mbet.val { border-color: var(--pitch); }
+.mbet .band { font: 600 0.72rem var(--body); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.mbet .bet { font-weight: 600; }
+.mbet .nb { font-variant-numeric: tabular-nums; }
+.mnone { display: block; margin-top: 6px; color: var(--muted); font-size: 0.86rem; }
 @media (max-width: 560px) { .match { grid-template-columns: 2.8rem minmax(0, 1fr); } .match .bd { grid-column: 2; justify-content: flex-start; } }
 .vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); gap: 10px; }
 .stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; background: var(--panel); align-content: start; }
@@ -262,6 +270,12 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
         </div>
       </div>
       <div class="chips" id="m-days" role="group" aria-label="Dzień"></div>
+      <div class="row">
+        <div class="seg" id="m-band" role="tablist" aria-label="Widełki kursów"></div>
+        <label class="check" for="m-val"><input id="m-val" type="checkbox"> tylko z wartością</label>
+        <label class="check" for="m-only"><input id="m-only" type="checkbox"> tylko mecze z typem</label>
+      </div>
+      <p class="note" id="m-eff"></p>
     </div>
     <div class="page" id="m-list"></div>
   </section>
@@ -411,7 +425,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
   // ================================================================== state and helpers
   const S = {
     data: {}, page: "typy", sorts: {}, td: null, mecz: null, calc: null, allLines: false,
-    mz: { day: "", liga: "main", q: "" },
+    mz: { day: "", liga: "main", q: "", band: "all", val: false, only: false },
     sz: { liga: "main", stat: "shots", kto: "home", dni: 3, kursy: false },
     zkEdit: null, zkDraft: null, downloads: null, drafts: {},
     db: null, user: null, me: null, canWrite: false, names: {},
@@ -962,7 +976,9 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     hd.append(el("span", "mt", (n ? n + ". " : "") + p.mecz + (start ? " · " + day(start) + ", " + hm(start) : "") + (m ? " · " + ligaName(m.liga_id) : "")));
     const tags = el("span", "row");
     if (p.zasady === "v1") tags.append(el("span", "chip c-muted", "stare zasady"));
-    if (p.top && n) tags.append(el("span", "chip c-win", "★ typ dnia"));
+    if (p.top) tags.append(el("span", "chip c-win", "★ typ dnia"));
+    if (p.pasmo !== undefined && !(p.zasady === "v1")) tags.append(el("span", "chip " + (p.z_wartoscia ? "c-win" : "c-muted"),
+      "kurs " + bandLabel(p.pasmo) + (p.z_wartoscia ? " · z wartością" : " · bez wartości")));
     if ("wynik" in p) tags.append(resultChip(p.wynik, p.wartosc));
     hd.append(tags);
     c.append(hd, pickBlocks(p));
@@ -1173,24 +1189,72 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     if (sel.options.length !== opts.length) sel.replaceChildren(...opts);
     sel.value = value || "main";
   }
-  function pickedMatches() {
-    const out = new Set();
-    Object.values(st("typy") || {}).forEach((d) => { (d.top || []).forEach((p) => out.add(String(p.fixture_id))); ((d.kupon && d.kupon.legs) || []).forEach((l) => out.add(String(l.fixture_id))); });
+  // every logged or proposed bet by match (all days, all odds bands)
+  let betsCache = null, betsSrc = null;
+  function betsByMatch() {
+    const src = st("typy");
+    if (betsCache && betsSrc === src) return betsCache;
+    const out = new Map();
+    Object.values(src || {}).forEach((d) => (d.wszystkie || d.top || []).forEach((p) => {
+      const k = String(p.fixture_id);
+      if (!out.has(k)) out.set(k, []);
+      out.get(k).push(p);
+    }));
+    out.forEach((lst) => lst.sort((a, b) => (a.pasmo ?? 9) - (b.pasmo ?? 9)));
+    betsSrc = src; betsCache = out;
     return out;
+  }
+  const bandMatch = (p) => S.mz.band === "all" || p.pasmo === S.mz.band;
+  // one bet in a match row: band, the bet, odds, chance, value, result
+  function betLine(p) {
+    const s = el("span", "mbet" + (p.z_wartoscia ? " val" : ""));
+    s.append(el("span", "band", "Kurs " + bandLabel(p.pasmo)));
+    if (p.top) s.append(el("span", "chip c-win", "★ typ dnia"));
+    const [who, what] = splitOpis(p.opis);
+    s.append(el("span", "bet", who && who !== "W meczu" ? who + ": " + what : what + " w meczu"));
+    const k = el("span", "nb"); k.append("kurs ", el("b", null, dec(p.kurs)), p.bukmacher ? " " + p.bukmacher : ""); s.append(k);
+    const c = el("span", "nb"); c.append("szansa ", el("b", null, pct(p.p_model))); s.append(c);
+    s.append(el("span", "chip " + (p.z_wartoscia ? "c-win" : "c-muted"), p.z_wartoscia ? "z wartością" : "bez wartości"));
+    if (p.wynik) { s.append(resultChip(p.wynik, p.wartosc)); s.append(el("b", sign(p.zysk_zl), zl(p.zysk_zl))); }
+    return s;
   }
   function renderMecze() {
     const box = $("#m-list");
     if (!st("mecze")) { box.replaceChildren(el("div", "card", "Wczytywanie meczów…")); return; }
     fillLiga($("#m-liga"), S.mz.liga);
-    const all = matches().filter((m) => inLiga(m, S.mz.liga));
+    const bets = betsByMatch();
+    const shownBets = (m) => (bets.get(String(m.id)) || []).filter((p) => bandMatch(p) && (!S.mz.val || p.z_wartoscia));
+    const all = matches().filter((m) => inLiga(m, S.mz.liga) && (!S.mz.only || shownBets(m).length));
     const keys = [...new Set(all.map((m) => dayKey(m.start)))].sort();
     if (!S.mz.day || !keys.includes(S.mz.day)) S.mz.day = keys.find((k) => k >= todayKey()) || keys[0] || "";
     $("#m-days").replaceChildren(...keys.map((k) => chip(dayLabel(k), k === S.mz.day, () => { S.mz.day = k; render(); }, all.filter((m) => dayKey(m.start) === k).length)));
+    // the odds-band filter and the track record of what it shows
+    const seg = $("#m-band");
+    seg.replaceChildren(...[["all", "Wszystkie kursy"], ...BANDS.map((_, i) => [i, bandLabel(i)])].map(([v, label]) => {
+      const b = el("button", null, label);
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", S.mz.band === v ? "true" : "false");
+      b.addEventListener("click", () => { S.mz.band = v; render(); });
+      return b;
+    }));
+    $("#m-val").checked = S.mz.val;
+    $("#m-only").checked = S.mz.only;
+    const wy = st("wyniki") || {};
+    const rows = (wy.pasma || []).filter((b) => S.mz.band === "all" || b.pasmo === S.mz.band)
+      .flatMap((b) => (S.mz.val ? [b.z_wartoscia] : [b.z_wartoscia, b.bez_wartosci])).filter(Boolean);
+    const sumOf = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
+    const eff = $("#m-eff");
+    eff.replaceChildren("Przy każdym meczu jest typ: zakład, kurs u bukmachera i szansa według modelu, osobno w każdych widełkach kursów. Każdy pokazany typ zapisuję przed meczem (stawka 100 zł na papierze) i rozliczam po meczu. ");
+    if (sumOf("rozliczone")) eff.append("Skuteczność takich typów do tej pory: ", el("b", null, sumOf("trafione") + " z " + sumOf("rozliczone")),
+      " (model spodziewał się " + NF1.format(sumOf("oczekiwane")) + "), zysk ", el("b", sign(sumOf("zysk")), zl(sumOf("zysk"))), ".");
+    else eff.append(el("span", "c-muted", "Skuteczność pojawi się po pierwszych rozliczonych meczach (zakładka Wyniki)."));
     const q = (S.mz.q || "").trim().toLowerCase();
     const list = all.filter((m) => dayKey(m.start) === S.mz.day && (!q || (m.gosp + " " + m.gosc).toLowerCase().includes(q))).sort(byOrder);
-    const picked = pickedMatches();
+    const inCoupon = new Set();
+    Object.values(st("typy") || {}).forEach((d) => [d.kupon, d.kupon_pewne].forEach((k) => ((k && k.legs) || []).forEach((l) => inCoupon.add(String(l.fixture_id)))));
     box.replaceChildren();
-    if (!list.length) { box.append(el("div", "card", q ? "Brak meczów pasujących do wyszukiwania." : "Brak meczów w tym dniu.")); return; }
+    if (!list.length) { box.append(el("div", "card", q ? "Brak meczów pasujących do wyszukiwania." : S.mz.only ? "Brak meczów z typem w tych widełkach." : "Brak meczów w tym dniu.")); return; }
     let group = null, gb = null;
     list.forEach((m) => {
       if (m.liga_id !== group) { group = m.liga_id; gb = el("div", "card group"); gb.append(el("h3", null, ligaName(m.liga_id))); box.append(gb); }
@@ -1199,16 +1263,33 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       b.append(el("span", "tm", hm(m.start)));
       const mid = el("span");
       mid.append(el("span", "tt", m.gosp + " – " + m.gosc));
-      mid.append(el("span", "st", ["shots", "corners", "cards"].map((s) => STAT[s] + " " + d1(m.m[s][0]) + "–" + d1(m.m[s][1])).join(" · ")));
+      mid.append(el("span", "st", "Średnio według modelu (" + m.gosp + " – " + m.gosc + "): " +
+        ["shots", "corners", "cards"].map((s) => STAT[s].toLowerCase() + " " + d1(m.m[s][0]) + " – " + d1(m.m[s][1])).join(" · ")));
+      const mine = shownBets(m);
+      if (mine.length) {
+        const wrap = el("span", "mbets");
+        mine.forEach((p) => wrap.append(betLine(p)));
+        mid.append(wrap);
+      } else {
+        const anyBets = (bets.get(String(m.id)) || []).length;
+        const few = m.n && Math.min(m.n[0] || 0, m.n[1] || 0) < 10 ? ((m.n[0] || 0) < 10 ? m.gosp : m.gosc) : null;
+        mid.append(el("span", "mnone", anyBets ? "Brak typu w tych widełkach" + (S.mz.val ? " z wartością." : ".")
+          : few ? "Brak typu: za mało danych o drużynie " + few + " (mniej niż 10 meczów ze statystykami w ostatnim roku), więc model jej nie typuje."
+          : m.kursy && m.kursy.length ? "Brak typu: żaden zakład nie mieści się w zasadach (co najmniej …, kurs 1,25–2,00)."
+          : "Typ pojawi się, gdy bukmacherzy wystawią kursy na statystyki (zwykle 1–3 dni przed meczem)."));
+      }
       b.append(mid);
       const bd = el("span", "bd");
-      if (picked.has(String(m.id))) bd.append(el("span", "chip c-win", "typ dnia"));
+      if ((bets.get(String(m.id)) || []).some((p) => p.top)) bd.append(el("span", "chip c-win", "★ typ dnia"));
+      if (inCoupon.has(String(m.id))) bd.append(el("span", "chip", "w kuponie"));
       if (m.status && !["NS", "TBD"].includes(m.status)) bd.append(el("span", "chip c-warn", m.status === "FT" ? "koniec" : "trwa"));
       b.append(bd);
       b.addEventListener("click", () => openMatch(m.id));
       gb.append(b);
     });
   }
+  $("#m-val").addEventListener("change", (e) => { S.mz.val = e.target.checked; render(); });
+  $("#m-only").addEventListener("change", (e) => { S.mz.only = e.target.checked; render(); });
   $("#m-liga").addEventListener("change", (e) => { S.mz.liga = e.target.value; S.mz.day = ""; render(); });
   $("#m-q").addEventListener("input", (e) => { S.mz.q = e.target.value; render(); });
   $("#mz-back").addEventListener("click", () => show("mecze", true));
@@ -1243,14 +1324,9 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       c.append(val, bar, el("span", "s", "łącznie " + d1(meanOf(m, s, "total"))));
       cards.append(c);
     });
-    // picks of this match: logged picks first, then other candidates of its day
+    // the match's bets: one per odds band (with value, or the likeliest without), as on the match list
     const mp = $("#mz-picks");
-    mp.replaceChildren();
-    const shown = new Set();
-    Object.values(st("typy") || {}).forEach((d) => {
-      (d.top || []).filter((p) => String(p.fixture_id) === String(m.id)).forEach((p) => { shown.add(p.stat + p.scope); mp.append(pickCard(p)); });
-      (d.kandydaci || []).filter((p) => String(p.fixture_id) === String(m.id) && !shown.has(p.stat + p.scope)).slice(0, 3).forEach((p) => { shown.add(p.stat + p.scope); mp.append(pickCard(p)); });
-    });
+    mp.replaceChildren(...(betsByMatch().get(String(m.id)) || []).map((p) => pickCard(p)));
     $("#mz-picks-card").hidden = !mp.children.length;
     const why = $("#mz-why");
     why.replaceChildren(...(m.wyr || []).map((t) => el("li", null, t)));
