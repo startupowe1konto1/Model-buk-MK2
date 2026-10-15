@@ -116,6 +116,13 @@ th[aria-sort="descending"] .th::after { content: " ↓"; }
 .bblegs { margin: 0; padding-left: 1.3rem; display: grid; gap: 6px; }
 .bblegs li { padding-left: 2px; }
 .bblegs .p { color: var(--muted); font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+/* results */
+.big3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 8px; }
+details.day { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--panel); display: grid; gap: 8px; }
+details.day > summary { cursor: pointer; line-height: 1.7; }
+details.day[open] > summary { margin-bottom: 4px; }
+.tbl tr.top td { background: var(--pitch-soft); }
+.tbl td .chip { margin-right: 4px; }
 details.why summary { cursor: pointer; color: var(--pitch); font-weight: 600; font-size: 0.9rem; }
 details.why p { margin: 6px 0 0; font-size: 0.92rem; max-width: 80ch; }
 /* matches */
@@ -159,6 +166,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     </div>
     <nav class="tabs" role="tablist" aria-label="Sekcje">
       <button class="tab" role="tab" id="t-typy" data-p="typy" aria-selected="true">Typy dnia</button>
+      <button class="tab" role="tab" id="t-wyniki" data-p="wyniki">Wyniki</button>
       <button class="tab" role="tab" id="t-mecze" data-p="mecze">Mecze</button>
       <button class="tab" role="tab" id="t-szukaj" data-p="szukaj">Szukaj</button>
       <button class="tab" role="tab" id="t-zaklady" data-p="zaklady">Moje zakłady<span class="n" id="n-zak">0</span></button>
@@ -214,13 +222,25 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     </div>
     <div class="page" id="td-picks"></div>
     <div class="page" id="td-kupon"></div>
+    <div class="page" id="td-all"></div>
     <div class="page" id="td-pewne" hidden></div>
     <div class="page" id="td-bb" hidden></div>
+  </section>
+
+  <!-- WYNIKI -->
+  <section class="page" id="pg-wyniki" role="tabpanel" aria-labelledby="t-wyniki" hidden>
     <div class="card">
-      <h2>Wyniki do tej pory</h2>
-      <p class="note">Każdy typ i kupon dnia zapisuję przed meczem, a po meczu sprawdzam z prawdziwą statystyką. Zysk liczę na stawkę 1 przy kursie z listy, bez podatku i z podatkiem 12%.</p>
+      <h2>Bilans</h2>
+      <p class="note" id="wy-note">Każdy zakład i każdy kupon liczę od stawki 100 zł. Wypłata to 100 zł × 0,88 × kurs (podatek 12% od stawki). Zakłady zapisuję przed meczem, a po meczu rozliczam z prawdziwą statystyką.</p>
+      <div class="big3" id="wy-big"></div>
+      <div class="wrap short"><table class="tbl" id="wy-rodzaje"></table></div>
       <div class="sum" id="wy-sum"></div>
-      <div class="wrap short"><table class="tbl" id="wy-dni"></table></div>
+    </div>
+    <div class="card">
+      <h2>Dzień po dniu</h2>
+      <div class="page" id="wy-dni"></div>
+    </div>
+    <div class="card">
       <details class="why"><summary>Jak trafne są same prognozy?</summary>
         <p class="note">Dla każdego rozegranego meczu: ostatnia prognoza przed pierwszym gwizdkiem kontra to, co padło. Progi „co najmniej X” z szansą 70% powinny trafiać ok. 7 razy na 10.</p>
         <div class="wrap short"><table class="tbl" id="wy-prog"></table></div>
@@ -394,7 +414,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     db: null, user: null, me: null, canWrite: false, names: {},
     ov: { plan: {}, prosby: [], zaklady: [] },
   };
-  const PAGES = ["typy", "mecze", "mecz", "szukaj", "zaklady", "projekt"];
+  const PAGES = ["typy", "wyniki", "mecze", "mecz", "szukaj", "zaklady", "projekt"];
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e.textContent = text; return e; };
   const nf = (d) => new Intl.NumberFormat("pl-PL", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -685,7 +705,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const res = new Map(((wy && wy.dni) || []).map((d) => [d.dzien, d]));
     const v = S.tdv || "typy";
     document.querySelectorAll("#td-seg button").forEach((b) => b.setAttribute("aria-selected", b.dataset.v === v ? "true" : "false"));
-    $("#td-picks").hidden = $("#td-kupon").hidden = $("#td-rules").hidden = v !== "typy";
+    $("#td-picks").hidden = $("#td-kupon").hidden = $("#td-all").hidden = $("#td-rules").hidden = v !== "typy";
     $("#td-pewne").hidden = $("#td-rules-pewne").hidden = v !== "pewne";
     $("#td-bb").hidden = $("#td-rules-bb").hidden = v !== "bb";
     // per day: settled/total for what is shown in the current view
@@ -700,7 +720,6 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const r = res.get(S.td);
     const sum = $("#td-sum");
     sum.replaceChildren();
-    renderResults(wy);
     if (v === "pewne" || v === "bb") { renderExtras(d, v, sum); return; }
     if (r && r.typy_wynik.rozliczone) {
       const tw = r.typy_wynik;
@@ -712,6 +731,12 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     } else if (S.td < t) sum.append(el("span", "c-muted", "Czekam na statystyki tych meczów; rozliczenie pojawi się po najbliższej aktualizacji."));
     else sum.append(el("span", "c-muted", "Typy zapisuję przed meczami, a po meczu pokazuję, co siadło. Graj tylko, gdy kurs u Twojego bukmachera jest co najmniej taki jak „opłaca się od kursu”."));
     if (r && r.stare_zasady) sum.append(el("span", "c-warn", "Te typy powstały według starych zasad (były też zakłady „poniżej” i kursy powyżej 1,8), więc ich wynik liczę osobno."));
+    if (S.td < t || (r && r.typy_wynik.rozliczone)) {
+      const go = el("button", "btn ghost sm", "Rozpiska i finanse tego dnia →");
+      go.type = "button";
+      go.addEventListener("click", () => { S.wyDay = S.td; show("wyniki", true); });
+      sum.append(go);
+    }
     $("#td-info").textContent = d.top && d.top.length ? "typy: " + d.top.length : "";
     const box = $("#td-picks");
     box.replaceChildren();
@@ -719,6 +744,41 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     d.top.forEach((p, i) => box.append(pickCard(p, i + 1)));
     const kb = $("#td-kupon");
     kb.replaceChildren(couponCard(d.kupon, d.kupony || []));
+    renderAllMatches(d);
+  }
+  // every match of the day with its paper bet (100 zł); the day's picks marked
+  function renderAllMatches(d) {
+    const box = $("#td-all");
+    const list = (d.wszystkie || d.top || []).map((p, i) => {
+      const m = matchById(p.fixture_id);
+      return Object.assign({ key: i, startT: (m && m.start) || p.start || "", liga: m ? ligaShort(m.liga_id) : "" }, p);
+    }).sort((a, b) => a.startT.localeCompare(b.startT) || a.mecz.localeCompare(b.mecz, "pl"));
+    const card = el("div", "card");
+    card.append(el("h2", null, "Wszystkie mecze dnia"),
+      el("p", "note", "Na każdy mecz z kursami model stawia na papierze najlepszy zakład według zasad, po 100 zł. ★ to typy dnia. Oczekiwany zysk to średni wynik na 100 zł według modelu: ujemny znaczy, że w tym meczu model nie widzi przewagi nad bukmacherem, a zakład jest tylko do sprawdzania modelu."));
+    if (!list.length) { card.append(el("p", "note", "Na ten dzień nie ma jeszcze meczów z kursami na statystyki (pobieram je na 3 dni przed meczem).")); box.replaceChildren(card); return; }
+    const w = el("div", "wrap"), tb = el("table", "tbl");
+    w.append(tb);
+    table(tb, list, [
+      { f: "startT", h: "Godz.", nw: true, fmt: (v) => (v ? hm(v) : "—") },
+      { f: "mecz", h: "Mecz", render: (td, r) => { if (r.top) td.append(el("span", "chip c-win", "★")); td.append(r.mecz + " "); if (r.liga) td.append(el("span", "c-muted", r.liga)); } },
+      { f: "opis", h: "Zakład", wide: true, render: (td, r) => betCell(td, r) },
+      { f: "kurs", h: "Kurs", num: true, render: (td, r) => { td.textContent = dec(r.kurs) + " "; if (r.bukmacher) td.append(el("span", "c-muted", r.bukmacher)); } },
+      { f: "p_model", h: "Szansa", num: true, fmt: (v) => pct(v) },
+      { f: "zysk_oczekiwany_zl", h: "Oczekiwany zysk", num: true, fmt: (v) => (empty(v) ? "—" : zl(v)), cls: (v) => sign(v) },
+      { f: "wynik", h: "Wynik", render: (td, r) => { if (r.wynik) td.append(resultChip(r.wynik, r.wartosc)); else td.textContent = "—"; } },
+      { f: "zysk_zl", h: "Zysk", num: true, fmt: (v, r) => (r.wynik ? zl(v) : "—"), cls: (v, r) => (r.wynik ? sign(v) : "") },
+    ], "key", { nosortAll: true });
+    tb.querySelectorAll("tbody tr").forEach((tr, i) => { if (list[i] && list[i].top) tr.classList.add("top"); });
+    card.append(w);
+    box.replaceChildren(card);
+  }
+  // "Aston Villa: co najmniej 14 strzałów (powyżej 13,5)" in a table cell
+  function betCell(td, r) {
+    const [who, what] = splitOpis(r.opis);
+    td.append(el("b", null, who && who !== "W meczu" ? who + ": " + what : what + (who ? " w meczu" : "")));
+    const z = r.zaklad || (r.line !== undefined && r.line !== null ? (r.side === "over" ? "powyżej " : "poniżej ") + line(r.line) : "");
+    if (z && !what.includes(z)) td.append(" ", el("span", "c-muted", "(" + z + ")"));
   }
   document.querySelectorAll("#td-seg button").forEach((b) => b.addEventListener("click", () => { S.tdv = b.dataset.v; render(); }));
   // near-certain events and bet builders of the chosen day
@@ -849,6 +909,13 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     g.append(b1, b2, b3);
     return g;
   }
+  // a 100 zł paper bet: what it pays after the 12% tax if it comes in, and what it made once settled
+  function stakeFacts(box, p) {
+    if (empty(p.kurs)) return;
+    fact(box, "Stawka 100 zł, wygrana po podatku", zlf(100 * TAX * p.kurs));
+    if (p.wynik) fact(box, "Wynik", zl(p.zysk_zl), sign(p.zysk_zl));
+  }
+  const zlf = (v) => (empty(v) ? "—" : NF2.format(v) + " zł");
   function payFrom(box, p) {
     const s = el("span");
     s.append("Opłaca się od kursu ", el("b", "c-win", dec(minOdds(p))), " (po podatku 12%)");
@@ -863,12 +930,14 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     hd.append(el("span", "mt", (n ? n + ". " : "") + p.mecz + (start ? " · " + day(start) + ", " + hm(start) : "") + (m ? " · " + ligaName(m.liga_id) : "")));
     const tags = el("span", "row");
     if (p.zasady === "v1") tags.append(el("span", "chip c-muted", "stare zasady"));
+    if (p.top && n) tags.append(el("span", "chip c-win", "★ typ dnia"));
     if ("wynik" in p) tags.append(resultChip(p.wynik, p.wartosc));
     hd.append(tags);
     c.append(hd, pickBlocks(p));
     const f = el("div", "facts");
     if (!empty(p.oczekiwane)) fact(f, "Model oczekuje średnio", d1(p.oczekiwane));
     payFrom(f, p.p_model);
+    stakeFacts(f, p);
     c.append(f);
     const w = whyBox(p.why);
     if (w) c.append(w);
@@ -919,6 +988,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const f = el("div", "facts");
     fact(f, "Oczekiwany zysk z podatkiem", spct(k.ev_podatek), sign(k.ev_podatek));
     payFrom(f, k.p_model);
+    stakeFacts(f, k);
     c.append(f);
     const w = whyBox(k.why, "Dlaczego ten kupon?");
     if (w) c.append(w);
@@ -939,46 +1009,95 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     }
     return card;
   }
-  function renderResults(wy) {
-    if (!wy) return;
+  // ================================================================== Wyniki
+  function renderWyniki() {
+    const wy = st("wyniki");
+    if (!wy) { $("#wy-dni").replaceChildren(el("p", "note", "Wczytywanie…")); return; }
+    const F = wy.finanse || {}, L = F.lacznie || {};
+    const blk = (k, v, s, cls) => { const b = el("div", "blk"); b.append(el("span", "k", k), el("span", "v " + (cls || ""), v)); if (s) b.append(el("span", "s", s)); return b; };
+    $("#wy-big").replaceChildren(
+      blk("Zysk / strata", L.rozliczone ? zl(L.zysk) : "—", L.rozliczone ? "zwrot " + spct(L.roi, 1) + " postawionej kwoty" : "pierwsze rozliczenia po meczach", L.rozliczone ? sign(L.zysk) : ""),
+      blk("Postawione", zlf(L.postawione || 0), (L.rozliczone || 0) + " rozliczonych zakładów po 100 zł"),
+      blk("Wypłaty po podatku", zlf(L.wyplaty || 0), "trafione " + (L.trafione || 0) + " z " + (L.rozliczone || 0)));
+    const kinds = [["top5", "Typy dnia (5 wyróżnionych)"], ["pozostale", "Pozostałe mecze"], ["kupon", "Kupon dnia"],
+      ["kupon_pewne", "Kupon z pewniaczków"], ["lacznie", "Razem"]];
+    table($("#wy-rodzaje"), kinds.map(([k, label]) => Object.assign({ key: k, label }, F[k] || {})), [
+      { f: "label", h: "Rodzaj", nw: true },
+      { f: "rozliczone", h: "Rozliczone", num: true, fmt: (v, r) => int(v || 0) + (r.n > (v || 0) ? " (czeka " + (r.n - (v || 0)) + ")" : "") },
+      { f: "trafione", h: "Trafione", num: true, fmt: (v, r) => (r.rozliczone ? v + " z " + r.rozliczone : "—") },
+      { f: "postawione", h: "Postawione", num: true, fmt: (v, r) => (r.rozliczone ? zlf(v) : "—") },
+      { f: "wyplaty", h: "Wypłaty", num: true, fmt: (v, r) => (r.rozliczone ? zlf(v) : "—") },
+      { f: "zysk", h: "Zysk", num: true, fmt: (v, r) => (r.rozliczone ? zl(v) : "—"), cls: (v, r) => (r.rozliczone ? sign(v) : "") },
+      { f: "roi", h: "Zwrot", num: true, fmt: (v) => (empty(v) ? "—" : spct(v, 1)), cls: (v) => sign(v) },
+    ], "key", { nosortAll: true });
     const s = $("#wy-sum");
     s.replaceChildren();
-    const t = wy.razem.typy, k = wy.razem.kupony;
-    const a = el("span"); a.append("Typy: ", el("b", null, t.trafione + " z " + t.rozliczone), " siadło (zapisanych " + t.n + ")");
-    const b = el("span"); b.append("zysk na stawkę 1: ", el("b", sign(t.zysk), money(t.zysk)), ", z podatkiem ", el("b", sign(t.zysk_podatek), money(t.zysk_podatek)));
-    const c = el("span"); c.append("Kupony dnia: ", el("b", null, k.trafione + " z " + k.rozliczone), ", zysk ", el("b", sign(k.zysk_podatek), money(k.zysk_podatek)), " z podatkiem");
-    s.append(a, b, c);
-    const old = wy.stare_zasady;
-    if (old && (old.typy.n || old.kupony.n)) {
-      const o = el("span", "c-muted");
-      o.append("Osobno, typy według starych zasad (do 14.10): " + (old.typy.rozliczone ? old.typy.trafione + " z " + old.typy.rozliczone + " siadło, zysk z podatkiem " + money(old.typy.zysk_podatek) : "czekają na wynik")
-        + (old.kupony.rozliczone ? "; kupon: " + (old.kupony.trafione ? "siadł" : "nie siadł") : ""));
-      s.append(o);
+    const o = wy.finanse_stare;
+    if (o && o.rozliczone) {
+      const x = el("span", "c-muted");
+      x.append("W tym 14.10 według starych zasad (były też zakłady „poniżej” i kursy powyżej 1,8): trafione " + o.trafione + " z " + o.rozliczone + ", zysk ", el("b", sign(o.zysk), zl(o.zysk)));
+      s.append(x);
     }
-    // near-certain events and bet builders: hits against the model's expectation; their coupon's profit
     [["pewniaki", "Pewniaczki"], ["bet_buildery", "Bet buildery"]].forEach(([key, label]) => {
       const h = wy[key];
       if (!h || !h.n) return;
       const x = el("span");
-      if (h.rozliczone) x.append(label + ": weszło ", el("b", null, h.trafione + " z " + h.rozliczone), " (model spodziewał się ok. " + NF1.format(h.oczekiwane) + ")");
+      if (h.rozliczone) x.append(label + " (bez stawek): weszło ", el("b", null, h.trafione + " z " + h.rozliczone), ", model spodziewał się ok. " + NF1.format(h.oczekiwane));
       else x.append(label + ": ", el("span", "c-muted", "pierwsze rozliczenia po meczach"));
       s.append(x);
     });
-    const kp = wy.kupony_pewne;
-    if (kp && kp.rozliczone) {
-      const x = el("span");
-      x.append("Kupony z pewniaczków: ", el("b", null, kp.trafione + " z " + kp.rozliczone), ", zysk ", el("b", sign(kp.zysk_podatek), money(kp.zysk_podatek)), " z podatkiem");
-      s.append(x);
-    }
-    const rows = (wy.dni || []).filter((d) => d.dzien <= todayKey()).map((d) => ({ key: d.dzien, dzien: d.dzien, typy: d.typy_wynik, kupon: d.kupon, stare: d.stare_zasady }));
-    table($("#wy-dni"), rows, [
-      { f: "dzien", h: "Dzień", nw: true, render: (td, r) => { td.textContent = dayLabel(r.dzien) + " "; if (r.stare) td.append(el("span", "c-muted", "(stare zasady)")); } },
-      { f: "typy", h: "Typy: siadło", nosort: true, fmt: (v) => (v.rozliczone ? v.trafione + " z " + v.rozliczone : "czeka") },
-      { f: "typy", h: "Zysk (stawka 1)", nosort: true, num: true, fmt: (v) => (v.rozliczone ? money(v.zysk) : "—"), cls: (v) => sign(v.zysk) },
-      { f: "typy", h: "Z podatkiem", nosort: true, num: true, fmt: (v) => (v.rozliczone ? money(v.zysk_podatek) : "—"), cls: (v) => sign(v.zysk_podatek) },
-      { f: "kupon", h: "Kupon dnia", nosort: true, render: (td, r) => { if (r.kupon) td.append(resultChip(r.kupon.wynik)); else td.textContent = "—"; } },
-      { f: "_o", h: "", nosort: true, render: (td, r) => { const b = el("button", "btn ghost sm", "Pokaż"); b.type = "button"; b.addEventListener("click", () => { S.td = r.dzien; window.scrollTo(0, 0); render(); }); td.append(b); } },
-    ], "key", { nosortAll: true });
+    // day by day, newest first; the newest settled day (or the one chosen in Typy dnia) open
+    const box = $("#wy-dni");
+    box.replaceChildren();
+    const days = (wy.dni || []).filter((d) => d.dzien <= todayKey());
+    if (!days.length) { box.append(el("p", "note", "Rozpiska pojawi się po pierwszych rozegranych meczach z zapisanymi zakładami.")); }
+    const cum = new Map((wy.narastajaco || []).map((r) => [r.dzien, r.suma]));
+    const openDay = S.wyDay && days.some((d) => d.dzien === S.wyDay) ? S.wyDay : (days.find((d) => d.finanse && d.finanse.dzien.rozliczone) || days[0] || {}).dzien;
+    days.forEach((d) => {
+      const f = (d.finanse && d.finanse.dzien) || { n: 0, rozliczone: 0 };
+      const det = el("details", "day");
+      det.open = d.dzien === openDay;
+      const sm = el("summary");
+      sm.append(el("b", null, dayLabel(d.dzien) + ", " + day(d.dzien + "T12:00:00Z")), " · zakładów: " + f.n + " · ");
+      if (f.rozliczone) sm.append("siadło " + f.trafione + " z " + f.rozliczone + " · postawione " + zlf(f.postawione) + " · wypłaty " + zlf(f.wyplaty) + " · ", el("b", sign(f.zysk), zl(f.zysk)));
+      else sm.append(el("span", "c-muted", "czeka na wyniki"));
+      if (cum.has(d.dzien)) sm.append(el("span", "c-muted", " · razem od początku " + zl(cum.get(d.dzien))));
+      if (d.stare_zasady) sm.append(" ", el("span", "chip c-muted", "stare zasady"));
+      det.append(sm);
+      const rows = (d.typy || []).map((p, i) => Object.assign({ key: i }, p));
+      if (rows.length) {
+        const w = el("div", "wrap"), tb = el("table", "tbl");
+        w.append(tb);
+        table(tb, rows, [
+          { f: "mecz", h: "Mecz", render: (td, r) => { if (r.top) td.append(el("span", "chip c-win", "★ typ dnia")); td.append(r.mecz); } },
+          { f: "opis", h: "Zakład", wide: true, render: (td, r) => betCell(td, r) },
+          { f: "kurs", h: "Kurs", num: true, render: (td, r) => { td.textContent = dec(r.kurs) + " "; if (r.bukmacher) td.append(el("span", "c-muted", r.bukmacher)); } },
+          { f: "p_model", h: "Szansa", num: true, fmt: (v) => pct(v) },
+          { f: "wartosc", h: "Padło", num: true, fmt: int },
+          { f: "wynik", h: "Wynik", render: (td, r) => td.append(resultChip(r.wynik)) },
+          { f: "wyplata", h: "Wypłata", num: true, fmt: (v, r) => (r.wynik ? zlf(v) : "—") },
+          { f: "zysk_zl", h: "Zysk", num: true, fmt: (v, r) => (r.wynik ? zl(v) : "—"), cls: (v, r) => (r.wynik ? sign(v) : "") },
+        ], "key", { nosortAll: true });
+        tb.querySelectorAll("tbody tr").forEach((tr, i) => { if (rows[i] && rows[i].top) tr.classList.add("top"); });
+        det.append(w);
+      }
+      [["kupon", "Kupon dnia"], ["kupon_pewne", "Kupon z pewniaczków"]].forEach(([k, label]) => {
+        const c = d[k];
+        if (!c) return;
+        const p = el("p", "note");
+        p.append(el("b", null, label + " (100 zł, kurs " + dec(c.kurs) + "): "));
+        (c.legs || []).forEach((l, i) => {
+          if (i) p.append(" + ");
+          p.append(l.mecz + ": " + (splitOpis(l.opis)[1] || l.opis) + " (" + dec(l.kurs) + ")");
+          if (l.wynik) p.append(" ", el("span", l.wynik === "wygrana" ? "c-win" : l.wynik === "przegrana" ? "c-loss" : "c-muted",
+            (l.wynik === "wygrana" ? "✓" : l.wynik === "przegrana" ? "✗" : "zwrot") + (empty(l.wartosc) ? "" : " " + int(l.wartosc))));
+        });
+        p.append(" · ", resultChip(c.wynik), " ");
+        if (c.wynik) p.append(el("b", sign(c.zysk_zl), zl(c.zysk_zl)));
+        det.append(p);
+      });
+      box.append(det);
+    });
     const pr = wy.prognozy || {};
     const prow = MAIN.filter((x) => pr[x]).map((x) => Object.assign({ key: x, statL: STAT[x] }, pr[x]));
     table($("#wy-prog"), prow, [
@@ -1459,7 +1578,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       pending = false;
       $("#n-zak").textContent = String((S.ov.zaklady || []).filter((b) => !b.wynik).length);
       $("#n-prosby").textContent = String(S.ov.prosby.filter((x) => x.status === "nowa" || x.status === "w toku").length);
-      const fn = { typy: renderTypy, mecze: renderMecze, mecz: renderMecz, szukaj: renderSzukaj, zaklady: renderZaklady, projekt: renderProjekt }[S.page];
+      const fn = { typy: renderTypy, wyniki: renderWyniki, mecze: renderMecze, mecz: renderMecz, szukaj: renderSzukaj, zaklady: renderZaklady, projekt: renderProjekt }[S.page];
       if (fn) fn();
     });
   }
