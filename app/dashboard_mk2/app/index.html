@@ -120,6 +120,7 @@ th[aria-sort="descending"] .th::after { content: " ↓"; }
 .big3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 8px; }
 details.day { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--panel); display: grid; gap: 8px; }
 details.day > summary { cursor: pointer; line-height: 1.7; }
+summary.h3like { cursor: pointer; font: 600 1.02rem var(--display); color: var(--muted); }
 details.day[open] > summary { margin-bottom: 4px; }
 .tbl tr.top td { background: var(--pitch-soft); }
 .tbl td .chip { margin-right: 4px; }
@@ -1227,7 +1228,8 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const all = matches().filter((m) => inLiga(m, S.mz.liga) && (!S.mz.only || shownBets(m).length));
     const keys = [...new Set(all.map((m) => dayKey(m.start)))].sort();
     if (!S.mz.day || !keys.includes(S.mz.day)) S.mz.day = keys.find((k) => k >= todayKey()) || keys[0] || "";
-    $("#m-days").replaceChildren(...keys.map((k) => chip(dayLabel(k), k === S.mz.day, () => { S.mz.day = k; render(); }, all.filter((m) => dayKey(m.start) === k).length)));
+    $("#m-days").replaceChildren(...keys.map((k) => chip(dayLabel(k), k === S.mz.day, () => { S.mz.day = k; render(); },
+      all.filter((m) => dayKey(m.start) === k && shownBets(m).length).length)));
     // the odds-band filter and the track record of what it shows
     const seg = $("#m-band");
     seg.replaceChildren(...[["all", "Wszystkie kursy"], ...BANDS.map((_, i) => [i, bandLabel(i)])].map(([v, label]) => {
@@ -1255,9 +1257,28 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     Object.values(st("typy") || {}).forEach((d) => [d.kupon, d.kupon_pewne].forEach((k) => ((k && k.legs) || []).forEach((l) => inCoupon.add(String(l.fixture_id)))));
     box.replaceChildren();
     if (!list.length) { box.append(el("div", "card", q ? "Brak meczów pasujących do wyszukiwania." : S.mz.only ? "Brak meczów z typem w tych widełkach." : "Brak meczów w tym dniu.")); return; }
-    let group = null, gb = null;
-    list.forEach((m) => {
-      if (m.liga_id !== group) { group = m.liga_id; gb = el("div", "card group"); gb.append(el("h3", null, ligaName(m.liga_id))); box.append(gb); }
+    // matches with a bet first (by competition, kick-off, home team); those without at the end, folded
+    const withBets = list.filter((m) => shownBets(m).length), without = list.filter((m) => !shownBets(m).length);
+    const groups = (ms, into) => {
+      let group = null, gb = null;
+      ms.forEach((m) => {
+        if (m.liga_id !== group) { group = m.liga_id; gb = el("div", "card group"); gb.append(el("h3", null, ligaName(m.liga_id))); into.append(gb); }
+        gb.append(matchRow(m));
+      });
+    };
+    if (withBets.length) groups(withBets, box);
+    else box.append(el("div", "card", el("p", "note", "W tym dniu nie ma jeszcze meczów z typem w tych widełkach" + (S.mz.val ? " z wartością" : "") + ".")));
+    if (without.length) {
+      const d = el("details", "card");
+      d.open = !withBets.length;
+      d.append(el("summary", "h3like", "Mecze bez typu (" + without.length + ")"));
+      const inner = el("div", "page");
+      groups(without, inner);
+      d.append(inner);
+      box.append(d);
+    }
+
+    function matchRow(m) {
       const b = el("button", "match");
       b.type = "button";
       b.append(el("span", "tm", hm(m.start)));
@@ -1285,8 +1306,8 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       if (m.status && !["NS", "TBD"].includes(m.status)) bd.append(el("span", "chip c-warn", m.status === "FT" ? "koniec" : "trwa"));
       b.append(bd);
       b.addEventListener("click", () => openMatch(m.id));
-      gb.append(b);
-    });
+      return b;
+    }
   }
   $("#m-val").addEventListener("change", (e) => { S.mz.val = e.target.checked; render(); });
   $("#m-only").addEventListener("change", (e) => { S.mz.only = e.target.checked; render(); });
