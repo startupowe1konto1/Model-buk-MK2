@@ -45,7 +45,6 @@ MODEL_WEIGHT = 0.2
 # - 1 at least this much), from at least two bookmakers quoting the line.
 MIN_PRICE_EDGE = 0.02
 MIN_BOOKS = 2
-TAX_LOW = 0.94   # the 6% variant (a bookmaker that pays the tax itself in part, e.g. Betclic)
 # A model that disagrees with the whole market by more than this is far more often wrong than right
 # (lopsided cup ties between clubs of very different leagues are where it extrapolates most).
 MAX_EDGE = 0.15
@@ -69,15 +68,14 @@ def blend(p_model: float, q_market: float) -> float:
 
 def value_fields(p_model: float, q: float, odd: float, n_books: int) -> dict:
     """The fields every bet carries under v5: the blended chance, the price's edge over the market's
-    fair price, expected profit before tax, after 12% and after 6%."""
+    fair price, expected profit before and after the 12% tax."""
     p = blend(p_model, q)
     return {"p_model": round(p, 4), "p_model_czysty": round(p_model, 4), "p_rynek": round(q, 4),
             "przewaga": round(p - q, 4), "przewaga_modelu": round(p_model - q, 4),
             "przewaga_kursu": round(odd * q - 1, 4), "n_buk": n_books,
             "kurs_uczciwy": round(1 / p, 2) if p > 0 else None,
             "kurs_min_z_podatkiem": round(1 / (p * TAX), 2) if p > 0 else None,
-            "ev": round(p * odd - 1, 4), "ev_podatek": round(p * odd * TAX - 1, 4),
-            "ev_podatek_6": round(p * odd * TAX_LOW - 1, 4)}
+            "ev": round(p * odd - 1, 4), "ev_podatek": round(p * odd * TAX - 1, 4)}
 
 
 def band_of(odd: float | None) -> int | None:
@@ -227,7 +225,7 @@ def coupons(picks: list[dict], legs: int, lo: float = 1.8, hi: float = 2.5, top:
         out.append({"nogi": [c["opis"] + f" @ {c['kurs']:.2f} ({c['bukmacher']})" for c in combo],
                     "legs": [{k: c.get(k) for k in LEG_KEYS} for c in combo],
                     "kurs": round(odd, 2), "p_model": round(p, 4), "ev": round(p * odd - 1, 4),
-                    "ev_podatek": round(p * odd * TAX - 1, 4), "ev_podatek_6": round(p * odd * TAX_LOW - 1, 4)})
+                    "ev_podatek": round(p * odd * TAX - 1, 4)})
     out.sort(key=lambda c: -c["ev"])
     for c in out:
         c["n_kombinacji"] = len(out)

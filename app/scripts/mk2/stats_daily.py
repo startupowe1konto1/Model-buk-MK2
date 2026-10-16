@@ -681,13 +681,12 @@ def why_result(c: dict, m: dict, rank: int, n: int) -> str:
 
 def price_sentence(c: dict, rank: int, n: int | None) -> str:
     """The v5 part of every reason: the mixed chance, the price against the market's fair price, the
-    result after 12% and 6% tax, and the place among the day's picks."""
+    result after the 12% tax, and the place among the day's picks."""
     edge = c["przewaga_kursu"]
     s = (f"Szansa 80% wg bukmacherów ({_pc(c['p_rynek'])}) i 20% wg modelu ({_pc(c['p_model_czysty'])}): {_pc(c['p_model'])}. "
          f"Uczciwy kurs rynku to {_pl2(1 / c['p_rynek'])}, najlepszy kurs {_pl2(c['kurs'])} ({c['bukmacher']}) jest "
          + (f"o {round(edge * 100)}% wyższy" if edge > 0.005 else f"o {round(-edge * 100)}% niższy" if edge < -0.005 else "taki sam")
-         + f". Oczekiwany wynik na 100 zł: {round(c['ev_podatek'] * 100):+d} zł przy podatku 12%, "
-         f"{round(c['ev_podatek_6'] * 100):+d} zł przy 6%.")
+         + f". Oczekiwany wynik na 100 zł po podatku 12%: {round(c['ev_podatek'] * 100):+d} zł.")
     if n:
         s += (" " + ("Największa" if rank == 1 else f"{rank}. największa") + f" przewaga kursu nad rynkiem spośród {n} "
               "zakładów tego dnia, które spełniają zasady typów dnia (kurs co najmniej 2% powyżej uczciwego kursu rynku, "
@@ -745,8 +744,7 @@ def why_coupon(k: dict, alts: list[dict], rank: int = 1) -> str:
     q = math.prod(l["p_rynek"] for l in k["legs"])
     n, n2 = k.get("n_kombinacji"), k.get("n_dwojek")
     s = (f"{len(k['legs'])} zdarzenia z różnych meczów, łączny kurs {_pl2(k['kurs'])}. Szansa wg modelu {_pc(k['p_model'])}, "
-         f"wg bukmacherów {_pc(q)}; oczekiwany wynik na 100 zł {round(k['ev_podatek'] * 100):+d} zł przy podatku 12%, "
-         f"{round(k.get('ev_podatek_6', k['ev_podatek']) * 100):+d} zł przy 6%. ")
+         f"wg bukmacherów {_pc(q)}; oczekiwany wynik na 100 zł po podatku 12%: {round(k['ev_podatek'] * 100):+d} zł. ")
     place = "Największy oczekiwany zysk" if rank == 1 else f"{rank}. miejsce pod względem oczekiwanego zysku"
     if n is None:
         s += "Kupon o łącznym kursie 1,8–2,5 złożony z typów tego dnia."
@@ -831,11 +829,10 @@ def settle_picks(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
         if res == "wygrana":
             p["zysk"] = round(p["odd"] - 1, 4)
             p["zysk_podatek"] = round(p["odd"] * 0.88 - 1, 4)
-            p["zysk_podatek_6"] = round(p["odd"] * sp.TAX_LOW - 1, 4)
         elif res == "przegrana":
-            p["zysk"] = p["zysk_podatek"] = p["zysk_podatek_6"] = -1.0
+            p["zysk"] = p["zysk_podatek"] = -1.0
         elif res == "zwrot":
-            p["zysk"] = p["zysk_podatek"] = p["zysk_podatek_6"] = 0.0
+            p["zysk"] = p["zysk_podatek"] = 0.0
         out.append(p)
     return out
 
@@ -903,14 +900,13 @@ def settle_coupons(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
         c["legs"] = legs
         c["wynik"] = None
         if any(r == "przegrana" for r, _ in res):
-            c["wynik"], c["zysk"], c["zysk_podatek"], c["zysk_podatek_6"] = "przegrana", -1.0, -1.0, -1.0
+            c["wynik"], c["zysk"], c["zysk_podatek"] = "przegrana", -1.0, -1.0
         elif all(r in ("wygrana", "zwrot") for r, _ in res):
             odd = math.prod(l["kurs"] if r == "wygrana" else 1.0 for l, (r, _) in zip(legs, res))
             if odd > 1.0:
                 c["wynik"], c["zysk"], c["zysk_podatek"] = "wygrana", round(odd - 1, 4), round(odd * 0.88 - 1, 4)
-                c["zysk_podatek_6"] = round(odd * sp.TAX_LOW - 1, 4)
             else:
-                c["wynik"], c["zysk"], c["zysk_podatek"], c["zysk_podatek_6"] = "zwrot", 0.0, 0.0, 0.0
+                c["wynik"], c["zysk"], c["zysk_podatek"] = "zwrot", 0.0, 0.0
     return rows
 
 
@@ -990,19 +986,18 @@ def main() -> None:
     # corners in the same match are the same bet twice, so once a market has a bet in one band it is
     # not used in another; bets with value choose first, then the likeliest lines fill the free bands.
     # v5: the chance is 80% the market's, so "value" means a price above the market's fair price; the
-    # bets whose best price is furthest above it choose their markets first (pays after 12%, then
-    # after 6%, then a clear price edge), the likeliest lines fill the free bands.
+    # bets whose best price is furthest above it choose their markets first (pays after the 12% tax,
+    # then a clear price edge), the likeliest lines fill the free bands.
     allowed = [c for c in cands + results_c if c["do_typow"] and c["przewaga_modelu"] <= sp.MAX_EDGE]
     per_match: dict[int, list[dict]] = {}
     for c in allowed:
         c["pasmo"] = sp.band_of(c["kurs"])
         c["z_wartoscia"] = c["ev_podatek"] >= 0
-        c["z_wartoscia_6"] = c["ev_podatek_6"] >= 0
         per_match.setdefault(c["fixture_id"], []).append(c)
     chosen = []
     for lst in per_match.values():
         bands, markets = set(), set()
-        for c in sorted(lst, key=lambda c: (c["z_wartoscia"], c["z_wartoscia_6"], strict_pick(c),
+        for c in sorted(lst, key=lambda c: (c["z_wartoscia"], strict_pick(c),
                                             c["przewaga_kursu"] if strict_pick(c) else -9.0, c["p_model"]), reverse=True):
             if c["pasmo"] in bands or sp.market_key(c) in markets:
                 continue
@@ -1020,7 +1015,7 @@ def main() -> None:
                 top_matches.add(c["fixture_id"])
     # Coupon legs come from a wider pool than the picks: likelier events (at least 55%) whose best
     # price is above the market's fair price (v5: the coupon is the one furthest above the market;
-    # whether it pays after 12% or 6% tax is shown, not required).
+    # whether it pays after the 12% tax is shown, not required).
     leg_pool: dict[str, list[dict]] = {}
     seen_leg = set()
     for c in sorted(cands, key=lambda c: -c["ev"]):
@@ -1198,7 +1193,6 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         return {"fixture_id": s["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}",
                 "p_model_czysty": s.get("p_model_pure"), "n_buk": s.get("n_books"),
                 "przewaga_kursu": round(odd * q - 1, 4) if q else None,
-                "ev_podatek_6": round(p * odd * sp.TAX_LOW - 1, 4), "z_wartoscia_6": p * odd * sp.TAX_LOW >= 1,
                 **clv_of(s),
                 "start": (names.get(s["fixture_id"]) or {}).get("kickoff_utc"), "stat": s["stat"],
                 "scope": s["scope"], "line": s["line"], "side": s["side"],
@@ -1211,17 +1205,17 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
                 "zysk_podatek": s.get("zysk_podatek"), "zapisano": s["made_at"], "why": s.get("why"),
                 "oczekiwane": _r(s.get("expected"), 2), "top": s.get("top") is None or bool(s.get("top")),
                 "pasmo": sp.band_of(s["odd"]), "z_wartoscia": s["ev_tax"] is not None and s["ev_tax"] >= 0,
-                **money(s.get("zysk_podatek"), s.get("wynik"), s["ev_tax"], s.get("zysk_podatek_6"))}
+                **money(s.get("zysk_podatek"), s.get("wynik"), s["ev_tax"])}
 
     def logged_coupon(c: dict) -> dict:
         for l in c["legs"]:
             l.setdefault("zaklad", f"{'powyżej' if l['side'] == 'over' else 'poniżej'} {_pl(l['line'])}")
         return {"legs": c["legs"], "kurs": c["odd"], "p_model": c["p_model"], "p_rynek": c["p_market"],
                 "zasady": c.get("rules") or "v1",
-                "ev": c["ev"], "ev_podatek": c["ev_tax"], "ev_podatek_6": round(c["p_model"] * c["odd"] * sp.TAX_LOW - 1, 4),
+                "ev": c["ev"], "ev_podatek": c["ev_tax"],
                 "why": c["why"], "wynik": c.get("wynik"),
                 "zysk": c.get("zysk"), "zysk_podatek": c.get("zysk_podatek"), "zapisano": c["made_at"],
-                **money(c.get("zysk_podatek"), c.get("wynik"), c["ev_tax"], c.get("zysk_podatek_6"))}
+                **money(c.get("zysk_podatek"), c.get("wynik"), c["ev_tax"])}
 
     logged: dict[str, list[dict]] = {}
     for s in settled:
@@ -1304,6 +1298,8 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     wyniki = {"dni": results, "stawka": STAKE,
               "finanse": {"top5": finance([p for p in cur_p if p["top"]]),
                           "pozostale": finance([p for p in cur_p if not p["top"]]),
+                          "z_wartoscia": finance([p for p in cur_p if p["z_wartoscia"]]),
+                          "bez_wartosci": finance([p for p in cur_p if not p["z_wartoscia"]]),
                           "kupon": finance(cur_c), "kupon_pewne": finance(cur_k), "lacznie": finance(cur_p + cur_c + cur_k)},
               "pasma": [{"pasmo": i, "od": lo, "do": hi,
                          "z_wartoscia": finance([p for p in cur_p if p["pasmo"] == i and p["z_wartoscia"]]),
@@ -1353,15 +1349,14 @@ def _pick(c: dict) -> dict:
     out = {k: c.get(k) for k in ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "zaklad", "p_model",
                                  "p_rynek", "kurs", "bukmacher", "kurs_uczciwy", "kurs_min_z_podatkiem", "ev",
                                  "ev_podatek", "przewaga", "oczekiwane", "why", "zasady", "top", "pasmo",
-                                 "z_wartoscia", "p_model_czysty", "przewaga_kursu", "przewaga_modelu", "n_buk",
-                                 "ev_podatek_6", "z_wartoscia_6")}
+                                 "z_wartoscia", "p_model_czysty", "przewaga_kursu", "przewaga_modelu", "n_buk")}
     out.update(money(None, None, c.get("ev_podatek")))
     return out
 
 
 def strict_pick(c: dict) -> bool:
     """v5: a line good enough for the day's highlighted picks: its best price is at least 2% above the
-    market's fair price, with at least two bookmakers quoting it (whether it also pays after 12% or 6%
+    market's fair price, with at least two bookmakers quoting it (whether it also pays after the 12%
     tax is shown on the pick; at 12% that takes a price about 14% above the market's), and the model
     does not see the event as less likely than the market does."""
     return (c["przewaga_kursu"] >= sp.MIN_PRICE_EDGE and (c.get("n_buk") or 0) >= sp.MIN_BOOKS
@@ -1374,24 +1369,20 @@ def why_rest(c: dict) -> str:
     if strict_pick(c):
         return (f"Kurs {rng} wyraźnie powyżej rynku: spełnia zasady typów dnia, ale pięć innych zakładów ma większą "
                 f"przewagę kursu albo typ dnia z tego meczu jest już wybrany.")
-    if c["ev_podatek"] >= 0 or c["ev_podatek_6"] >= 0:
-        return f"Z wartością {rng} " + ("po podatku 12%." if c["ev_podatek"] >= 0 else "przy podatku 6% (przy 12% nie).")
+    if c["ev_podatek"] >= 0:
+        return f"Z wartością {rng}: opłaca się po podatku 12%."
     return (f"Bez wartości po podatku: {rng} żaden kurs w tym meczu nie jest wyraźnie wyższy niż uczciwy kurs rynku, "
             f"więc to zakład z największą szansą ({_pc(c['p_model'])}). Może spokojnie wejść, tylko przy tym kursie "
-            f"na dłuższą metę nie zarabia (oczekiwany wynik {round(c['ev_podatek'] * 100):+d} zł na 100 zł przy podatku 12%, "
-            f"{round(c['ev_podatek_6'] * 100):+d} zł przy 6%).")
+            f"na dłuższą metę nie zarabia (oczekiwany wynik {round(c['ev_podatek'] * 100):+d} zł na 100 zł po podatku 12%).")
 
 
-def money(unit_after_tax: float | None, result: str | None, ev_tax: float | None = None,
-          unit_6: float | None = None) -> dict:
-    """A 100 zł paper bet: the stake, the payout after the 12% tax and the profit (once settled), the
-    same at 6% tax, and the profit the model expects."""
+def money(unit_after_tax: float | None, result: str | None, ev_tax: float | None = None) -> dict:
+    """A 100 zł paper bet: the stake, the payout after the 12% tax and the profit (once settled), and the
+    profit the model expects."""
     out = {"stawka": STAKE, "zysk_oczekiwany_zl": None if ev_tax is None else round(STAKE * ev_tax, 2)}
     if result is None or unit_after_tax is None:
-        return {**out, "wyplata": None, "zysk_zl": None, "wyplata_6": None, "zysk_zl_6": None}
-    u6 = unit_after_tax if unit_6 is None else unit_6
-    return {**out, "wyplata": round(STAKE * (1 + unit_after_tax), 2), "zysk_zl": round(STAKE * unit_after_tax, 2),
-            "wyplata_6": round(STAKE * (1 + u6), 2), "zysk_zl_6": round(STAKE * u6, 2)}
+        return {**out, "wyplata": None, "zysk_zl": None}
+    return {**out, "wyplata": round(STAKE * (1 + unit_after_tax), 2), "zysk_zl": round(STAKE * unit_after_tax, 2)}
 
 
 def clv_summary(items: list[dict]) -> dict:
@@ -1406,13 +1397,10 @@ def finance(items: list[dict]) -> dict:
     done = [x for x in items if x.get("wynik")]
     staked = STAKE * len(done)
     paid = round(sum(x["wyplata"] for x in done), 2)
-    paid6 = round(sum(x.get("wyplata_6") or x["wyplata"] for x in done), 2)
     return {"n": len(items), "rozliczone": len(done), "trafione": sum(x["wynik"] == "wygrana" for x in done),
             "oczekiwane": round(sum(x.get("p_model") or 0 for x in done), 2),
             "postawione": staked, "wyplaty": paid, "zysk": round(paid - staked, 2),
-            "roi": round((paid - staked) / staked, 4) if staked else None,
-            "wyplaty_6": paid6, "zysk_6": round(paid6 - staked, 2),
-            "roi_6": round((paid6 - staked) / staked, 4) if staked else None}
+            "roi": round((paid - staked) / staked, 4) if staked else None}
 
 
 if __name__ == "__main__":

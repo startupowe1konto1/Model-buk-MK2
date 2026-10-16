@@ -313,6 +313,5 @@ def test_v5_chance_is_mostly_the_market_and_picks_need_a_price_above_it():
     assert v["p_model"] == pytest.approx(0.64) and v["p_model_czysty"] == 0.8
     assert v["przewaga_kursu"] == pytest.approx(0.08)
     assert v["ev_podatek"] == pytest.approx(0.64 * 1.8 * 0.88 - 1, abs=1e-4)
-    assert v["ev_podatek_6"] == pytest.approx(0.64 * 1.8 * 0.94 - 1, abs=1e-4)
     assert sd.strict_pick(v) and not sd.strict_pick({**v, "n_buk": 1})
     assert not sd.strict_pick(sp.value_fields(0.90, 0.60, 1.65, 3))   # the model alone is not enough
