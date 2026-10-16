@@ -283,3 +283,36 @@ def test_result_odds_become_margin_free_chances():
     assert len(rows) == 6 and {r["side"] for r in rows} == {"home", "draw", "away"}
     h, d, a = sd.result_probs(rows)
     assert h + d + a == pytest.approx(1.0) and 0.6 < h < 0.65 and a < d
+
+
+def test_double_chance_odds_are_read_and_match_result_bets_settle_after_90_minutes():
+    payload = {"response": [{"bookmakers": [{"name": "A", "bets": [
+        {"id": 12, "values": [{"value": "Home/Draw", "odd": "1.30"}, {"value": "Home/Away", "odd": "1.25"},
+                              {"value": "Draw/Away", "odd": "2.40"}]}]}]}]}
+    assert {r["side"] for r in sd.parse_result_odds(payload)} == {"home_draw", "draw_away"}
+    by_fix = {9: pd.DataFrame([{"fixture_id": 9, "side": "home", "goals": 1.0},
+                               {"fixture_id": 9, "side": "away", "goals": 1.0}])}
+    leg = {"fixture_id": 9, "stat": "wynik", "line": 0.0}
+    assert sd.settle_leg({**leg, "scope": "home", "side": "win"}, by_fix) == ("przegrana", "1:1")
+    assert sd.settle_leg({**leg, "scope": "away", "side": "win_draw"}, by_fix) == ("wygrana", "1:1")
+    m = {"gospodarz": "Bayern", "gosc": "Inter"}
+    assert sp.describe(m, "wynik", "away", "win_draw", 0.0) == "Inter: wygra albo zremisuje"
+    assert sp.bookie_wording("wynik", "away", "win_draw", 0.0) == "X2"
+
+
+def test_one_bet_per_market_in_a_match():
+    a = {"fixture_id": 1, "stat": "corners", "scope": "total"}
+    assert sp.market_key(a) == sp.market_key({**a, "line": 9.5})
+    assert sp.market_key(a) != sp.market_key({**a, "scope": "home"})
+    assert sp.market_key({"fixture_id": 1, "stat": "wynik", "scope": "home"}) == sp.market_key(
+        {"fixture_id": 1, "stat": "wynik", "scope": "away"})
+
+
+def test_v5_chance_is_mostly_the_market_and_picks_need_a_price_above_it():
+    v = sp.value_fields(0.80, 0.60, 1.80, 3)
+    assert v["p_model"] == pytest.approx(0.64) and v["p_model_czysty"] == 0.8
+    assert v["przewaga_kursu"] == pytest.approx(0.08)
+    assert v["ev_podatek"] == pytest.approx(0.64 * 1.8 * 0.88 - 1, abs=1e-4)
+    assert v["ev_podatek_6"] == pytest.approx(0.64 * 1.8 * 0.94 - 1, abs=1e-4)
+    assert sd.strict_pick(v) and not sd.strict_pick({**v, "n_buk": 1})
+    assert not sd.strict_pick(sp.value_fields(0.90, 0.60, 1.65, 3))   # the model alone is not enough

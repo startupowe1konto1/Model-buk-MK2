@@ -33,7 +33,19 @@ MIN_EV = 0.02        # expected value per unit stake at the best price, before t
 # depend on the referee and on how each provider counts them, so they are shown but not picked yet.
 PICK_STATS = {"shots", "sot", "corners"}
 MARKET_BAND = (0.30, 0.80)   # lines far in the tails are where a count model is least reliable
-MAX_PRICE_OVER_MEDIAN = 1.08  # a price far above the other bookmakers' is more likely stale than a gift
+# A price far above the other bookmakers' is more likely stale than a gift; v5 looks for prices above
+# the market on purpose, so the cap is looser than before (1.08), but 15% above the median is still
+# treated as an error.
+MAX_PRICE_OVER_MEDIAN = 1.15
+# v5 (user, 2026-10-16): the chance is 80% the bookmakers' (margin removed) and 20% the model's: on
+# 2029 settled lines the market forecast better than the model on every statistic and this mix was
+# the best of all (scripts/mk2/eval_live.py).
+MODEL_WEIGHT = 0.2
+# The day's picks are the prices furthest above the market's fair price (best price x market chance
+# - 1 at least this much), from at least two bookmakers quoting the line.
+MIN_PRICE_EDGE = 0.02
+MIN_BOOKS = 2
+TAX_LOW = 0.94   # the 6% variant (a bookmaker that pays the tax itself in part, e.g. Betclic)
 # A model that disagrees with the whole market by more than this is far more often wrong than right
 # (lopsided cup ties between clubs of very different leagues are where it extrapolates most).
 MAX_EDGE = 0.15
@@ -46,7 +58,26 @@ HALF_LINES_ONLY = True
 MIN_PICK_ODDS = 1.25
 MAX_PICK_ODDS = 2.00
 ODDS_BANDS = ((1.25, 1.45), (1.46, 1.65), (1.66, 2.00))
-RULES = "v3"
+# v4 (2026-10-16): one bet per market in a match, match-result bets (win, win or draw) added
+# v5 (2026-10-16): chance 80% market / 20% model, picks by the price's edge over the market, CLV
+RULES = "v5"
+
+
+def blend(p_model: float, q_market: float) -> float:
+    return MODEL_WEIGHT * p_model + (1 - MODEL_WEIGHT) * q_market
+
+
+def value_fields(p_model: float, q: float, odd: float, n_books: int) -> dict:
+    """The fields every bet carries under v5: the blended chance, the price's edge over the market's
+    fair price, expected profit before tax, after 12% and after 6%."""
+    p = blend(p_model, q)
+    return {"p_model": round(p, 4), "p_model_czysty": round(p_model, 4), "p_rynek": round(q, 4),
+            "przewaga": round(p - q, 4), "przewaga_modelu": round(p_model - q, 4),
+            "przewaga_kursu": round(odd * q - 1, 4), "n_buk": n_books,
+            "kurs_uczciwy": round(1 / p, 2) if p > 0 else None,
+            "kurs_min_z_podatkiem": round(1 / (p * TAX), 2) if p > 0 else None,
+            "ev": round(p * odd - 1, 4), "ev_podatek": round(p * odd * TAX - 1, 4),
+            "ev_podatek_6": round(p * odd * TAX_LOW - 1, 4)}
 
 
 def band_of(odd: float | None) -> int | None:
@@ -133,34 +164,49 @@ def candidates(analysis: dict, factors: dict) -> list[dict]:
                 fair_prices = {bm: o for bm, o in prices.items() if o <= median * MAX_PRICE_OVER_MEDIAN}
                 bm_best = max(fair_prices, key=fair_prices.get)
                 odd = fair_prices[bm_best]
-                ev = p * odd + p_push - 1
                 rows.append({
                     "fixture_id": m["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}",
                     "stat": l["stat"], "scope": l["scope"], "line": l["line"], "side": side,
                     "opis": describe(m, l["stat"], l["scope"], side, l["line"]),
                     "zaklad": f"{'powyżej' if side == 'over' else 'poniżej'} {l['line']:.1f}".replace(".", ","),
                     "zasady": RULES,
-                    "p_model": round(p, 4), "p_model_surowe": round(l[f"p_{side}"], 4), "p_rynek": round(q, 4),
+                    "p_model_surowe": round(l[f"p_{side}"], 4),
                     "kurs": odd, "bukmacher": bm_best, "kurs_mediana": round(median, 2),
                     "do_typow": l["stat"] in PICK_STATS and MARKET_BAND[0] <= q <= MARKET_BAND[1]
                                 and m.get("min_n", MIN_TEAM_MATCHES) >= MIN_TEAM_MATCHES
                                 and MIN_PICK_ODDS <= odd <= MAX_PICK_ODDS,
-                    "kurs_uczciwy": round(1 / p, 2) if p > 0 else None,
-                    "kurs_min_z_podatkiem": round(1 / (p * TAX), 2) if p > 0 else None,
-                    "ev": round(ev, 4), "ev_podatek": round(p * odd * TAX + p_push * TAX - 1, 4),
-                    "przewaga": round(p - q, 4), "oczekiwane": round(mu, 2), "k": k,
+                    **value_fields(p, q, odd, len(prices)),
+                    "oczekiwane": round(mu, 2), "k": k,
                 })
     return rows
 
 
 def describe(m: dict, stat: str, scope: str, side: str, line: float) -> str:
-    """'Aston Villa: co najmniej 14 strzałów' for an over X.5 bet; the bookmaker's wording otherwise."""
+    """'Aston Villa: co najmniej 14 strzałów' for an over X.5 bet; the bookmaker's wording otherwise.
+    Match-result bets (stat 'wynik'): 'Aston Villa: wygra mecz' or 'Aston Villa: wygra albo zremisuje'."""
     who = {"home": m["gospodarz"], "away": m["gosc"], "total": "W meczu"}[scope]
+    if stat == "wynik":
+        return f"{who}: " + ("wygra mecz" if side == "win" else "wygra albo zremisuje")
     if side == "over" and is_half_line(line):
         k = int(line + 0.5)
         return f"{who}: co najmniej {k} {plural(k, stat)}"
     word = "powyżej" if side == "over" else "poniżej"
     return f"{who}: {sm.STAT_PL[stat]} {word} {str(line).replace('.', ',')}"
+
+
+def bookie_wording(stat: str, scope: str, side: str, line: float | None) -> str:
+    """The bet as the bookmaker names it: 'powyżej 13,5', or '1', '2', '1X', 'X2' for the match result."""
+    if stat == "wynik":
+        return {("home", "win"): "1", ("away", "win"): "2", ("home", "win_draw"): "1X",
+                ("away", "win_draw"): "X2"}[(scope, side)]
+    return f"{'powyżej' if side == 'over' else 'poniżej'} {line:.1f}".replace(".", ",")
+
+
+def market_key(c: dict) -> tuple:
+    """The market a bet belongs to: two lines of the same market in one match are the same bet
+    twice (e.g. at least 8 and at least 9 corners), so a match gets at most one bet per market;
+    all match-result bets (win, win or draw, either team) count as one market."""
+    return (c["fixture_id"], "wynik") if c["stat"] == "wynik" else (c["fixture_id"], c["stat"], c["scope"])
 
 
 LEG_KEYS = ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "zaklad", "kurs", "bukmacher", "p_model",
@@ -169,7 +215,7 @@ LEG_KEYS = ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "zakl
 
 def coupons(picks: list[dict], legs: int, lo: float = 1.8, hi: float = 2.5, top: int = 5) -> list[dict]:
     """Best combinations of legs from different matches with total odds in [lo, hi]."""
-    pool = [p for p in picks if p["ev"] > 0 and p["p_model"] >= 0.55][:40]
+    pool = [p for p in picks if p.get("przewaga_kursu", p["ev"]) > 0 and p["p_model"] >= 0.55][:40]
     out = []
     for combo in itertools.combinations(pool, legs):
         if len({c["fixture_id"] for c in combo}) < legs:
@@ -181,7 +227,7 @@ def coupons(picks: list[dict], legs: int, lo: float = 1.8, hi: float = 2.5, top:
         out.append({"nogi": [c["opis"] + f" @ {c['kurs']:.2f} ({c['bukmacher']})" for c in combo],
                     "legs": [{k: c.get(k) for k in LEG_KEYS} for c in combo],
                     "kurs": round(odd, 2), "p_model": round(p, 4), "ev": round(p * odd - 1, 4),
-                    "ev_podatek": round(p * odd * TAX - 1, 4)})
+                    "ev_podatek": round(p * odd * TAX - 1, 4), "ev_podatek_6": round(p * odd * TAX_LOW - 1, 4)})
     out.sort(key=lambda c: -c["ev"])
     for c in out:
         c["n_kombinacji"] = len(out)
@@ -193,7 +239,7 @@ def main() -> None:
     analysis = json.loads(path.read_text(encoding="utf-8"))
     factors = level_factors(analysis)
     rows = candidates(analysis, factors)
-    good = [r for r in rows if r["do_typow"] and MIN_EDGE <= r["przewaga"] <= MAX_EDGE and r["ev"] >= MIN_EV]
+    good = [r for r in rows if r["do_typow"] and r["przewaga_modelu"] <= MAX_EDGE and r["przewaga_kursu"] >= MIN_PRICE_EDGE]
     good.sort(key=lambda r: -r["ev"])
     # one pick per (match, statistic, scope): the best line
     seen, top = set(), []

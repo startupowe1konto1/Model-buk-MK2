@@ -40,6 +40,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -67,6 +68,7 @@ STATS_DIR = sm.OUT / "stats"
 TOP_PER_DAY = 5
 ALL_PER_DAY = 240      # up to one bet per match in each of the three odds bands
 STAKE = 100.0          # zł on every paper bet and coupon (user, 2026-10-15)
+TAX = 0.88
 
 
 def utcnow() -> dt.datetime:
@@ -115,6 +117,12 @@ def init_dbs() -> tuple[sqlite3.Connection, sqlite3.Connection, sqlite3.Connecti
         pr.execute("alter table picks add column rules text")
     if "top" not in cols:   # 1 for the day's highlighted picks; empty on rows from before 15.10 (all were)
         pr.execute("alter table picks add column top integer")
+    # v5: the model's own chance (p_model is the 80/20 mix), how many bookmakers quoted the line, and
+    # the first time the bet was proposed with its price and market chance then (for CLV)
+    for col, typ in (("p_model_pure", "real"), ("n_books", "integer"), ("first_at", "text"), ("first_odd", "real"),
+                     ("first_q", "real")):
+        if col not in cols:
+            pr.execute(f"alter table picks add column {col} {typ}")
     pr.execute("""create table if not exists coupons (
         made_at text, day text, kind text, legs text, odd real, p_model real, p_market real, ev real,
         ev_tax real, why text, primary key (day, kind))""")
@@ -254,16 +262,22 @@ def step_odds(client: Client, fx: sqlite3.Connection, od: sqlite3.Connection, ho
     return fetched
 
 
+RESULT_SIDES = {1: {"Home": "home", "Draw": "draw", "Away": "away"},          # match winner
+                12: {"Home/Draw": "home_draw", "Draw/Away": "draw_away"}}      # double chance
+
+
 def parse_result_odds(payload: dict) -> list[dict]:
-    """The match-winner market (API-Football bet 1) as rows of stat 'result': side home, draw or away."""
+    """The match-winner market (API-Football bet 1) and the double chance (bet 12) as rows of stat
+    'result': side home, draw, away, home_draw or draw_away."""
     rows = []
     for block in payload.get("response", []):
         for bm in block.get("bookmakers", []):
             for bet in bm.get("bets", []):
-                if bet.get("id") != 1:
+                sides = RESULT_SIDES.get(bet.get("id"))
+                if not sides:
                     continue
                 for v in bet.get("values", []):
-                    side = {"Home": "home", "Draw": "draw", "Away": "away"}.get(str(v.get("value")))
+                    side = sides.get(str(v.get("value")))
                     try:
                         odd = float(v.get("odd"))
                     except (TypeError, ValueError):
@@ -291,6 +305,47 @@ def result_probs(rows: list[dict]) -> tuple[float, float, float] | None:
     med = np.median(np.array(probs), axis=0)
     med = med / med.sum()
     return float(med[0]), float(med[1]), float(med[2])
+
+
+def result_candidates(analysis: dict, goals_fit, odds: dict[int, list[dict]]) -> list[dict]:
+    """Win and win-or-draw bets (1, 2, 1X, X2) of every match with match-result prices, in the same
+    shape as stats_picks.candidates() rows (stat 'wynik', scope home/away, side win/win_draw).
+    The chance is mixed like every other bet's: 80% the bookmakers' (margin removed), 20% the
+    Poisson goals model's (in the project's earlier tests the 1X2 market beat it in every league)."""
+    k = np.arange(16)
+    rows = []
+    for m in analysis["mecze"]:
+        q = m.get("wynik_rynek")
+        quotes = [r for r in odds.get(m["fixture_id"], []) if r["stat"] == "result"]
+        if not q or not quotes:
+            continue
+        cup = m["liga_id"] in CUPS
+        mh = goals_fit.mean(m["home_id"], m["away_id"], True, cup)
+        ma = goals_fit.mean(m["away_id"], m["home_id"], False, cup)
+        j = np.outer(stats.poisson.pmf(k, mh), stats.poisson.pmf(k, ma))
+        g_home, g_draw, g_away = float(np.tril(j, -1).sum()), float(np.trace(j)), float(np.triu(j, 1).sum())
+        for scope, side, key, q_, g in (("home", "win", "home", q[0], g_home), ("away", "win", "away", q[2], g_away),
+                                        ("home", "win_draw", "home_draw", q[0] + q[1], g_home + g_draw),
+                                        ("away", "win_draw", "draw_away", q[2] + q[1], g_away + g_draw)):
+            prices = {r["bookmaker"]: r["odd"] for r in quotes if r["side"] == key}
+            if not prices:
+                continue
+            median = float(np.median(list(prices.values())))
+            fair = {bm: o for bm, o in prices.items() if o <= median * sp.MAX_PRICE_OVER_MEDIAN}
+            bm_best = max(fair, key=fair.get)
+            odd = fair[bm_best]
+            rows.append({
+                "fixture_id": m["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}",
+                "stat": "wynik", "scope": scope, "line": 0.0, "side": side,
+                "opis": sp.describe(m, "wynik", scope, side, 0.0), "zaklad": sp.bookie_wording("wynik", scope, side, 0.0),
+                "zasady": sp.RULES, "p_model_surowe": round(g, 4),
+                "kurs": odd, "bukmacher": bm_best, "kurs_mediana": round(median, 2),
+                "do_typow": m.get("min_n", sp.MIN_TEAM_MATCHES) >= sp.MIN_TEAM_MATCHES
+                            and sp.MIN_PICK_ODDS <= odd <= sp.MAX_PICK_ODDS,
+                **sp.value_fields(g, q_, odd, len(prices)),
+                "oczekiwane": None, "k": 1.0, "gole": [round(mh, 2), round(ma, 2)],
+            })
+    return rows
 
 
 def latest_odds(od: sqlite3.Connection, fixture_ids: list[int]) -> dict[int, list[dict]]:
@@ -613,14 +668,43 @@ def rank_phrase(r: int, n: int) -> str:
     return f"{r}. najwięcej w lidze" if r <= (n + 1) / 2 else f"{n - r + 1}. najmniej w lidze"
 
 
+def why_result(c: dict, m: dict, rank: int, n: int) -> str:
+    """Reasons for a match-result bet: the bookmakers' chance, the goals model's, the price."""
+    who = m["gospodarz"] if c["scope"] == "home" else m["gosc"]
+    what = "wygra" if c["side"] == "win" else "wygra albo zremisuje"
+    gh, ga = c.get("gole") or (None, None)
+    s = (f"Bukmacherzy (bez marży) dają {_pc(c['p_rynek'])}, że {who} {what} (po 90 minutach). "
+         + (f"Model goli oczekuje {_pl(gh)}:{_pl(ga)} i daje {_pc(c['p_model_surowe'])}; " if gh is not None else "")
+         + price_sentence(c, rank, n))
+    return s
+
+
+def price_sentence(c: dict, rank: int, n: int | None) -> str:
+    """The v5 part of every reason: the mixed chance, the price against the market's fair price, the
+    result after 12% and 6% tax, and the place among the day's picks."""
+    edge = c["przewaga_kursu"]
+    s = (f"Szansa 80% wg bukmacherów ({_pc(c['p_rynek'])}) i 20% wg modelu ({_pc(c['p_model_czysty'])}): {_pc(c['p_model'])}. "
+         f"Uczciwy kurs rynku to {_pl2(1 / c['p_rynek'])}, najlepszy kurs {_pl2(c['kurs'])} ({c['bukmacher']}) jest "
+         + (f"o {round(edge * 100)}% wyższy" if edge > 0.005 else f"o {round(-edge * 100)}% niższy" if edge < -0.005 else "taki sam")
+         + f". Oczekiwany wynik na 100 zł: {round(c['ev_podatek'] * 100):+d} zł przy podatku 12%, "
+         f"{round(c['ev_podatek_6'] * 100):+d} zł przy 6%.")
+    if n:
+        s += (" " + ("Największa" if rank == 1 else f"{rank}. największa") + f" przewaga kursu nad rynkiem spośród {n} "
+              "zakładów tego dnia, które spełniają zasady typów dnia (kurs co najmniej 2% powyżej uczciwego kursu rynku, "
+              "co najmniej 2 bukmacherów na tę linię, kurs 1,25–2,00, model nie niżej niż rynek).")
+    return s
+
+
 def why_pick(c: dict, m: dict, teams: dict, rank: int, n: int) -> str:
     """Plain-language reasons for a pick: the model's number, the teams' record, the market, the ranking."""
+    if c["stat"] == "wynik":
+        return why_result(c, m, rank, n)
     stat, scope, side, line = c["stat"], c["scope"], c["side"], c["line"]
     noun = NOUN_GEN[stat]
     who = {"home": m["gospodarz"], "away": m["gosc"], "total": "w całym meczu"}[scope]
     k = int(line + 0.5)
-    parts = [f"Model oczekuje średnio {_pl(c['oczekiwane'])} {noun} ({who}). Szansa, że padnie co najmniej {k}, "
-             f"to {_pc(c['p_model'])} (u bukmacherów to zakład „powyżej {_pl(line)}”)."]
+    parts = [f"Model oczekuje średnio {_pl(c['oczekiwane'])} {noun} ({who}); według niego co najmniej {k} padnie "
+             f"z szansą {_pc(c['p_model_czysty'])} (u bukmacherów to zakład „powyżej {_pl(line)}”)."]
     if side != "over":
         parts = [f"Model oczekuje średnio {_pl(c['oczekiwane'])} {noun} ({who}); zakład „poniżej {_pl(line)}” "
                  f"wychodzi z szansą {_pc(c['p_model'])}."]
@@ -647,12 +731,7 @@ def why_pick(c: dict, m: dict, teams: dict, rank: int, n: int) -> str:
             if t and t["sezon"].get(stat) and None not in t["sezon"][stat]:
                 parts.append(f"{tn}: w lidze średnio {_pl(t['sezon'][stat][0])} {noun} własnych "
                              f"i {_pl(t['sezon'][stat][1])} rywali na mecz.")
-    parts.append(f"Bukmacherzy dają {_pc(c['p_rynek'])} (najlepszy kurs {_pl2(c['kurs'])}, {c['bukmacher']}), "
-                 f"model {_pc(c['p_model'])}: różnica {round((c['p_model'] - c['p_rynek']) * 100):+d} pkt.")
-    if n:
-        parts.append(("Najwyższy" if rank == 1 else f"{rank}. najwyższy") + f" oczekiwany zysk spośród {n} zakładów tego dnia, "
-                     "które spełniają zasady: tylko „co najmniej” (powyżej X,5), kurs 1,25–2,00, zysk także po podatku "
-                     "12%, strzały, celne albo rożne, różnica z rynkiem 4–15 pkt, drużyny z co najmniej 10 meczami w danych.")
+    parts.append(price_sentence(c, rank, n))
     return " ".join(parts)
 
 
@@ -666,16 +745,17 @@ def why_coupon(k: dict, alts: list[dict], rank: int = 1) -> str:
     q = math.prod(l["p_rynek"] for l in k["legs"])
     n, n2 = k.get("n_kombinacji"), k.get("n_dwojek")
     s = (f"{len(k['legs'])} zdarzenia z różnych meczów, łączny kurs {_pl2(k['kurs'])}. Szansa wg modelu {_pc(k['p_model'])}, "
-         f"wg bukmacherów {_pc(q)}; oczekiwany zysk z podatkiem {round(k['ev_podatek'] * 100):+d}% stawki. ")
+         f"wg bukmacherów {_pc(q)}; oczekiwany wynik na 100 zł {round(k['ev_podatek'] * 100):+d} zł przy podatku 12%, "
+         f"{round(k.get('ev_podatek_6', k['ev_podatek']) * 100):+d} zł przy 6%. ")
     place = "Największy oczekiwany zysk" if rank == 1 else f"{rank}. miejsce pod względem oczekiwanego zysku"
     if n is None:
         s += "Kupon o łącznym kursie 1,8–2,5 złożony z typów tego dnia."
     elif len(k["legs"]) == 2:
-        s += f"{place} spośród {n2} kuponów z 2 zdarzeń o łącznym kursie 1,8–2,5, które opłacają się po podatku."
+        s += f"{place} spośród {n2} kuponów z 2 zdarzeń o łącznym kursie 1,8–2,5 z kursami powyżej uczciwego kursu rynku."
     else:
         s += (("Tego dnia żaden kupon z 2 zdarzeń nie spełnił zasad. " if not n2 else "")
-              + f"{place} spośród {n - n2} kuponów z 3 zdarzeń o łącznym kursie 1,8–2,5, które opłacają się po podatku.")
-    s += " Każde zdarzenie to „co najmniej …” z kursem 1,25–2,00"
+              + f"{place} spośród {n - n2} kuponów z 3 zdarzeń o łącznym kursie 1,8–2,5 z kursami powyżej uczciwego kursu rynku.")
+    s += " Każde zdarzenie to „co najmniej …” z kursem 1,25–2,00, wyższym niż uczciwy kurs rynku"
     if alts:
         s += ". Kolejne: " + "; ".join(
             f"{' + '.join(_leg_name(l) for l in a['legs'])} (kurs {_pl2(a['kurs'])}, zysk {round(a['ev_podatek'] * 100):+d}%)"
@@ -685,15 +765,20 @@ def why_coupon(k: dict, alts: list[dict], rank: int = 1) -> str:
 
 # ---------------------------------------------------------------------------- 9. settle paper picks and coupons
 
-def settle_leg(leg: dict, by_fix: dict) -> tuple[str | None, float | None]:
+def settle_leg(leg: dict, by_fix: dict) -> tuple[str | None, float | str | None]:
+    """The result of one bet and what came in (the count, or the score '2:1' for match-result bets)."""
     g = by_fix.get(leg["fixture_id"])
     if g is None or len(g) != 2:
         return None, None
-    col = sm.STATS.get(leg["stat"]) or sm.EXTRA_STATS[leg["stat"]]
+    col = "goals" if leg["stat"] == "wynik" else sm.STATS.get(leg["stat"]) or sm.EXTRA_STATS[leg["stat"]]
     h = g[g["side"] == "home"][col].iloc[0]
     a = g[g["side"] == "away"][col].iloc[0]
     if pd.isna(h) or pd.isna(a):
         return None, None
+    if leg["stat"] == "wynik":   # after 90 minutes: a win, or a win or a draw
+        mine, theirs = (h, a) if leg["scope"] == "home" else (a, h)
+        won = mine > theirs if leg["side"] == "win" else mine >= theirs
+        return ("wygrana" if won else "przegrana"), f"{int(h)}:{int(a)}"
     if leg["side"] == "more":   # the team's count above the opponent's (a tie loses)
         mine, theirs = (h, a) if leg["scope"] == "home" else (a, h)
         return ("wygrana" if mine > theirs else "przegrana"), float(mine)
@@ -701,6 +786,37 @@ def settle_leg(leg: dict, by_fix: dict) -> tuple[str | None, float | None]:
     if val == leg["line"]:
         return "zwrot", val
     return ("wygrana" if (val > leg["line"]) == (leg["side"] == "over") else "przegrana"), val
+
+
+def closing_chance(od: sqlite3.Connection, p: dict, kickoff: str | None) -> tuple[float | None, str | None]:
+    """The market's margin-free chance of a logged bet at the last odds fetch before kick-off (the
+    "closing" price as far as this archive knows it) and when that fetch was."""
+    if not kickoff:
+        return None, None
+    k = kickoff.replace("+00:00", "Z")
+    last = od.execute("select max(fetched_at) from odds where fixture_id = ? and fetched_at < ?",
+                      (p["fixture_id"], k)).fetchone()[0]
+    if not last:
+        return None, None
+    if p["stat"] == "wynik":
+        rows = [dict(r) for r in od.execute("select bookmaker, stat, side, odd from odds where fixture_id = ? and "
+                                            "fetched_at = ? and stat = 'result'", (p["fixture_id"], last))]
+        q = result_probs(rows)
+        if not q:
+            return None, last
+        h, d, a = q
+        return {("home", "win"): h, ("away", "win"): a, ("home", "win_draw"): h + d,
+                ("away", "win_draw"): a + d}[(p["scope"], p["side"])], last
+    books: dict[str, dict[str, float]] = {}
+    for bm, side, odd in od.execute("select bookmaker, side, odd from odds where fixture_id = ? and fetched_at = ? and "
+                                    "stat = ? and scope = ? and line = ?",
+                                    (p["fixture_id"], last, p["stat"], p["scope"], p["line"])):
+        books.setdefault(bm, {})[side] = odd
+    fair = [1 / b["over"] / (1 / b["over"] + 1 / b["under"]) for b in books.values() if "over" in b and "under" in b]
+    if not fair:
+        return None, last
+    q = float(np.mean(fair))
+    return (q if p["side"] == "over" else 1 - q), last
 
 
 def settle_picks(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
@@ -715,10 +831,11 @@ def settle_picks(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
         if res == "wygrana":
             p["zysk"] = round(p["odd"] - 1, 4)
             p["zysk_podatek"] = round(p["odd"] * 0.88 - 1, 4)
+            p["zysk_podatek_6"] = round(p["odd"] * sp.TAX_LOW - 1, 4)
         elif res == "przegrana":
-            p["zysk"] = p["zysk_podatek"] = -1.0
+            p["zysk"] = p["zysk_podatek"] = p["zysk_podatek_6"] = -1.0
         elif res == "zwrot":
-            p["zysk"] = p["zysk_podatek"] = 0.0
+            p["zysk"] = p["zysk_podatek"] = p["zysk_podatek_6"] = 0.0
         out.append(p)
     return out
 
@@ -786,13 +903,14 @@ def settle_coupons(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
         c["legs"] = legs
         c["wynik"] = None
         if any(r == "przegrana" for r, _ in res):
-            c["wynik"], c["zysk"], c["zysk_podatek"] = "przegrana", -1.0, -1.0
+            c["wynik"], c["zysk"], c["zysk_podatek"], c["zysk_podatek_6"] = "przegrana", -1.0, -1.0, -1.0
         elif all(r in ("wygrana", "zwrot") for r, _ in res):
             odd = math.prod(l["kurs"] if r == "wygrana" else 1.0 for l, (r, _) in zip(legs, res))
             if odd > 1.0:
                 c["wynik"], c["zysk"], c["zysk_podatek"] = "wygrana", round(odd - 1, 4), round(odd * 0.88 - 1, 4)
+                c["zysk_podatek_6"] = round(odd * sp.TAX_LOW - 1, 4)
             else:
-                c["wynik"], c["zysk"], c["zysk_podatek"] = "zwrot", 0.0, 0.0
+                c["wynik"], c["zysk"], c["zysk_podatek"], c["zysk_podatek_6"] = "zwrot", 0.0, 0.0, 0.0
     return rows
 
 
@@ -858,7 +976,8 @@ def main() -> None:
         cands += sp.candidates({"mecze": [m for m in analysis["mecze"] if group_of(m["liga_id"]) == g],
                                 "model": analysis["model_puchary" if g == "puchary" else "model"]}, gf)
     by_match = {m["fixture_id"]: m for m in analysis["mecze"]}
-    for c in cands:
+    results_c = result_candidates(analysis, goals_fit, odds)
+    for c in cands + results_c:
         c["day"] = by_match[c["fixture_id"]]["start"][:10]
     # Every match gets a bet in each odds band (1.25-1.45, 1.46-1.65, 1.66-2.00) within the user's rules
     # (only "at least" on X.5 lines, shots / on target / corners) and the safety limits (market band,
@@ -866,19 +985,32 @@ def main() -> None:
     # the one with the most expected profit (a pick-of-the-day line first); otherwise the likeliest line
     # ("bez wartości", shown with a mark: it may still come in, it just does not pay at that price).
     # The five best lines that pay after tax with a clear edge, one per match, are the day's picks.
-    allowed = [c for c in cands if c["do_typow"] and c["przewaga"] <= sp.MAX_EDGE]
-    by_band: dict[tuple[int, int | None], list[dict]] = {}
+    # Match-result bets (win, win or draw) compete for the bands like any other line.
+    # One bet per market in a match (user, 2026-10-16: "nie podwajamy"): at least 8 and at least 9
+    # corners in the same match are the same bet twice, so once a market has a bet in one band it is
+    # not used in another; bets with value choose first, then the likeliest lines fill the free bands.
+    # v5: the chance is 80% the market's, so "value" means a price above the market's fair price; the
+    # bets whose best price is furthest above it choose their markets first (pays after 12%, then
+    # after 6%, then a clear price edge), the likeliest lines fill the free bands.
+    allowed = [c for c in cands + results_c if c["do_typow"] and c["przewaga_modelu"] <= sp.MAX_EDGE]
+    per_match: dict[int, list[dict]] = {}
     for c in allowed:
         c["pasmo"] = sp.band_of(c["kurs"])
         c["z_wartoscia"] = c["ev_podatek"] >= 0
-        by_band.setdefault((c["fixture_id"], c["pasmo"]), []).append(c)
+        c["z_wartoscia_6"] = c["ev_podatek_6"] >= 0
+        per_match.setdefault(c["fixture_id"], []).append(c)
     chosen = []
-    for lst in by_band.values():
-        value = [c for c in lst if c["z_wartoscia"]]
-        chosen.append(max(value, key=lambda c: (strict_pick(c), c["ev_podatek"], c["p_model"])) if value
-                      else max(lst, key=lambda c: (c["p_model"], c["ev_podatek"])))
+    for lst in per_match.values():
+        bands, markets = set(), set()
+        for c in sorted(lst, key=lambda c: (c["z_wartoscia"], c["z_wartoscia_6"], strict_pick(c),
+                                            c["przewaga_kursu"] if strict_pick(c) else -9.0, c["p_model"]), reverse=True):
+            if c["pasmo"] in bands or sp.market_key(c) in markets:
+                continue
+            bands.add(c["pasmo"])
+            markets.add(sp.market_key(c))
+            chosen.append(c)
     days: dict[str, list[dict]] = {}
-    for c in sorted(chosen, key=lambda c: (not strict_pick(c), -c["ev_podatek"], -c["p_model"])):
+    for c in sorted(chosen, key=lambda c: (not strict_pick(c), -c["przewaga_kursu"], -c["p_model"])):
         days.setdefault(c["day"], []).append(c)
     for lst in days.values():
         top_matches: set[int] = set()
@@ -886,14 +1018,15 @@ def main() -> None:
             c["top"] = strict_pick(c) and len(top_matches) < TOP_PER_DAY and c["fixture_id"] not in top_matches
             if c["top"]:
                 top_matches.add(c["fixture_id"])
-    # Coupon legs come from a wider pool than the picks: likelier events (model at least 55%) whose
-    # price still beats the model's fair price, with a smaller edge over the market (2-15 points).
+    # Coupon legs come from a wider pool than the picks: likelier events (at least 55%) whose best
+    # price is above the market's fair price (v5: the coupon is the one furthest above the market;
+    # whether it pays after 12% or 6% tax is shown, not required).
     leg_pool: dict[str, list[dict]] = {}
     seen_leg = set()
     for c in sorted(cands, key=lambda c: -c["ev"]):
         key = (c["fixture_id"], c["stat"], c["scope"])
-        if (c["do_typow"] and 0.02 <= c["przewaga"] <= sp.MAX_EDGE and c["ev"] > 0 and c["p_model"] >= 0.55
-                and key not in seen_leg):
+        if (c["do_typow"] and c["przewaga_modelu"] <= sp.MAX_EDGE and c["przewaga_kursu"] > 0
+                and c["n_buk"] >= sp.MIN_BOOKS and c["p_model"] >= 0.55 and key not in seen_leg):
             seen_leg.add(key)
             leg_pool.setdefault(c["day"], []).append(c)
     for day, lst in leg_pool.items():
@@ -909,7 +1042,7 @@ def main() -> None:
                 c["why"] += " " + why_rest(c)
         pool = leg_pool.get(day, [])
         # The user wants two events, at most three: a three-leg coupon only when no two-leg one qualifies.
-        ks = [k for k in sp.coupons(pool, 2, top=10**6) + sp.coupons(pool, 3, top=10**6) if k["ev_podatek"] > 0]
+        ks = sp.coupons(pool, 2, top=10**6) + sp.coupons(pool, 3, top=10**6)
         ks.sort(key=lambda k: (len(k["legs"]), -k["ev"]))
         n2 = sum(len(k["legs"]) == 2 for k in ks)
         for k in ks:
@@ -932,6 +1065,10 @@ def main() -> None:
             # Picks of matches that have started are frozen (they are what gets settled); the rest of
             # the day's list is replaced by this run's, so the log keeps the last list made before kickoff.
             logged = [dict(r) for r in pr.execute("select fixture_id, top from picks where day = ?", (day,))]
+            # the first proposal of each bet survives the re-logging (CLV compares its price with the close)
+            first = {(r["fixture_id"], r["stat"], r["scope"], r["line"], r["side"]): (r["first_at"], r["first_odd"], r["first_q"])
+                     for r in pr.execute("select fixture_id, stat, scope, line, side, first_at, first_odd, first_q "
+                                         "from picks where day = ? and first_at is not null", (day,))}
             frozen = [r for r in logged if kickoff.get(r["fixture_id"], "") <= made or r["fixture_id"] not in kickoff]
             open_ids = [r["fixture_id"] for r in logged if r not in frozen]
             if open_ids:
@@ -945,12 +1082,14 @@ def main() -> None:
                 is_top = strict_pick(c) and len(top_matches) < free_top and c["fixture_id"] not in top_matches
                 if is_top:
                     top_matches.add(c["fixture_id"])
+                f_at, f_odd, f_q = first.get((c["fixture_id"], c["stat"], c["scope"], c["line"], c["side"]),
+                                             (made, c["kurs"], c["p_rynek"]))
                 pr.execute("insert or replace into picks (made_at, day, fixture_id, stat, scope, line, side, p_model, "
-                           "p_market, odd, bookmaker, ev, ev_tax, rank, why, expected, rules, top) "
-                           "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
+                           "p_market, odd, bookmaker, ev, ev_tax, rank, why, expected, rules, top, p_model_pure, n_books, "
+                           "first_at, first_odd, first_q) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
                                made, day, c["fixture_id"], c["stat"], c["scope"], c["line"], c["side"], c["p_model"],
                                c["p_rynek"], c["kurs"], c["bukmacher"], c["ev"], c["ev_podatek"], rank, c["why"],
-                               c["oczekiwane"], sp.RULES, int(is_top)))
+                               c["oczekiwane"], sp.RULES, int(is_top), c["p_model_czysty"], c["n_buk"], f_at, f_odd, f_q))
             # the coupon of the day: the first coupon of the list, frozen once its first match has started
             ks = [k for k in coupons_of_day.get(day) or []
                   if min(kickoff.get(l["fixture_id"], "") for l in k["legs"]) > made]
@@ -1034,14 +1173,37 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         f = names.get(fid) or {}
         return {"gospodarz": f.get("home", "?"), "gosc": f.get("away", "?")}
 
+    od = open_db("odds.sqlite")
+    clv_cache: dict[tuple, dict] = {}
+
+    def clv_of(s: dict) -> dict:
+        """CLV of a bet: its first proposed price against the market's fair price at the last fetch before
+        kick-off (first price x closing chance - 1); only for bets logged since v5 with a later fetch."""
+        key = (s["day"], s["fixture_id"], s["stat"], s["scope"], s["line"], s["side"])
+        if key not in clv_cache:
+            out = {"kurs_pierwszy": s.get("first_odd"), "zapisano_pierwszy": s.get("first_at"),
+                   "rynek_pierwszy": s.get("first_q"), "rynek_zamkniecie": None, "clv": None}
+            if s.get("first_at") and s.get("first_odd"):
+                q, at = closing_chance(od, s, (names.get(s["fixture_id"]) or {}).get("kickoff_utc"))
+                if q and at and at > s["first_at"]:
+                    out["rynek_zamkniecie"] = round(q, 4)
+                    out["clv"] = round(s["first_odd"] * q - 1, 4)
+            clv_cache[key] = out
+        return clv_cache[key]
+
     def logged_pick(s: dict) -> dict:
         m = named(s["fixture_id"])
         p = s["p_model"]
+        q, odd = s["p_market"], s["odd"]
         return {"fixture_id": s["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}",
+                "p_model_czysty": s.get("p_model_pure"), "n_buk": s.get("n_books"),
+                "przewaga_kursu": round(odd * q - 1, 4) if q else None,
+                "ev_podatek_6": round(p * odd * sp.TAX_LOW - 1, 4), "z_wartoscia_6": p * odd * sp.TAX_LOW >= 1,
+                **clv_of(s),
                 "start": (names.get(s["fixture_id"]) or {}).get("kickoff_utc"), "stat": s["stat"],
                 "scope": s["scope"], "line": s["line"], "side": s["side"],
                 "opis": sp.describe(m, s["stat"], s["scope"], s["side"], s["line"]),
-                "zaklad": f"{'powyżej' if s['side'] == 'over' else 'poniżej'} {_pl(s['line'])}",
+                "zaklad": sp.bookie_wording(s["stat"], s["scope"], s["side"], s["line"]),
                 "zasady": s.get("rules") or "v1",
                 "p_model": p, "p_rynek": s["p_market"], "kurs": s["odd"], "bukmacher": s["bookmaker"],
                 "kurs_min_z_podatkiem": round(1 / (p * 0.88), 2), "ev": s["ev"], "ev_podatek": s["ev_tax"],
@@ -1049,16 +1211,17 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
                 "zysk_podatek": s.get("zysk_podatek"), "zapisano": s["made_at"], "why": s.get("why"),
                 "oczekiwane": _r(s.get("expected"), 2), "top": s.get("top") is None or bool(s.get("top")),
                 "pasmo": sp.band_of(s["odd"]), "z_wartoscia": s["ev_tax"] is not None and s["ev_tax"] >= 0,
-                **money(s.get("zysk_podatek"), s.get("wynik"), s["ev_tax"])}
+                **money(s.get("zysk_podatek"), s.get("wynik"), s["ev_tax"], s.get("zysk_podatek_6"))}
 
     def logged_coupon(c: dict) -> dict:
         for l in c["legs"]:
             l.setdefault("zaklad", f"{'powyżej' if l['side'] == 'over' else 'poniżej'} {_pl(l['line'])}")
         return {"legs": c["legs"], "kurs": c["odd"], "p_model": c["p_model"], "p_rynek": c["p_market"],
                 "zasady": c.get("rules") or "v1",
-                "ev": c["ev"], "ev_podatek": c["ev_tax"], "why": c["why"], "wynik": c.get("wynik"),
+                "ev": c["ev"], "ev_podatek": c["ev_tax"], "ev_podatek_6": round(c["p_model"] * c["odd"] * sp.TAX_LOW - 1, 4),
+                "why": c["why"], "wynik": c.get("wynik"),
                 "zysk": c.get("zysk"), "zysk_podatek": c.get("zysk_podatek"), "zapisano": c["made_at"],
-                **money(c.get("zysk_podatek"), c.get("wynik"), c["ev_tax"])}
+                **money(c.get("zysk_podatek"), c.get("wynik"), c["ev_tax"], c.get("zysk_podatek_6"))}
 
     logged: dict[str, list[dict]] = {}
     for s in settled:
@@ -1157,7 +1320,8 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
               "pewniaki": hits([r for r in extras if r["kind"] == "pewniak"]),
               "bet_buildery": hits([r for r in extras if r["kind"] == "bb"]),
               "kupony_pewne": tally([logged_coupon(c) for c in coupons if c["kind"] == "pewne"]),
-              "prognozy": track}
+              "prognozy": track,
+              "clv": {"wszystkie": clv_summary(cur_p), "top5": clv_summary([p for p in cur_p if p["top"]])}}
     meta = {
         "utworzono": made,
         "dane_do": df["kickoff"].max().isoformat(),
@@ -1189,38 +1353,52 @@ def _pick(c: dict) -> dict:
     out = {k: c.get(k) for k in ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis", "zaklad", "p_model",
                                  "p_rynek", "kurs", "bukmacher", "kurs_uczciwy", "kurs_min_z_podatkiem", "ev",
                                  "ev_podatek", "przewaga", "oczekiwane", "why", "zasady", "top", "pasmo",
-                                 "z_wartoscia")}
+                                 "z_wartoscia", "p_model_czysty", "przewaga_kursu", "przewaga_modelu", "n_buk",
+                                 "ev_podatek_6", "z_wartoscia_6")}
     out.update(money(None, None, c.get("ev_podatek")))
     return out
 
 
 def strict_pick(c: dict) -> bool:
-    """A line good enough for the day's highlighted picks: pays after tax and the model is clearly
-    (4-15 points) above the bookmakers."""
-    return sp.MIN_EDGE <= c["przewaga"] <= sp.MAX_EDGE and c["ev_podatek"] >= 0
+    """v5: a line good enough for the day's highlighted picks: its best price is at least 2% above the
+    market's fair price, with at least two bookmakers quoting it (whether it also pays after 12% or 6%
+    tax is shown on the pick; at 12% that takes a price about 14% above the market's), and the model
+    does not see the event as less likely than the market does."""
+    return (c["przewaga_kursu"] >= sp.MIN_PRICE_EDGE and (c.get("n_buk") or 0) >= sp.MIN_BOOKS
+            and c.get("przewaga_modelu", 0) >= 0)
 
 
 def why_rest(c: dict) -> str:
     band = sp.ODDS_BANDS[c["pasmo"]] if c.get("pasmo") is not None else None
     rng = f"w widełkach {_pl2(band[0])}–{_pl2(band[1])}" if band else ""
     if strict_pick(c):
-        return (f"Z wartością {rng}: spełnia zasady typów dnia, ale pięć innych zakładów ma wyższy oczekiwany zysk "
-                f"albo typ dnia z tego meczu jest już wybrany.")
-    if c["ev_podatek"] >= 0:
-        return (f"Z wartością {rng}: opłaca się po podatku, ale model różni się od bukmacherów o mniej niż 4 punkty, "
-                f"więc to nie jest typ dnia.")
-    return (f"Bez wartości po podatku: {rng} żaden zakład w tym meczu nie opłaca się przy tych kursach, więc to ten "
-            f"z największą szansą ({_pc(c['p_model'])}). Może spokojnie wejść, tylko kurs jest za niski, żeby na dłuższą "
-            f"metę zarabiać (oczekiwany wynik {round(c['ev_podatek'] * 100):+d}% stawki).")
+        return (f"Kurs {rng} wyraźnie powyżej rynku: spełnia zasady typów dnia, ale pięć innych zakładów ma większą "
+                f"przewagę kursu albo typ dnia z tego meczu jest już wybrany.")
+    if c["ev_podatek"] >= 0 or c["ev_podatek_6"] >= 0:
+        return f"Z wartością {rng} " + ("po podatku 12%." if c["ev_podatek"] >= 0 else "przy podatku 6% (przy 12% nie).")
+    return (f"Bez wartości po podatku: {rng} żaden kurs w tym meczu nie jest wyraźnie wyższy niż uczciwy kurs rynku, "
+            f"więc to zakład z największą szansą ({_pc(c['p_model'])}). Może spokojnie wejść, tylko przy tym kursie "
+            f"na dłuższą metę nie zarabia (oczekiwany wynik {round(c['ev_podatek'] * 100):+d} zł na 100 zł przy podatku 12%, "
+            f"{round(c['ev_podatek_6'] * 100):+d} zł przy 6%).")
 
 
-def money(unit_after_tax: float | None, result: str | None, ev_tax: float | None = None) -> dict:
-    """A 100 zł paper bet: the stake, the payout after the 12% tax and the profit (once settled), and the
-    profit the model expects."""
+def money(unit_after_tax: float | None, result: str | None, ev_tax: float | None = None,
+          unit_6: float | None = None) -> dict:
+    """A 100 zł paper bet: the stake, the payout after the 12% tax and the profit (once settled), the
+    same at 6% tax, and the profit the model expects."""
     out = {"stawka": STAKE, "zysk_oczekiwany_zl": None if ev_tax is None else round(STAKE * ev_tax, 2)}
     if result is None or unit_after_tax is None:
-        return {**out, "wyplata": None, "zysk_zl": None}
-    return {**out, "wyplata": round(STAKE * (1 + unit_after_tax), 2), "zysk_zl": round(STAKE * unit_after_tax, 2)}
+        return {**out, "wyplata": None, "zysk_zl": None, "wyplata_6": None, "zysk_zl_6": None}
+    u6 = unit_after_tax if unit_6 is None else unit_6
+    return {**out, "wyplata": round(STAKE * (1 + unit_after_tax), 2), "zysk_zl": round(STAKE * unit_after_tax, 2),
+            "wyplata_6": round(STAKE * (1 + u6), 2), "zysk_zl_6": round(STAKE * u6, 2)}
+
+
+def clv_summary(items: list[dict]) -> dict:
+    """CLV of the bets where it could be measured: how many, the average and how many beat the close."""
+    v = [x["clv"] for x in items if x.get("clv") is not None]
+    return {"n": len(v), "srednia": round(float(np.mean(v)), 4) if v else None,
+            "dodatnie": sum(x > 0 for x in v)}
 
 
 def finance(items: list[dict]) -> dict:
@@ -1228,10 +1406,13 @@ def finance(items: list[dict]) -> dict:
     done = [x for x in items if x.get("wynik")]
     staked = STAKE * len(done)
     paid = round(sum(x["wyplata"] for x in done), 2)
+    paid6 = round(sum(x.get("wyplata_6") or x["wyplata"] for x in done), 2)
     return {"n": len(items), "rozliczone": len(done), "trafione": sum(x["wynik"] == "wygrana" for x in done),
             "oczekiwane": round(sum(x.get("p_model") or 0 for x in done), 2),
             "postawione": staked, "wyplaty": paid, "zysk": round(paid - staked, 2),
-            "roi": round((paid - staked) / staked, 4) if staked else None}
+            "roi": round((paid - staked) / staked, 4) if staked else None,
+            "wyplaty_6": paid6, "zysk_6": round(paid6 - staked, 2),
+            "roi_6": round((paid6 - staked) / staked, 4) if staked else None}
 
 
 if __name__ == "__main__":
