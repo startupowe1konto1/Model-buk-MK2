@@ -232,6 +232,55 @@ def coupons(picks: list[dict], legs: int, lo: float = 1.8, hi: float = 2.5, top:
     return out[:top]
 
 
+
+# Ready coupons (user, 2026-10-19: "I jak z gotowymi kuponami?"): every day a coupon of about 2.0 (two
+# events, three only when no pair fits) and one of about 4 (three or four events), each event a bet the
+# singles' rules allow (at least ..., odds 1.25-2.00, two bookmakers or more), one per match. For a given
+# total price the likeliest coupon is also the best priced one (its chance is the product of chance x odds
+# over the total odds), so the coupon most likely to come in is chosen; one that pays after the 12% tax
+# comes first when there is any. A coupon without value is shown with a mark, as single bets are.
+READY = {"2": {"sizes": ((2,), (3,)), "kurs": (1.80, 2.50), "nazwa": "ok. 2,0"},
+         "4": {"sizes": ((3, 4),), "kurs": (3.80, 5.00), "nazwa": "ok. 4"}}
+READY_MIN_P = 0.55                   # each event likelier than not, with some room
+READY_POOL = {2: 60, 3: 40, 4: 26}   # events tried per coupon size: the best priced (chance x odds)
+READY_PER_MATCH = 2                  # lines of one match among them
+
+
+def ready_coupons(pool: list[dict], kind: str, top: int = 5) -> list[dict]:
+    """The best coupons of one kind (READY) from the day's allowed bets, legs from different matches:
+    those that pay after the 12% tax first, then the likeliest; ties by the expected value."""
+    spec = READY[kind]
+    lo, hi = spec["kurs"]
+    legs, per_match = [], {}
+    for c in sorted(pool, key=lambda c: -c["p_model"] * c["kurs"]):
+        if c["p_model"] < READY_MIN_P or per_match.get(c["fixture_id"], 0) >= READY_PER_MATCH:
+            continue
+        per_match[c["fixture_id"]] = per_match.get(c["fixture_id"], 0) + 1
+        legs.append(c)
+    found = []
+    for sizes in spec["sizes"]:
+        for n in sizes:
+            for combo in itertools.combinations(legs[:READY_POOL[n]], n):
+                if len({c["fixture_id"] for c in combo}) < n:
+                    continue
+                odd = math.prod(c["kurs"] for c in combo)
+                if lo <= odd <= hi:
+                    found.append((combo, odd, math.prod(c["p_model"] for c in combo)))
+        if found:
+            break
+    out = [{"nogi": [c["opis"] + f" @ {c['kurs']:.2f} ({c['bukmacher']})" for c in combo],
+            "legs": [{k: c.get(k) for k in LEG_KEYS} for c in combo],
+            "kurs": round(odd, 2), "p_model": round(p, 4),
+            "p_rynek": round(math.prod(c["p_rynek"] for c in combo), 4),
+            "ev": round(p * odd - 1, 4), "ev_podatek": round(p * odd * TAX - 1, 4), "rodzaj": kind}
+           for combo, odd, p in found]
+    out.sort(key=lambda k: (k["ev_podatek"] >= 0, k["p_model"], k["ev"]), reverse=True)
+    for k in out:
+        k["z_wartoscia"] = k["ev_podatek"] >= 0
+        k["n_kombinacji"] = len(out)
+    return out[:top]
+
+
 def main() -> None:
     path = Path(sys.argv[1])
     analysis = json.loads(path.read_text(encoding="utf-8"))

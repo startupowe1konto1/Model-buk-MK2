@@ -739,26 +739,24 @@ def _leg_name(l: dict) -> str:
     return l["opis"].replace("W meczu:", f"{l['mecz']}:", 1) if l.get("mecz") else l["opis"]
 
 
-def why_coupon(k: dict, alts: list[dict], rank: int = 1) -> str:
-    """rank: the coupon's place among the day's coupons with the same number of legs."""
-    q = math.prod(l["p_rynek"] for l in k["legs"])
-    n, n2 = k.get("n_kombinacji"), k.get("n_dwojek")
-    s = (f"{len(k['legs'])} zdarzenia z różnych meczów, łączny kurs {_pl2(k['kurs'])}. Szansa wg modelu {_pc(k['p_model'])}, "
-         f"wg bukmacherów {_pc(q)}; oczekiwany wynik na 100 zł po podatku 12%: {round(k['ev_podatek'] * 100):+d} zł. ")
-    place = "Największy oczekiwany zysk" if rank == 1 else f"{rank}. miejsce pod względem oczekiwanego zysku"
-    if n is None:
-        s += "Kupon o łącznym kursie 1,8–2,5 złożony z typów tego dnia."
-    elif len(k["legs"]) == 2:
-        s += f"{place} spośród {n2} kuponów z 2 zdarzeń o łącznym kursie 1,8–2,5 z kursami powyżej uczciwego kursu rynku."
+def why_ready(k: dict, alts: list[dict]) -> str:
+    """Why this ready coupon: its chance, whether it pays after tax, how it was chosen, the next ones."""
+    lo, hi = sp.READY[k["rodzaj"]]["kurs"]
+    s = (f"{len(k['legs'])} zdarzenia z różnych meczów, łączny kurs {_pl2(k['kurs'])}. Szansa, że wejdą wszystkie: "
+         f"{_pc(k['p_model'])} (według samych bukmacherów {_pc(k['p_rynek'])}). ")
+    if k["z_wartoscia"]:
+        s += f"Opłaca się po podatku 12%: oczekiwany wynik na 100 zł {round(k['ev_podatek'] * 100):+d} zł. "
     else:
-        s += (("Tego dnia żaden kupon z 2 zdarzeń nie spełnił zasad. " if not n2 else "")
-              + f"{place} spośród {n - n2} kuponów z 3 zdarzeń o łącznym kursie 1,8–2,5 z kursami powyżej uczciwego kursu rynku.")
-    s += " Każde zdarzenie to „co najmniej …” z kursem 1,25–2,00, wyższym niż uczciwy kurs rynku"
+        s += (f"Bez wartości: przy tej szansie opłacałby się dopiero od kursu {_pl2(1 / (k['p_model'] * sp.TAX))} "
+              f"(oczekiwany wynik na 100 zł {round(k['ev_podatek'] * 100):+d} zł); to najpewniejszy kupon tego dnia. ")
+    s += (f"Spośród {k['n_kombinacji']} możliwych kuponów z łącznym kursem {_pl2(lo)}–{_pl2(hi)} ten ma największą "
+          f"szansę{' wśród tych, które się opłacają' if k['z_wartoscia'] else ''}. Każde zdarzenie przechodzi zasady "
+          "pojedynczych typów (kurs 1,25–2,00, co najmniej dwóch bukmacherów), z każdego meczu najwyżej jedno.")
     if alts:
-        s += ". Kolejne: " + "; ".join(
-            f"{' + '.join(_leg_name(l) for l in a['legs'])} (kurs {_pl2(a['kurs'])}, zysk {round(a['ev_podatek'] * 100):+d}%)"
-            for a in alts[:2])
-    return s + "."
+        s += " Kolejne: " + "; ".join(
+            f"{' + '.join(_leg_name(l) for l in a['legs'])} (kurs {_pl2(a['kurs'])}, szansa {_pc(a['p_model'])})"
+            for a in alts[:2]) + "."
+    return s
 
 
 # ---------------------------------------------------------------------------- 9. settle paper picks and coupons
@@ -1013,39 +1011,29 @@ def main() -> None:
             c["top"] = strict_pick(c) and len(top_matches) < TOP_PER_DAY and c["fixture_id"] not in top_matches
             if c["top"]:
                 top_matches.add(c["fixture_id"])
-    # Coupon legs come from a wider pool than the picks: likelier events (at least 55%) whose best
-    # price is above the market's fair price (v5: the coupon is the one furthest above the market;
-    # whether it pays after the 12% tax is shown, not required).
-    leg_pool: dict[str, list[dict]] = {}
-    seen_leg = set()
-    for c in sorted(cands, key=lambda c: -c["ev"]):
-        key = (c["fixture_id"], c["stat"], c["scope"])
-        if (c["do_typow"] and c["przewaga_modelu"] <= sp.MAX_EDGE and c["przewaga_kursu"] > 0
-                and c["n_buk"] >= sp.MIN_BOOKS and c["p_model"] >= 0.55 and key not in seen_leg):
-            seen_leg.add(key)
-            leg_pool.setdefault(c["day"], []).append(c)
-    for day, lst in leg_pool.items():
-        for rank, c in enumerate(lst, 1):
-            c.setdefault("why", why_pick(c, by_match[c["fixture_id"]], teams, rank, None))
-    coupons_of_day: dict[str, list[dict]] = {}
-    for day in sorted(set(days) | set(leg_pool)):
-        lst = days.get(day, [])
+    for day in sorted(days):
+        lst = days[day]
         n_strict = sum(strict_pick(c) for c in lst)
         for rank, c in enumerate(lst, 1):
             c["why"] = why_pick(c, by_match[c["fixture_id"]], teams, rank, n_strict if c["top"] else None)
             if not c["top"]:
                 c["why"] += " " + why_rest(c)
-        pool = leg_pool.get(day, [])
-        # The user wants two events, at most three: a three-leg coupon only when no two-leg one qualifies.
-        ks = sp.coupons(pool, 2, top=10**6) + sp.coupons(pool, 3, top=10**6)
-        ks.sort(key=lambda k: (len(k["legs"]), -k["ev"]))
-        n2 = sum(len(k["legs"]) == 2 for k in ks)
-        for k in ks:
-            k["n_kombinacji"], k["n_dwojek"] = len(ks), n2
-        ks = ks[:5]
-        for i, k in enumerate(ks):
-            k["why"] = why_coupon(k, ks[i + 1:i + 3], i + 1 if len(k["legs"]) == 2 else i + 1 - n2)
-        coupons_of_day[day] = ks
+    # Ready coupons (sp.READY, user 2026-10-19: "I jak z gotowymi kuponami?"): every day one of about 2.0
+    # and one of about 4, made of bets the singles' rules allow in matches that have not started; the one
+    # that pays after the 12% tax first, otherwise the likeliest, shown with a mark (as single bets are).
+    # Since v5 almost no coupon paid, so the old value-only coupon of the day was missing for days.
+    ready_pool: dict[str, list[dict]] = {}
+    for c in allowed:
+        if c["n_buk"] >= sp.MIN_BOOKS and by_match[c["fixture_id"]]["start"] > made:
+            ready_pool.setdefault(c["day"], []).append(c)
+    ready_of_day: dict[str, dict[str, list[dict]]] = {kind: {} for kind in sp.READY}
+    for day, pool in ready_pool.items():
+        for kind in sp.READY:
+            ks = sp.ready_coupons(pool, kind)
+            for i, k in enumerate(ks):
+                k["why"] = why_ready(k, ks[i + 1:i + 3])
+            if ks:
+                ready_of_day[kind][day] = ks
 
     # near-certain events, a coupon made of them and same-match bet builders (stats_sure.py)
     extra = ss.run(analysis, fac, fits, goals_fit, df, set(SHOWN), set(CUPS), made)
@@ -1055,7 +1043,8 @@ def main() -> None:
     if "picks" not in skip:
         kickoff = {m["fixture_id"]: m["start"] for m in analysis["mecze"]}
         logged_days = {r[0] for r in pr.execute("select day from picks union select day from coupons")}
-        for day in sorted(set(days) | set(coupons_of_day) | {d for d in logged_days if d >= made[:10]}):
+        for day in sorted(set(days) | {d for of_day in ready_of_day.values() for d in of_day}
+                          | {d for d in logged_days if d >= made[:10]}):
             lst = days.get(day, [])
             # Picks of matches that have started are frozen (they are what gets settled); the rest of
             # the day's list is replaced by this run's, so the log keeps the last list made before kickoff.
@@ -1085,24 +1074,26 @@ def main() -> None:
                                made, day, c["fixture_id"], c["stat"], c["scope"], c["line"], c["side"], c["p_model"],
                                c["p_rynek"], c["kurs"], c["bukmacher"], c["ev"], c["ev_podatek"], rank, c["why"],
                                c["oczekiwane"], sp.RULES, int(is_top), c["p_model_czysty"], c["n_buk"], f_at, f_odd, f_q))
-            # the coupon of the day: the first coupon of the list, frozen once its first match has started
-            ks = [k for k in coupons_of_day.get(day) or []
-                  if min(kickoff.get(l["fixture_id"], "") for l in k["legs"]) > made]
-            row = pr.execute("select legs from coupons where day = ? and kind = '2'", (day,)).fetchone()
-            started = row is not None and min(kickoff.get(l["fixture_id"], "") for l in json.loads(row[0])) <= made
-            if row is not None and not started and not ks:
-                pr.execute("delete from coupons where day = ? and kind = '2'", (day,))
-            if ks and not started:
-                k = ks[0]
-                pr.execute("insert or replace into coupons (made_at, day, kind, legs, odd, p_model, p_market, ev, "
-                           "ev_tax, why, rules) values (?,?,?,?,?,?,?,?,?,?,?)", (
-                               made, day, "2", json.dumps(k["legs"], ensure_ascii=False), k["kurs"], k["p_model"],
-                               math.prod(l["p_rynek"] for l in k["legs"]), k["ev"], k["ev_podatek"], k["why"], sp.RULES))
+            # the ready coupons (about 2.0 and about 4): the first of each list, frozen once its first match
+            # has started
+            for kind, of_day in ready_of_day.items():
+                ks = [k for k in of_day.get(day) or []
+                      if min(kickoff.get(l["fixture_id"], "") for l in k["legs"]) > made]
+                row = pr.execute("select legs from coupons where day = ? and kind = ?", (day, kind)).fetchone()
+                started = row is not None and min(kickoff.get(l["fixture_id"], "") for l in json.loads(row[0])) <= made
+                if row is not None and not started and not ks:
+                    pr.execute("delete from coupons where day = ? and kind = ?", (day, kind))
+                if ks and not started:
+                    k = ks[0]
+                    pr.execute("insert or replace into coupons (made_at, day, kind, legs, odd, p_model, p_market, ev, "
+                               "ev_tax, why, rules) values (?,?,?,?,?,?,?,?,?,?,?)", (
+                                   made, day, kind, json.dumps(k["legs"], ensure_ascii=False), k["kurs"],
+                                   k["p_model"], k["p_rynek"], k["ev"], k["ev_podatek"], k["why"], sp.RULES))
         log_extras(pr, extra, kickoff, made)
         pr.commit()
 
     if "export" not in skip:
-        export(Path(args.dest), analysis, factors, fits, df, teams, upcoming, days, coupons_of_day, pr, fx, made, extra)
+        export(Path(args.dest), analysis, factors, fits, df, teams, upcoming, days, ready_of_day, pr, fx, made, extra)
     print(f"requests used {client.used}, account remaining {client.remaining}")
 
 
@@ -1125,7 +1116,7 @@ def plan_items() -> list[dict]:
 
 
 def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFrame, teams: dict,
-           upcoming: list, days: dict, coupons_of_day: dict, pr: sqlite3.Connection, fx: sqlite3.Connection,
+           upcoming: list, days: dict, ready_of_day: dict, pr: sqlite3.Connection, fx: sqlite3.Connection,
            made: str, extra: dict | None = None) -> None:
     extra = extra or {"pewne": {}, "bb": {}, "kupon_pewne": {}}
     dest.mkdir(parents=True, exist_ok=True)
@@ -1213,7 +1204,8 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         return {"legs": c["legs"], "kurs": c["odd"], "p_model": c["p_model"], "p_rynek": c["p_market"],
                 "zasady": c.get("rules") or "v1",
                 "ev": c["ev"], "ev_podatek": c["ev_tax"],
-                "why": c["why"], "wynik": c.get("wynik"),
+                "why": c["why"], "wynik": c.get("wynik"), "rodzaj": c.get("kind"),
+                "z_wartoscia": c["ev_tax"] is not None and c["ev_tax"] >= 0,
                 "zysk": c.get("zysk"), "zysk_podatek": c.get("zysk_podatek"), "zapisano": c["made_at"],
                 **money(c.get("zysk_podatek"), c.get("wynik"), c["ev_tax"])}
 
@@ -1221,6 +1213,7 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     for s in settled:
         logged.setdefault(s["day"], []).append(s)
     logged_c = {c["day"]: c for c in coupons if c["kind"] == "2"}
+    logged_c4 = {c["day"]: c for c in coupons if c["kind"] == "4"}
     logged_cp = {c["day"]: c for c in coupons if c["kind"] == "pewne"}
     logged_x: dict[tuple[str, str], list[dict]] = {}
     for r in extras:
@@ -1237,16 +1230,19 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         return out
 
     picks_out = {}
-    for day in sorted(set(days) | set(logged) | set(logged_c) | set(extra["pewne"]) | set(extra["bb"])
-                      | {d for d, _ in logged_x} | set(logged_cp)):
+    for day in sorted(set(days) | set(logged) | set(logged_c) | set(logged_c4) | set(extra["pewne"])
+                      | set(extra["bb"]) | {d for d, _ in logged_x} | set(logged_cp)
+                      | set(ready_of_day["2"]) | set(ready_of_day["4"])):
         lst = days.get(day, [])
         everything = ([logged_pick(s) for s in sorted(logged[day], key=lambda s: s["rank"])] if day in logged
                       else [_pick(c) for c in lst[:ALL_PER_DAY]])
         top = [p for p in everything if p["top"]]
-        ks = coupons_of_day.get(day, [])
+        ks = ready_of_day["2"].get(day, [])
         kupon = logged_coupon(logged_c[day]) if day in logged_c else (ks[0] if ks else None)
+        ks4 = ready_of_day["4"].get(day, [])
+        kupon4 = logged_coupon(logged_c4[day]) if day in logged_c4 else (ks4[0] if ks4 else None)
         picks_out[day] = {"top": top, "wszystkie": everything, "kupon": kupon, "kupony": ks[:5],
-                          "kandydaci": [_pick(c) for c in lst[:30]]}
+                          "kupon4": kupon4, "kupony4": ks4[:5], "kandydaci": [_pick(c) for c in lst[:30]]}
         # near-certain events and builders: the logged ones (with results) where there are any
         picks_out[day]["pewne"] = ([logged_extra(r) for r in logged_x[(day, "pewniak")]] if (day, "pewniak") in logged_x
                                    else extra["pewne"].get(day, []))
@@ -1264,18 +1260,24 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
                 "zysk": round(sum(x["zysk"] for x in done), 3),
                 "zysk_podatek": round(sum(x["zysk_podatek"] for x in done), 3)}
     results = []
-    for day in sorted(set(logged) | set(logged_c) | set(logged_cp), reverse=True):
+    for day in sorted(set(logged) | set(logged_c) | set(logged_c4) | set(logged_cp), reverse=True):
         ps = [logged_pick(s) for s in sorted(logged.get(day, []), key=lambda s: s["rank"])]
         ps.sort(key=lambda p: not p["top"])
         kc = logged_coupon(logged_c[day]) if day in logged_c else None
         kp = logged_coupon(logged_cp[day]) if day in logged_cp else None
+        kc4 = logged_coupon(logged_c4[day]) if day in logged_c4 else None
+        ks_all = [x for x in (kc, kc4, kp) if x]
         old = any(not s.get("rules") for s in logged.get(day, [])) or (day in logged_c and not logged_c[day].get("rules"))
         tops = [p for p in ps if p["top"]]
-        results.append({"dzien": day, "typy": ps, "kupon": kc, "kupon_pewne": kp, "typy_wynik": tally(tops),
+        results.append({"dzien": day, "typy": ps, "kupon": kc, "kupon4": kc4, "kupon_pewne": kp,
+                        "typy_wynik": tally(tops),
                         "wszystkie_wynik": tally(ps), "kupon_wynik": tally([kc]) if kc else None, "stare_zasady": old,
                         "finanse": {"top5": finance(tops), "pozostale": finance([p for p in ps if not p["top"]]),
-                                    "kupon": finance([kc] if kc else []), "kupon_pewne": finance([kp] if kp else []),
-                                    "dzien": finance(ps + [x for x in (kc, kp) if x])}})
+                                    "z": finance([x for x in ps + ks_all if x["z_wartoscia"]]),
+                                    "bez": finance([x for x in ps + ks_all if not x["z_wartoscia"]]),
+                                    "kupon": finance([kc] if kc else []), "kupon4": finance([kc4] if kc4 else []),
+                                    "kupon_pewne": finance([kp] if kp else []),
+                                    "dzien": finance(ps + ks_all)}})
     current = [s for s in settled if s.get("rules")]
     old_rows = [s for s in settled if not s.get("rules")]
     day_coupons = [c for c in coupons if c["kind"] == "2"]
@@ -1288,19 +1290,27 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     # money: every paper bet ever logged (the old rules' day included; it is also shown on its own)
     cur_p = [logged_pick(s) for s in settled]
     cur_c = [logged_coupon(c) for c in day_coupons]
+    cur_c4 = [logged_coupon(c) for c in coupons if c["kind"] == "4"]
     cur_k = [logged_coupon(c) for c in coupons if c["kind"] == "pewne"]
-    run, cum = [], 0.0
+    cur_all = cur_c + cur_c4 + cur_k
+    run, cum, cum_z, cum_b = [], 0.0, 0.0, 0.0
     for r in sorted(results, key=lambda r: r["dzien"]):
-        f = r["finanse"]["dzien"]
-        if f["rozliczone"]:
-            cum += f["zysk"]
-            run.append({"dzien": r["dzien"], "zysk": f["zysk"], "suma": round(cum, 2)})
+        f = r["finanse"]
+        if f["dzien"]["rozliczone"]:
+            cum, cum_z, cum_b = cum + f["dzien"]["zysk"], cum_z + f["z"]["zysk"], cum_b + f["bez"]["zysk"]
+            run.append({"dzien": r["dzien"], "zysk": f["dzien"]["zysk"], "suma": round(cum, 2),
+                        "suma_z": round(cum_z, 2), "suma_bez": round(cum_b, 2)})
     wyniki = {"dni": results, "stawka": STAKE,
               "finanse": {"top5": finance([p for p in cur_p if p["top"]]),
                           "pozostale": finance([p for p in cur_p if not p["top"]]),
                           "z_wartoscia": finance([p for p in cur_p if p["z_wartoscia"]]),
                           "bez_wartosci": finance([p for p in cur_p if not p["z_wartoscia"]]),
-                          "kupon": finance(cur_c), "kupon_pewne": finance(cur_k), "lacznie": finance(cur_p + cur_c + cur_k)},
+                          "kupony_z": finance([x for x in cur_all if x["z_wartoscia"]]),
+                          "kupony_bez": finance([x for x in cur_all if not x["z_wartoscia"]]),
+                          "razem_z": finance([x for x in cur_p + cur_all if x["z_wartoscia"]]),
+                          "razem_bez": finance([x for x in cur_p + cur_all if not x["z_wartoscia"]]),
+                          "kupon": finance(cur_c), "kupon4": finance(cur_c4), "kupon_pewne": finance(cur_k),
+                          "lacznie": finance(cur_p + cur_all)},
               "pasma": [{"pasmo": i, "od": lo, "do": hi,
                          "z_wartoscia": finance([p for p in cur_p if p["pasmo"] == i and p["z_wartoscia"]]),
                          "bez_wartosci": finance([p for p in cur_p if p["pasmo"] == i and not p["z_wartoscia"]])}
@@ -1317,6 +1327,7 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
               "bet_buildery": hits([r for r in extras if r["kind"] == "bb"]),
               "kupony_pewne": tally([logged_coupon(c) for c in coupons if c["kind"] == "pewne"]),
               "prognozy": track,
+              "analiza": miss_analysis(cur_p),
               "clv": {"wszystkie": clv_summary(cur_p), "top5": clv_summary([p for p in cur_p if p["top"]])}}
     meta = {
         "utworzono": made,
@@ -1401,6 +1412,137 @@ def finance(items: list[dict]) -> dict:
             "oczekiwane": round(sum(x.get("p_model") or 0 for x in done), 2),
             "postawione": staked, "wyplaty": paid, "zysk": round(paid - staked, 2),
             "roi": round((paid - staked) / staked, 4) if staked else None}
+
+
+# ---------------------------------------------------------------------------- 10. what did not come in and why
+
+STAT_NAMES = {"shots": "Strzały", "sot": "Celne strzały", "corners": "Rzuty rożne"}
+SCOPE_NAMES = {"home": "gospodarze", "away": "goście", "total": "cały mecz"}
+CHANCE_BINS = ((0.0, 0.6, "poniżej 60%"), (0.6, 0.7, "60–70%"), (0.7, 0.8, "70–80%"), (0.8, 1.01, "80% i więcej"))
+
+
+def _pl1(v: float) -> str:
+    return f"{v:.1f}".replace(".", ",")
+
+
+def _zl(v: float) -> str:
+    return f"{v:+.2f}".replace(".", ",") + " zł"
+
+
+def _hits(rows: list[dict]) -> dict:
+    """Settled bets: how many, how many came in, how many their chances promised and how far the count may
+    stray from that by chance alone (one standard deviation), the profit at 100 zł a bet."""
+    p = np.array([r["p_model"] for r in rows], dtype=float)
+    zysk = round(sum(r.get("zysk_zl") or 0.0 for r in rows), 2)
+    return {"n": len(rows), "trafione": sum(r["wynik"] == "wygrana" for r in rows),
+            "oczekiwane": round(float(p.sum()), 1), "odchylenie": round(float(np.sqrt((p * (1 - p)).sum())), 1),
+            "zysk": zysk, "roi": round(zysk / (STAKE * len(rows)), 4) if rows else None}
+
+
+def miss_analysis(items: list[dict]) -> dict:
+    """What did not come in and why (user, 2026-10-19: "Przeanalizuj też bety które nie siadły i dlaczego"):
+    the settled single bets by market and by chance, how far the misses were from the threshold, whether the
+    bets without value lose by bad luck or by their price, and which forecast was closest (the model alone,
+    the bookmakers or the 20/80 mix the rules use); plus plain conclusions for the app."""
+    done = [p for p in items if p.get("wynik") in ("wygrana", "przegrana")]
+    if not done:
+        return {"n": 0, "wnioski": []}
+    out: dict = _hits(done)
+    groups: dict[str, list[dict]] = {}
+    label: dict[str, str] = {}
+    for p in done:
+        if p["stat"] == "wynik":
+            key = "wynik_" + p["side"]
+            label[key] = "Wygrana drużyny" if p["side"] == "win" else "Wygrana albo remis (podwójna szansa)"
+        else:
+            key = f"{p['stat']}_{p['scope']}"
+            label[key] = f"{STAT_NAMES.get(p['stat'], p['stat'])}: {SCOPE_NAMES.get(p['scope'], p['scope'])}"
+        groups.setdefault(key, []).append(p)
+    out["rynki"] = sorted(({"key": k, "label": label[k], **_hits(v)} for k, v in groups.items()),
+                          key=lambda r: r["zysk"])
+    out["szanse"] = [{"label": name, **_hits(rows)} for lo, hi, name in CHANCE_BINS
+                     if (rows := [p for p in done if lo <= p["p_model"] < hi])]
+    # count bets that missed, by how many (one short is mostly the game's noise, three or more a clear miss)
+    short = [int(round(p["line"] + 0.5 - p["wartosc"])) for p in done
+             if p["wynik"] == "przegrana" and p["stat"] != "wynik" and p["side"] == "over"
+             and isinstance(p.get("wartosc"), (int, float))]
+    out["zabraklo"] = {"n": len(short), "1": sum(s == 1 for s in short), "2": sum(s == 2 for s in short),
+                       "3+": sum(s >= 3 for s in short),
+                       "wynik": sum(p["wynik"] == "przegrana" and p["stat"] == "wynik" for p in done)}
+    # with and without value: the chance needed to break even at the price, against the chance and the hits
+    out["wartosc"] = {}
+    for key, flag in (("z_wartoscia", True), ("bez_wartosci", False)):
+        rows = [p for p in done if bool(p.get("z_wartoscia")) == flag]
+        if rows:
+            evs = [p["ev_podatek"] for p in rows if p.get("ev_podatek") is not None]
+            out["wartosc"][key] = {**_hits(rows), "trafialnosc": round(sum(p["wynik"] == "wygrana" for p in rows) / len(rows), 4),
+                                   "szansa_srednia": round(float(np.mean([p["p_model"] for p in rows])), 4),
+                                   "potrzebna": round(float(np.mean([1 / (sp.TAX * p["kurs"]) for p in rows])), 4),
+                                   "zwrot_oczekiwany": round(float(np.mean(evs)), 4) if evs else None}
+    # which forecast was closest (log-loss per bet; the difference model - bookmakers against its noise)
+    rows = [p for p in done if p.get("p_model_czysty") is not None and p.get("p_rynek") is not None]
+    if len(rows) >= 30:
+        y = np.array([p["wynik"] == "wygrana" for p in rows], dtype=float)
+
+        def loss(ps: list[float]) -> np.ndarray:
+            q = np.clip(np.array(ps, dtype=float), 1e-4, 1 - 1e-4)
+            return -(y * np.log(q) + (1 - y) * np.log(1 - q))
+        lm = loss([p["p_model_czysty"] for p in rows])
+        lq = loss([p["p_rynek"] for p in rows])
+        lb = loss([p["p_model"] for p in rows])
+        d = lm - lq
+        scores = {"model": float(lm.mean()), "rynek": float(lq.mean()), "mieszanka": float(lb.mean())}
+        out["prognozy"] = {"n": len(rows), "trafione": int(y.sum()), **{k: round(v, 4) for k, v in scores.items()},
+                           "oczekiwane_model": round(sum(p["p_model_czysty"] for p in rows), 1),
+                           "oczekiwane_rynek": round(sum(p["p_rynek"] for p in rows), 1),
+                           "oczekiwane_mieszanka": round(sum(p["p_model"] for p in rows), 1),
+                           "najlepsza": min(scores, key=scores.get),
+                           "pewna_roznica": bool(abs(d.mean()) > 2 * d.std(ddof=1) / np.sqrt(len(d)))}
+    out["wnioski"] = conclusions(out)
+    return out
+
+
+def conclusions(a: dict) -> list[str]:
+    """Plain Polish conclusions from the misses analysis, only what the numbers support."""
+    w = []
+    v = a["wartosc"].get("bez_wartosci")
+    if v and v["n"] >= 20:
+        gap = v["trafione"] - v["oczekiwane"]
+        how = ("trafiają tak, jak przewidywał model" if abs(gap) <= 2 * v["odchylenie"]
+               else "trafiają rzadziej, niż przewidywał model" if gap < 0 else "trafiają częściej, niż przewidywał model")
+        w.append(f"Zakłady bez wartości {how} (siadło {v['trafione']} z {v['n']}, oczekiwane {_pl1(v['oczekiwane'])}), "
+                 f"a wynik to {_zl(v['zysk'])}. Przy ich kursach na zero wychodzi się dopiero przy {_pc(v['potrzebna'])} "
+                 f"trafień, a ich szansa to średnio {_pc(v['szansa_srednia'])}: tracą przez za niski kurs (marża "
+                 "bukmachera i 12% podatku), nie przez pecha.")
+    v = a["wartosc"].get("z_wartoscia")
+    if v:
+        w.append(f"Zakłady z wartością: siadło {v['trafione']} z {v['n']}, wynik {_zl(v['zysk'])}."
+                 + (" To wciąż za mało, żeby ocenić przewagę; szybciej pokaże ją CLV." if v["n"] < 100 else ""))
+    z = a["zabraklo"]
+    if z["n"]:
+        w.append(f"Z {z['n']} chybionych zakładów na liczby (strzały, celne, rożne) {z['1']} zabrakło jednego, "
+                 f"a {z['2']} dwóch ({_pc((z['1'] + z['2']) / z['n'])} wszystkich pudeł); wyraźnych pomyłek, o 3 "
+                 f"i więcej, było {z['3+']}. Pudło o jeden to zwykle przypadek meczu, nie zła prognoza.")
+    flagged = [r for r in a["rynki"] if r["n"] >= 10 and r["trafione"] < r["oczekiwane"] - 2 * r["odchylenie"]]
+    for r in flagged[:2]:
+        w.append(f"{r['label']}: siadło {r['trafione']} z {r['n']}, a model spodziewał się {_pl1(r['oczekiwane'])} "
+                 f"(wynik {_zl(r['zysk'])}). To więcej pudeł, niż wynikałoby z przypadku; ten rynek obserwujemy.")
+    if not flagged and a["rynki"]:
+        r = a["rynki"][0]
+        w.append(f"Najwięcej kosztował rynek „{r['label']}” ({_zl(r['zysk'])}, siadło {r['trafione']} z {r['n']} "
+                 f"przy oczekiwanych {_pl1(r['oczekiwane'])}); trafia w granicach przypadku, więc to kwestia ceny i "
+                 "liczby zakładów, nie błędu prognozy.")
+    for b in a["szanse"]:
+        if b["n"] >= 15 and b["trafione"] < b["oczekiwane"] - 2 * b["odchylenie"]:
+            w.append(f"Typy z szansą {b['label']} siadają rzadziej, niż powinny ({b['trafione']} z {b['n']}, "
+                     f"oczekiwane {_pl1(b['oczekiwane'])}).")
+    f = a.get("prognozy")
+    if f:
+        names = {"model": "sam model", "rynek": "sami bukmacherzy", "mieszanka": "mieszanka 20% model + 80% bukmacherzy (obecne zasady)"}
+        w.append(f"Kto lepiej przewiduje (na {f['n']} zakładach): najlepiej {names[f['najlepsza']]}. "
+                 + ("Różnica między modelem a bukmacherami jest większa niż przypadek." if f["pewna_roznica"]
+                    else "Różnice są w granicach przypadku, więc zasad nie zmieniamy i sprawdzamy dalej."))
+    return w
 
 
 if __name__ == "__main__":

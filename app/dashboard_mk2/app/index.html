@@ -227,6 +227,19 @@ th[aria-sort="descending"] .th::after { content: " ↓"; }
 .tbl .r { text-align: right; white-space: nowrap; } .tbl .nw { white-space: nowrap; } .tbl .wide { min-width: 14rem; }
 .tbl tr.grp td { background: var(--sunk); font: 600 0.74rem var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .tbl tr.tot td { font-weight: 600; border-top: 2px solid var(--line); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 0.86rem; color: var(--ink-2); margin: 2px 0 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend b { font-variant-numeric: tabular-nums; }
+.tile.val { box-shadow: inset 4px 0 0 var(--turf); }
+.tile.nov { box-shadow: inset 4px 0 0 var(--wait); }
+.vgrp { display: flex; flex-wrap: wrap; gap: 2px 14px; align-items: baseline; margin-top: 6px; padding: 8px 12px; border-radius: var(--r-sm); background: var(--wait-soft); font-size: 0.92rem; color: var(--ink-2); }
+.vgrp > b:first-child { font: 700 1.05rem var(--display); color: var(--ink); }
+.vgrp b { font-variant-numeric: tabular-nums; }
+.vgrp.val { background: var(--turf-soft); }
+.vgrp .none { color: var(--muted); }
+ul.wnioski { margin: 4px 0 8px; padding-left: 1.2em; display: grid; gap: 6px; }
+ul.wnioski li { line-height: 1.45; }
 .tbl caption { caption-side: bottom; text-align: left; padding: 10px; }
 
 /* explanations */
@@ -325,7 +338,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
           <li>Rynki: strzały, celne strzały, rzuty rożne oraz wynik meczu: zwycięstwo drużyny (1 albo 2) i zwycięstwo albo remis (1X albo X2), liczone po 90 minutach. Obie drużyny muszą mieć co najmniej 10 meczów w danych.</li>
           <li>Nie podwajamy: w jednym meczu najwyżej jeden zakład na ten sam rynek (np. nie „co najmniej 8” i „co najmniej 9” rożnych w meczu), a na wynik meczu najwyżej jeden zakład.</li>
           <li>Wynik meczu liczę tak samo: 80% bukmacherzy, 20% model goli. Taki zakład ma wartość tylko wtedy, gdy któryś bukmacher daje wyraźnie wyższy kurs niż reszta.</li>
-          <li>Kupon dnia: 2 zdarzenia z różnych meczów (3 tylko wtedy, gdy nie da się złożyć kuponu z 2), każde z kursem 1,25–2,00 wyższym niż uczciwy kurs rynku, łączny kurs 1,8–2,5; wybieram ten z największym oczekiwanym zyskiem i pokazuję oczekiwany wynik po podatku 12%.</li>
+          <li>Gotowe kupony, codziennie dwa: ok. 2,0 (2 zdarzenia z różnych meczów, 3 tylko wtedy, gdy nie da się z 2; łączny kurs 1,80–2,50) i ok. 4 (3–4 zdarzenia, łączny kurs 3,80–5,00). Każde zdarzenie przechodzi zasady pojedynczych typów (kurs 1,25–2,00, co najmniej dwóch bukmacherów), z jednego meczu najwyżej jedno. Najpierw kupon, który opłaca się po podatku 12%; gdy takiego nie ma, ten z największą szansą, że wejdą wszystkie, oznaczony „bez wartości”.</li>
           <li>„Kurs u bukmachera” to najlepszy kurs z serwisu kursowego (Bet365, Betano, 1xBet i inni). U Twojego bukmachera kurs może być inny: graj tylko, gdy jest co najmniej taki jak „opłaca się od kursu”.</li>
         </ul>
       </details>
@@ -344,12 +357,13 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       <div class="tiles" id="wy-big"></div>
       <div id="wy-chart"></div>
       <div class="cols">
-        <div class="page"><h3>Według rodzaju</h3><div class="wrap short"><table class="tbl" id="wy-rodzaje"></table></div></div>
+        <div class="page"><h3>Z wartością i bez wartości</h3><div class="wrap short"><table class="tbl" id="wy-rodzaje"></table></div></div>
         <div class="page"><h3>Według widełek kursów</h3><div class="wrap short"><table class="tbl" id="wy-pasma"></table></div></div>
       </div>
       <div class="sum" id="wy-sum"></div>
-      <p class="note" id="wy-note">Wypłata to 100 zł × 0,88 × kurs (podatek 12% od stawki). Zakłady zapisuję przed meczem, a po meczu rozliczam z prawdziwą statystyką. CLV: o ile kurs z chwili, gdy typ pojawił się pierwszy raz, był lepszy od uczciwego kursu rynku tuż przed meczem; to najszybszy sprawdzian, czy typy mają przewagę (wystarczy kilkadziesiąt zakładów, a nie kilka tysięcy).</p>
+      <p class="note" id="wy-note">„Z wartością” to zakład, który przy swoim kursie opłaca się po podatku według wyliczonej szansy (szansa × kurs × 0,88 większe niż 1); „bez wartości” to najbardziej prawdopodobny typ, który przy tym kursie się nie opłaca. Wypłata to 100 zł × 0,88 × kurs (podatek 12% od stawki). Zakłady zapisuję przed meczem, a po meczu rozliczam z prawdziwą statystyką. CLV: o ile kurs z chwili, gdy typ pojawił się pierwszy raz, był lepszy od uczciwego kursu rynku tuż przed meczem; to najszybszy sprawdzian, czy typy mają przewagę (wystarczy kilkadziesiąt zakładów, a nie kilka tysięcy).</p>
     </div>
+    <div class="card" id="wy-analiza"></div>
     <div class="card">
       <h2>Dzień po dniu</h2>
       <div class="page" id="wy-dni"></div>
@@ -972,12 +986,14 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       sum.append(all);
       [part("★ typy dnia", allDay.filter((x) => x.top)), part("z wartością", allDay.filter((x) => x.z_wartoscia)),
         part("bez wartości", allDay.filter((x) => !x.z_wartoscia))].forEach((x) => { if (x) sum.append(x); });
-      if (r && r.kupon && r.kupon.wynik) {
+      [["kupon", "Kupon ok. 2,0"], ["kupon4", "Kupon ok. 4"]].forEach(([k, label]) => {
+        const kc = r && r[k];
+        if (!kc || !kc.wynik) return;
         const c = el("span");
-        c.append("Kupon dnia: ", resultChip(r.kupon.wynik));
-        if (!empty(r.kupon.zysk_zl)) c.append(" ", el("b", sign(r.kupon.zysk_zl), zl(r.kupon.zysk_zl)));
+        c.append(label + ": ", resultChip(kc.wynik));
+        if (!empty(kc.zysk_zl)) c.append(" ", el("b", sign(kc.zysk_zl), zl(kc.zysk_zl)));
         sum.append(c);
-      }
+      });
       const open = allDay.filter((x) => !x.wynik).length;
       if (open) sum.append(el("span", "c-muted", open + " czeka na wynik"));
     } else if (S.td < t) sum.append(el("span", "c-muted", "Czekam na statystyki tych meczów; rozliczenie pojawi się po najbliższej aktualizacji."));
@@ -995,7 +1011,9 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     if (!d.top.length) box.append(boxed(el("p", "note", "Na ten dzień żaden kurs nie jest wyraźnie (co najmniej 2%) wyższy niż uczciwy kurs rynku, więc nie ma typów dnia. Wszystkie typy tego dnia są niżej.")));
     d.top.forEach((p) => box.append(pickCard(p, { noStar: true })));
     const kb = $("#td-kupon");
-    kb.replaceChildren(couponCard(d.kupon, d.kupony || []));
+    kb.replaceChildren(couponCard(d.kupon, d.kupony || [], { title: "Kupon ok. 2,0" }),
+      couponCard(d.kupon4, d.kupony4 || [], { title: "Kupon ok. 4", alt: "Inne kupony ok. 4 na ten dzień",
+        empty: "Na ten dzień nie da się złożyć kuponu ok. 4 (3–4 zdarzenia z różnych meczów, łączny kurs 3,80–5,00) z typów, które przechodzą zasady, albo ich mecze już się zaczęły." }));
     renderBandsSummary(d);
   }
   // ---------------------------------------------------------------- sorting and filtering bet lists
@@ -1239,11 +1257,11 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const head = el("div", "sec-head");
     head.append(el("h2", null, opts.title || "Kupon dnia ok. 2,0"));
     sec.append(head);
-    if (!k) { sec.append(boxed(el("p", "note", opts.empty || "Na ten dzień nie ma kuponu (2 zdarzenia, wyjątkowo 3; łączny kurs 1,8–2,5), który opłaca się po podatku."))); return sec; }
+    if (!k) { sec.append(boxed(el("p", "note", opts.empty || "Na ten dzień nie da się złożyć kuponu ok. 2,0 (2 zdarzenia z różnych meczów, wyjątkowo 3; łączny kurs 1,80–2,50) z typów, które przechodzą zasady, albo ich mecze już się zaczęły."))); return sec; }
     const legs = k.legs || [];
     const c = el("article", "ticket");
     c.append(ticketTop(null, null, events(legs.length) + " z różnych meczów · wygrywa, gdy wejdą wszystkie",
-      [k.zasady === "v1" ? pill("stare zasady") : null, k.wynik ? resultChip(k.wynik) : null]));
+      [k.zasady === "v1" ? pill("stare zasady") : null, valuePill(k), k.wynik ? resultChip(k.wynik) : null]));
     const lg = el("div", "t-legs");
     lg.append(el("span", "lab", "Zdarzenia"), betList(legs, { match: true }));
     const pm = k.p_rynek !== undefined ? k.p_rynek : legs.reduce((a, l) => a * (l.p_rynek || 1), 1);
@@ -1268,7 +1286,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const others = (alts || []).filter((a) => Math.abs(a.kurs - k.kurs) > 1e-9 || a.p_model !== k.p_model).slice(0, 2);
     if (others.length) {
       const d = el("details", "why");
-      d.append(el("summary", null, "Inne kupony ok. 2,0 na ten dzień"));
+      d.append(el("summary", null, opts.alt || "Inne kupony ok. 2,0 na ten dzień"));
       const ul = el("ul", "list");
       others.forEach((a) => ul.append(el("li", null, (a.legs || []).map((l) => (l.mecz || "") + ": " + (splitOpis(l.opis)[1] || l.opis) + " (" + dec(l.kurs) + ")").join(" + ") + " · kurs łączny " + dec(a.kurs) + ", szansa " + pct(a.p_model) + ", zysk po podatku " + spct(a.ev_podatek))));
       d.append(ul);
@@ -1277,51 +1295,125 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     return sec;
   }
   // ================================================================== Wyniki
-  // the running balance by day: a line over a zero rule, the last value labelled
-  function balanceChart(pts) {
-    const W = 640, H = 150, pl = 8, pr = 76, pt = 14, pb = 24, ns = "http://www.w3.org/2000/svg";
-    const ys = pts.map((p) => p.suma), lo = Math.min(0, ...ys), hi = Math.max(0, ...ys), span = hi - lo || 1;
+  // the running balance by day: one line per kind (with value, without, all) over a zero rule
+  function balanceChart(pts, series) {
+    series = series || [["suma", "Bilans", "var(--turf)"]];
+    const W = 640, H = 160, pl = 8, pr = 44, pt = 14, pb = 24, ns = "http://www.w3.org/2000/svg";
+    const ys = pts.flatMap((p) => series.map(([k]) => p[k])), lo = Math.min(0, ...ys), hi = Math.max(0, ...ys), span = hi - lo || 1;
     const x = (i) => pl + (W - pl - pr) * (pts.length === 1 ? 1 : i / (pts.length - 1));
     const y = (v) => pt + (H - pt - pb) * (1 - (v - lo) / span);
     const mk = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v)); if (text) e.textContent = text; return e; };
-    const svg = mk("svg", { viewBox: "0 0 " + W + " " + H, class: "chart", role: "img", "aria-label": "Bilans od początku: " + zl(ys[ys.length - 1]) });
-    const d = pts.map((p, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p.suma).toFixed(1)).join(" ");
-    svg.append(mk("line", { x1: pl, x2: W - pr, y1: y(0), y2: y(0), style: "stroke: var(--line); stroke-width: 1" }));
-    svg.append(mk("path", { d: d + " L" + x(pts.length - 1).toFixed(1) + " " + y(0).toFixed(1) + " L" + x(0).toFixed(1) + " " + y(0).toFixed(1) + " Z", style: "fill: var(--turf); fill-opacity: 0.12; stroke: none" }));
-    svg.append(mk("path", { d, style: "fill: none; stroke: var(--turf); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round" }));
     const last = pts[pts.length - 1];
-    svg.append(mk("circle", { cx: x(pts.length - 1), cy: y(last.suma), r: 4, style: "fill: var(--turf)" }));
-    svg.append(mk("text", { x: x(pts.length - 1) + 8, y: y(last.suma) + 4 }, zl(last.suma)));
+    const svg = mk("svg", { viewBox: "0 0 " + W + " " + H, class: "chart", role: "img",
+      "aria-label": "Bilans od początku: " + series.map(([k, label]) => label.toLowerCase() + " " + zl(last[k])).join(", ") });
+    svg.append(mk("line", { x1: pl, x2: W - pr, y1: y(0), y2: y(0), style: "stroke: var(--line); stroke-width: 1" }));
+    series.forEach(([k, , color]) => {
+      const d = pts.map((p, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p[k]).toFixed(1)).join(" ");
+      svg.append(mk("path", { d, style: "fill: none; stroke: " + color + "; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round"
+        + (k === "suma" && series.length > 1 ? "; stroke-dasharray: 5 4" : "") }));
+      svg.append(mk("circle", { cx: x(pts.length - 1), cy: y(last[k]), r: 3.5, style: "fill: " + color }));
+    });
     svg.append(mk("text", { x: pl, y: H - 6 }, dayLabel(pts[0].dzien)));
     svg.append(mk("text", { x: W - pr, y: H - 6, "text-anchor": "end" }, dayLabel(last.dzien)));
     svg.append(mk("text", { x: W - pr + 8, y: y(0) + 4 }, "0 zł"));
     return svg;
   }
+  const nBets = (n) => n + " " + (n === 1 ? "zakład" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "zakłady" : "zakładów");
+  // a coupon in the day-by-day list: its legs with what came in, the result and the profit
+  function couponLine(c, label) {
+    const p = el("div", "cline");
+    p.append(el("b", null, label + ", kurs " + dec(c.kurs) + ":"));
+    (c.legs || []).forEach((l, i) => {
+      const [who, what] = splitOpis(l.opis), leg = el("span");
+      leg.append((i ? "+ " : "") + (l.mecz || "") + (who && who !== "W meczu" ? " · " + who + ": " : ": ") + what + " (" + dec(l.kurs) + ")");
+      if (l.wynik) leg.append(" ", el("span", l.wynik === "wygrana" ? "c-win" : l.wynik === "przegrana" ? "c-loss" : "c-muted",
+        (l.wynik === "wygrana" ? "✓" : l.wynik === "przegrana" ? "✗" : "zwrot")
+        + (empty(l.wartosc) ? "" : " " + (typeof l.wartosc === "string" ? l.wartosc : int(l.wartosc)))));
+      p.append(leg);
+    });
+    p.append(resultChip(c.wynik));
+    if (c.wynik) p.append(el("b", sign(c.zysk_zl), zl(c.zysk_zl)));
+    return p;
+  }
+  // what did not come in and why: conclusions computed anew at every update, the numbers folded under them
+  function renderAnaliza(a) {
+    const box = $("#wy-analiza");
+    box.replaceChildren();
+    const head = el("div", "sec-head");
+    head.append(el("h2", null, "Co nie siadło i dlaczego"));
+    if (a && a.n) head.append(el("span", "fresh", "liczone od nowa przy każdej aktualizacji · " + a.n + " rozliczonych zakładów pojedynczych"));
+    box.append(head);
+    if (!a || !a.n) { box.append(el("p", "note", "Wnioski pojawią się po pierwszych rozliczonych zakładach.")); return; }
+    const ul = el("ul", "wnioski");
+    (a.wnioski || []).forEach((x) => ul.append(el("li", null, x)));
+    box.append(ul);
+    const det = el("details", "why");
+    det.append(el("summary", null, "Szczegóły: rynki, szanse i ile zabrakło"));
+    const hit = [
+      { f: "trafione", h: "Siadło", num: true, fmt: (v, r) => v + " z " + r.n },
+      { f: "oczekiwane", h: "Model", num: true, fmt: (v) => NF1.format(v || 0) },
+      { f: "zysk", h: "Zysk", num: true, fmt: (v) => zl(v), cls: (v) => sign(v) },
+    ];
+    const wrapT = (x) => { const w = el("div", "wrap short"); w.append(x); return w; };
+    const t1 = el("table", "tbl"), t2 = el("table", "tbl"), t3 = el("table", "tbl");
+    table(t1, a.rynki || [], [{ f: "label", h: "Rynek", nw: true }, ...hit], "key", { nosortAll: true });
+    table(t2, a.szanse || [], [{ f: "label", h: "Szansa", nw: true }, ...hit], "label", { nosortAll: true });
+    const z = a.zabraklo || {};
+    table(t3, [["1", "zabrakło 1"], ["2", "zabrakło 2"], ["3+", "zabrakło 3 i więcej"], ["wynik", "wynik meczu (nie wszedł)"]]
+      .map(([k, label]) => ({ key: k, label, ile: z[k] || 0 })), [{ f: "label", h: "Chybione", nw: true }, { f: "ile", h: "Ile", num: true, fmt: int }], "key", { nosortAll: true });
+    const cols = el("div", "cols"), c1 = el("div", "page"), c2 = el("div", "page");
+    c1.append(el("h3", null, "Według rynku"), wrapT(t1));
+    c2.append(el("h3", null, "Według szansy"), wrapT(t2), el("h3", null, "Ile zabrakło do progu"), wrapT(t3));
+    cols.append(c1, c2);
+    det.append(cols);
+    const f = a.prognozy;
+    if (f) {
+      const NF3 = nf(3);
+      det.append(el("p", "note", "Te same " + f.n + " zakładów: siadło " + f.trafione + "; sam model spodziewał się " + NF1.format(f.oczekiwane_model)
+        + ", sami bukmacherzy " + NF1.format(f.oczekiwane_rynek) + ", mieszanka 20/80 (obecne zasady) " + NF1.format(f.oczekiwane_mieszanka)
+        + ". Błąd prognozy (log-loss, im mniej, tym lepiej): model " + NF3.format(f.model) + ", bukmacherzy " + NF3.format(f.rynek)
+        + ", mieszanka " + NF3.format(f.mieszanka) + "."));
+    }
+    box.append(det);
+  }
   function renderWyniki() {
     const wy = st("wyniki");
     if (!wy) { $("#wy-dni").replaceChildren(el("p", "note", "Wczytywanie…")); return; }
     const F = wy.finanse || {}, L = F.lacznie || {};
-    const tile = (k, v, s, cls) => { const t = el("div", "tile"); t.append(el("span", "lab", k), el("span", "v " + (cls || ""), v)); if (s) t.append(el("span", "s", s)); return t; };
+    const tile = (k, v, s, cls, tcls) => { const t = el("div", "tile" + (tcls ? " " + tcls : "")); t.append(el("span", "lab", k), el("span", "v " + (cls || ""), v)); if (s) t.append(el("span", "s", s)); return t; };
+    // the split the user asked for (2026-10-19): bets with value and without, singles and coupons together
+    const kindTile = (label, f, tcls) => tile(label, f.rozliczone ? zl(f.zysk) : "—",
+      f.rozliczone ? "siadło " + f.trafione + " z " + f.rozliczone + " (model: ok. " + NF1.format(f.oczekiwane || 0) + ") · zwrot " + spct(f.roi, 1)
+        : f.n ? f.n + " czeka na wynik" : "jeszcze nie było takich zakładów", f.rozliczone ? sign(f.zysk) : "", tcls);
     $("#wy-big").replaceChildren(
-      tile("Bilans", L.rozliczone ? zl(L.zysk) : "—", L.rozliczone ? "zwrot " + spct(L.roi, 1) + " postawionej kwoty" : "pierwsze rozliczenia po meczach", L.rozliczone ? sign(L.zysk) : ""),
-      tile("Trafione", L.rozliczone ? L.trafione + " z " + L.rozliczone : "—", L.rozliczone ? "model spodziewał się ok. " + NF1.format(L.oczekiwane || 0) : "zakłady i kupony"),
-      tile("Postawione", zlf(L.postawione || 0), (L.rozliczone || 0) + " rozliczonych po 100 zł"),
-      tile("Wypłaty po podatku", zlf(L.wyplaty || 0), "100 zł × 0,88 × kurs"),
+      kindTile("Z wartością", F.razem_z || {}, "val"),
+      kindTile("Bez wartości", F.razem_bez || {}, "nov"),
+      tile("Razem", L.rozliczone ? zl(L.zysk) : "—", L.rozliczone ? "siadło " + L.trafione + " z " + L.rozliczone + " · postawione " + zlf(L.postawione || 0)
+        + ", wypłaty po podatku " + zlf(L.wyplaty || 0) : "pierwsze rozliczenia po meczach", L.rozliczone ? sign(L.zysk) : ""),
       tile("CLV", wy.clv && wy.clv.wszystkie.n ? spct(wy.clv.wszystkie.srednia, 1) : "—",
         wy.clv && wy.clv.wszystkie.n ? "średnio na " + wy.clv.wszystkie.n + " typach, " + wy.clv.wszystkie.dodatnie + " lepszych od kursu zamknięcia"
           : "kurs z chwili typu kontra kurs tuż przed meczem; pierwsze wyniki po meczach typowanych od 16.10",
         wy.clv && wy.clv.wszystkie.n ? sign(wy.clv.wszystkie.srednia) : ""));
-    $("#wy-chart").replaceChildren(...((wy.narastajaco || []).length >= 2 ? [balanceChart(wy.narastajaco)] : []));
+    const runPts = wy.narastajaco || [], chartBox = $("#wy-chart");
+    chartBox.replaceChildren();
+    if (runPts.length >= 2) {
+      const series = [["suma_z", "Z wartością", "var(--turf)"], ["suma_bez", "Bez wartości", "var(--wait)"], ["suma", "Razem", "var(--ink-2)"]]
+        .filter(([k]) => runPts.every((p) => !empty(p[k])));
+      const last = runPts[runPts.length - 1], lg = el("div", "legend");
+      series.forEach(([k, label, color]) => { const x = el("span"), i = el("i"); i.style.background = color; x.append(i, label + " ", el("b", sign(last[k]), zl(last[k]))); lg.append(x); });
+      chartBox.append(balanceChart(runPts, series), lg);
+    }
     const money = [
       { f: "trafione", h: "Trafione", num: true, fmt: (v, r) => (r.rozliczone ? v + " z " + r.rozliczone : r.n ? "czeka " + r.n : "—") },
       { f: "oczekiwane", h: "Model", num: true, fmt: (v, r) => (r.rozliczone ? NF1.format(v || 0) : "—") },
       { f: "zysk", h: "Zysk", num: true, fmt: (v, r) => (r.rozliczone ? zl(v) : "—"), cls: (v, r) => (r.rozliczone ? sign(v) : "") },
       { f: "roi", h: "Zwrot", num: true, fmt: (v) => (empty(v) ? "—" : spct(v, 1)), cls: (v) => sign(v) },
     ];
-    const kinds = [["top5", "Typy dnia ★"], ["pozostale", "Pozostałe typy"], ["z_wartoscia", "Pojedyncze z wartością"],
-      ["bez_wartosci", "Pojedyncze bez wartości"], ["kupon", "Kupon dnia"], ["kupon_pewne", "Kupon z pewniaczków"], ["lacznie", "Razem"]];
-    table($("#wy-rodzaje"), kinds.map(([k, label]) => Object.assign({ key: k, label }, F[k] || {})), [{ f: "label", h: "Rodzaj", nw: true }, ...money], "key", { nosortAll: true });
-    $("#wy-rodzaje").querySelectorAll("tbody tr").forEach((tr) => { if (tr.dataset.key === "lacznie") tr.classList.add("tot"); });
+    const kinds = [["Z wartością"], ["z_wartoscia", "Pojedyncze"], ["top5", "w tym typy dnia ★"], ["kupony_z", "Kupony"], ["razem_z", "Razem z wartością"],
+      ["Bez wartości"], ["bez_wartosci", "Pojedyncze"], ["kupony_bez", "Kupony"], ["razem_bez", "Razem bez wartości"], ["lacznie", "Wszystko razem"]];
+    table($("#wy-rodzaje"), kinds.map(([k, label]) => (label ? Object.assign({ key: k, label }, F[k] || {}) : { _grp: k })),
+      [{ f: "label", h: "Rodzaj", nw: true }, ...money], "key", { nosortAll: true });
+    $("#wy-rodzaje").querySelectorAll("tbody tr").forEach((tr) => { if (["razem_z", "razem_bez", "lacznie"].includes(tr.dataset.key)) tr.classList.add("tot"); });
     const brow = [];
     (wy.pasma || []).forEach((b) => [["z_wartoscia", "z wartością"], ["bez_wartosci", "bez wartości"]].forEach(([k, label]) =>
       brow.push(Object.assign({ key: b.pasmo + k, label: bandLabel(b.pasmo) + " · " + label }, b[k] || {}))));
@@ -1329,6 +1421,15 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     table($("#wy-pasma"), brow, [{ f: "label", h: "Widełki", nw: true }, ...money], "key", { nosortAll: true });
     const s = $("#wy-sum");
     s.replaceChildren();
+    [["kupon", "Kupon ok. 2,0"], ["kupon4", "Kupon ok. 4"], ["kupon_pewne", "Kupon z pewniaczków"]].forEach(([k, label]) => {
+      const f = F[k];
+      if (!f || !f.n) return;
+      const x = el("span");
+      x.append(label + ": ");
+      if (f.rozliczone) x.append(el("b", null, f.trafione + " z " + f.rozliczone), ", ", el("b", sign(f.zysk), zl(f.zysk)));
+      else x.append(el("span", "c-muted", "czeka na wynik"));
+      s.append(x);
+    });
     const o = wy.finanse_stare;
     if (o && o.rozliczone) {
       const x = el("span", "c-muted");
@@ -1343,6 +1444,7 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
       else x.append(label + ": ", el("span", "c-muted", "pierwsze rozliczenia po meczach"));
       s.append(x);
     });
+    renderAnaliza(wy.analiza);
     // day by day, newest first; the newest settled day (or the one chosen in Typy dnia) open
     const box = $("#wy-dni");
     box.replaceChildren();
@@ -1352,39 +1454,54 @@ details.box > summary { cursor: pointer; font: 600 1.1rem var(--display); }
     const cum = new Map((wy.narastajaco || []).map((r) => [r.dzien, r.suma]));
     const openDay = S.wyDay && days.some((d) => d.dzien === S.wyDay) ? S.wyDay : (days.find((d) => d.finanse && d.finanse.dzien.rozliczone) || days[0] || {}).dzien;
     days.forEach((d) => {
-      const f = (d.finanse && d.finanse.dzien) || { n: 0, rozliczone: 0 };
+      const F2 = d.finanse || {}, f = F2.dzien || { n: 0, rozliczone: 0 };
       const det = el("details", "day");
       det.open = d.dzien === openDay;
       const sm = el("summary");
-      sm.append(el("b", null, dayLabel(d.dzien) + ", " + day(d.dzien + "T12:00:00Z").slice(0, 5)));
-      sm.append(el("span", null, f.n + " zakładów"));
+      const lab = dayLabel(d.dzien), dd = day(d.dzien + "T12:00:00Z").slice(0, 5);
+      sm.append(el("b", null, lab.includes(dd) ? lab : lab + ", " + dd));
+      sm.append(el("span", null, nBets(f.n)));
       if (f.rozliczone) {
-        sm.append(el("span", null, "siadło " + f.trafione + " z " + f.rozliczone));
-        const z = el("span"); z.append("wynik ", el("b", sign(f.zysk), zl(f.zysk))); sm.append(z);
+        [["z", "z wartością"], ["bez", "bez wartości"]].forEach(([k, label]) => {
+          const g = F2[k];
+          if (!g || !g.rozliczone) return;
+          const z = el("span");
+          z.append(label + ": " + g.trafione + " z " + g.rozliczone + ", ", el("b", sign(g.zysk), zl(g.zysk)));
+          sm.append(z);
+        });
+        const z = el("span"); z.append("razem ", el("b", sign(f.zysk), zl(f.zysk))); sm.append(z);
         if (cum.has(d.dzien)) sm.append(el("span", "c-muted", "od początku " + zl(cum.get(d.dzien))));
       } else sm.append(pill("czeka na wyniki", "wait"));
       if (d.stare_zasady) sm.append(pill("stare zasady"));
       det.append(sm);
       const inner = el("div", "inner");
-      const rows = S.bsWy && S.bsWy !== "domyslna" ? sortBets(d.typy || [], S.bsWy) : (d.typy || []).slice().sort((a, b) => (b.top - a.top)
+      const order = (lst) => (S.bsWy && S.bsWy !== "domyslna" ? sortBets(lst, S.bsWy) : lst.slice().sort((a, b) => (b.top - a.top)
         || ((a.pasmo === null || a.pasmo === undefined ? 9 : a.pasmo) - (b.pasmo === null || b.pasmo === undefined ? 9 : b.pasmo))
-        || (b.z_wartoscia - a.z_wartoscia) || (b.p_model - a.p_model));
-      if (rows.length) inner.append(betList(rows, { match: true, band: true }));
-      [["kupon", "Kupon dnia"], ["kupon_pewne", "Kupon z pewniaczków"]].forEach(([k, label]) => {
-        const c = d[k];
-        if (!c) return;
-        const p = el("div", "cline");
-        p.append(el("b", null, label + ", kurs " + dec(c.kurs) + ":"));
-        (c.legs || []).forEach((l, i) => {
-          const leg = el("span");
-          leg.append((i ? "+ " : "") + (l.mecz || "") + ": " + (splitOpis(l.opis)[1] || l.opis) + " (" + dec(l.kurs) + ")");
-          if (l.wynik) leg.append(" ", el("span", l.wynik === "wygrana" ? "c-win" : l.wynik === "przegrana" ? "c-loss" : "c-muted",
-            (l.wynik === "wygrana" ? "✓" : l.wynik === "przegrana" ? "✗" : "zwrot") + (empty(l.wartosc) ? "" : " " + int(l.wartosc))));
-          p.append(leg);
-        });
-        p.append(resultChip(c.wynik));
-        if (c.wynik) p.append(el("b", sign(c.zysk_zl), zl(c.zysk_zl)));
-        inner.append(p);
+        || (b.p_model - a.p_model)));
+      const cps = [["kupon", "Kupon ok. 2,0"], ["kupon4", "Kupon ok. 4"], ["kupon_pewne", "Kupon z pewniaczków"]].filter(([k]) => d[k]);
+      // the user (2026-10-19): results "z rozróżnieniem, na te z wartością i bez"
+      [[true, "Z wartością", "val"], [false, "Bez wartości", ""]].forEach(([flag, label, cls]) => {
+        const rows = (d.typy || []).filter((p) => !!p.z_wartoscia === flag);
+        const ks = cps.filter(([k]) => !!d[k].z_wartoscia === flag);
+        const all = rows.concat(ks.map(([k]) => d[k])), done = all.filter((x) => x.wynik);
+        const head = el("div", "vgrp" + (cls ? " " + cls : ""));
+        head.append(el("b", null, label));
+        if (!all.length) {
+          head.append(el("span", "none", flag ? "tego dnia nie było zakładów z wartością" : "tego dnia nie było zakładów bez wartości"));
+          inner.append(head);
+          return;
+        }
+        head.append(el("span", null, nBets(all.length)));
+        if (done.length) {
+          const zs = done.reduce((a, x) => a + (x.zysk_zl || 0), 0), h1 = el("span"), h2 = el("span");
+          h1.append("siadło ", el("b", null, done.filter((x) => x.wynik === "wygrana").length + " z " + done.length));
+          h2.append("wynik ", el("b", sign(zs), zl(zs)));
+          head.append(h1, h2);
+          if (done.length < all.length) head.append(el("span", "c-muted", (all.length - done.length) + " czeka na wynik"));
+        } else head.append(pill("czeka na wyniki", "wait"));
+        inner.append(head);
+        if (rows.length) inner.append(betList(order(rows), { match: true, band: true }));
+        ks.forEach(([k, lab]) => inner.append(couponLine(d[k], lab)));
       });
       det.append(inner);
       box.append(det);

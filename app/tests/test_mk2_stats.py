@@ -315,3 +315,26 @@ def test_v5_chance_is_mostly_the_market_and_picks_need_a_price_above_it():
     assert v["ev_podatek"] == pytest.approx(0.64 * 1.8 * 0.88 - 1, abs=1e-4)
     assert sd.strict_pick(v) and not sd.strict_pick({**v, "n_buk": 1})
     assert not sd.strict_pick(sp.value_fields(0.90, 0.60, 1.65, 3))   # the model alone is not enough
+
+
+def test_ready_coupons_take_value_first_then_the_likeliest():
+    legs = [{"fixture_id": f, "opis": f"leg{f}", "kurs": o, "bukmacher": "A", "p_model": p, "p_rynek": p}
+            for f, o, p in ((1, 1.55, 0.75), (2, 1.40, 0.72), (3, 1.30, 0.80), (4, 1.40, 0.78))]
+    out = sp.ready_coupons(legs, "2")
+    assert all(1.8 <= k["kurs"] <= 2.5 and len(k["legs"]) == 2 for k in out)
+    assert {l["fixture_id"] for l in out[0]["legs"]} == {1, 3} and out[0]["z_wartoscia"]
+    assert any(not k["z_wartoscia"] and k["p_model"] > out[0]["p_model"] for k in out)   # likelier, but no value
+    four = sp.ready_coupons(legs, "4")
+    assert four and all(3.8 <= k["kurs"] <= 5.0 and len(k["legs"]) in (3, 4) for k in four)
+
+
+def test_miss_analysis_counts_near_misses_and_explains_no_value_losses():
+    def bet(won: bool, came: int) -> dict:
+        return {"stat": "corners", "scope": "total", "side": "over", "line": 9.5, "kurs": 1.5, "p_model": 0.6,
+                "p_rynek": 0.62, "p_model_czysty": 0.55, "wynik": "wygrana" if won else "przegrana", "wartosc": came,
+                "z_wartoscia": False, "ev_podatek": 0.6 * 1.5 * 0.88 - 1, "zysk_zl": 32.0 if won else -100.0}
+    a = sd.miss_analysis([bet(i % 5 < 3, 11 if i % 5 < 3 else 9 if i % 5 == 3 else 6) for i in range(40)])
+    assert a["n"] == 40 and a["trafione"] == 24
+    assert a["zabraklo"] == {"n": 16, "1": 8, "2": 0, "3+": 8, "wynik": 0}
+    assert a["wartosc"]["bez_wartosci"]["potrzebna"] == pytest.approx(1 / (0.88 * 1.5), abs=1e-4)
+    assert any("bez wartości" in w for w in a["wnioski"]) and a["prognozy"]["n"] == 40
