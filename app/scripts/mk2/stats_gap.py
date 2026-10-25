@@ -56,7 +56,8 @@ LEAGUES: dict[int, str] = {
 
 
 def api_key() -> str:
-    """The user-level key (registry) wins over a stale copy in this process' environment."""
+    """The user-level key (registry) wins over a stale copy in this process' environment; elsewhere than on
+    Windows (the cloud run) the key comes from the environment alone."""
     try:
         import winreg
 
@@ -64,7 +65,7 @@ def api_key() -> str:
             value = winreg.QueryValueEx(k, "API_FOOTBALL_KEY")[0].strip()
             if value:
                 return value
-    except OSError:
+    except (ImportError, OSError):
         pass
     value = os.environ.get("API_FOOTBALL_KEY", "").strip()
     if not value:
