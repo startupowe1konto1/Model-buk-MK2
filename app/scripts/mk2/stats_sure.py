@@ -47,8 +47,14 @@ BB_LEG_P = 0.80             # each count leg of a builder at least this likely o
 BB_BAND = (0.45, 0.80)      # joint chance of a builder worth showing
 BB_PER_DAY = 12
 # S shots, C shots on target, M more shots than the opponent, G scores, W wins (90 minutes)
-SAFE_TEMPLATES = ("SCM", "SCG", "SCMG")
-RESULT_TEMPLATES = ("SCW", "SMW")
+# leg codes: S shots, C shots on target, M more shots than the opponent, G scores, W wins, ND does not lose
+# (double chance), TS / TC match totals of shots / shots on target, B both teams score
+SAFE_TEMPLATES = (("S", "C", "M"), ("S", "C", "G"), ("S", "C", "M", "G"))
+RESULT_TEMPLATES = (("S", "C", "W"), ("S", "M", "W"), ("S", "C", "ND"), ("S", "M", "ND"))
+MATCH_TEMPLATES = (("TS", "TC"), ("TS", "TC", "B"), ("TS", "B"), ("TC", "B"))
+KIND_OF = {**{t: "bezpieczny" for t in SAFE_TEMPLATES}, **{t: "z_wynikiem" for t in RESULT_TEMPLATES},
+           **{t: "meczowy" for t in MATCH_TEMPLATES}}
+BB_PER_KIND = {"bezpieczny": 5, "z_wynikiem": 4, "meczowy": 3}
 N_SIM = 20000
 # Goals need far less shrinkage than shots: with the shots' team ridge (300) a 58% win came in 81% of
 # the time; ridge 10 and a one-year half-life were calibrated (eval_builder.py) and had the best log-loss.
@@ -272,12 +278,41 @@ def goals_from_market(mu_h: float, mu_a: float, p_home: float, p_away: float) ->
     return float(math.exp(res.x[0])), float(math.exp(res.x[1]))
 
 
+def _builder(m: dict, tn: str, scope: str, tpl: tuple, legs: dict) -> dict:
+    hit = np.logical_and.reduce([legs[c][0] for c in tpl])
+    p = corrected(float(hit.mean()), BB_MISS)
+    indep = math.prod(corrected(float(legs[c][0].mean()), BB_MISS) for c in tpl)
+    return {"fixture_id": m["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}", "start": m["start"],
+            "day": m["start"][:10], "druzyna": tn, "scope": scope, "szablon": "+".join(tpl),
+            "legs": [{"fixture_id": m["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}", **legs[c][1],
+                      "p_model": round(corrected(float(legs[c][0].mean()), BB_MISS), 4)} for c in tpl],
+            "p_model": round(p, 4), "p_niezalezne": round(indep, 4),
+            "kurs_uczciwy": round(1 / p, 2) if p > 0 else None,
+            "kurs_min_z_podatkiem": round(1 / (p * TAX), 2) if p > 0 else None}
+
+
 def builders_for_match(m: dict, means: dict[str, float], alphas: dict[str, float], dims: list[str],
                        corr: np.ndarray) -> list[dict]:
-    """Bet builders for both teams of a match: shots, shots on target, more shots than the opponent,
-    scoring, winning (90 minutes), each count leg at least BB_LEG_P likely on its own."""
+    """Bet builders of a match: for each team shots, shots on target, more shots than the opponent, scoring,
+    winning or not losing (90 minutes); for the whole match the totals of shots and shots on target and
+    both teams scoring; each count leg at least BB_LEG_P likely on its own."""
     X = simulate(means, alphas, dims, corr, seed=int(m["fixture_id"]) % (2 ** 31))
     out = []
+    # whole-match legs (both teams together)
+    ts_mu, tc_mu = means["home_shots"] + means["away_shots"], means["home_sot"] + means["away_sot"]
+    a_t, _ = highest_k(ts_mu, alphas.get("total_shots", alphas["home_shots"]), BB_LEG_P, K_MAX["shots"], BB_MISS)
+    c_t, _ = highest_k(tc_mu, alphas.get("total_sot", alphas["home_sot"]), BB_LEG_P, K_MAX["sot"], BB_MISS)
+    both = (X["home_goals"] >= 1) & (X["away_goals"] >= 1)
+    match_legs = {
+        "TS": (X["home_shots"] + X["away_shots"] >= a_t, {"stat": "shots", "scope": "total", "line": a_t - 0.5, "side": "over",
+                                                           "opis": f"W meczu: co najmniej {a_t} {sp.plural(a_t, 'shots')}"}),
+        "TC": (X["home_sot"] + X["away_sot"] >= c_t, {"stat": "sot", "scope": "total", "line": c_t - 0.5, "side": "over",
+                                                       "opis": f"W meczu: co najmniej {c_t} {sp.plural(c_t, 'sot')}"}),
+        "B": (both, {"stat": "goals", "scope": "total", "line": None, "side": "btts", "opis": "Obie drużyny strzelą gola"}),
+    }
+    if ts_mu >= 2 * MIN_MEAN["shots"] and a_t >= 1 and c_t >= 1:
+        for tpl in MATCH_TEMPLATES:
+            out.append(_builder(m, "Cały mecz", "total", tpl, match_legs))
     for team, opp in (("home", "away"), ("away", "home")):
         tn = m["gospodarz"] if team == "home" else m["gosc"]
         on = m["gosc"] if team == "home" else m["gospodarz"]
@@ -298,29 +333,22 @@ def builders_for_match(m: dict, means: dict[str, float], alphas: dict[str, float
                                             "opis": f"{tn} strzeli gola"}),
             "W": (X[f"{team}_goals"] > X[f"{opp}_goals"], {"stat": "goals", "scope": team, "line": None, "side": "more",
                                                            "opis": f"{tn} wygra mecz (90 minut)"}),
+            "ND": (X[f"{team}_goals"] >= X[f"{opp}_goals"], {"stat": "goals", "scope": team, "line": None, "side": "win_draw",
+                                                             "opis": f"{tn} nie przegra (wygra albo remis)"}),
         }
         for tpl in SAFE_TEMPLATES + RESULT_TEMPLATES:
-            hit = np.logical_and.reduce([legs[c][0] for c in tpl])
-            p = corrected(float(hit.mean()), BB_MISS)
-            indep = math.prod(corrected(float(legs[c][0].mean()), BB_MISS) for c in tpl)
-            out.append({"fixture_id": m["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}", "start": m["start"],
-                        "day": m["start"][:10], "druzyna": tn, "scope": team, "szablon": tpl,
-                        "legs": [{"fixture_id": m["fixture_id"], "mecz": f"{m['gospodarz']} – {m['gosc']}", **legs[c][1],
-                                  "p_model": round(corrected(float(legs[c][0].mean()), BB_MISS), 4)} for c in tpl],
-                        "p_model": round(p, 4), "p_niezalezne": round(indep, 4),
-                        "kurs_uczciwy": round(1 / p, 2) if p > 0 else None,
-                        "kurs_min_z_podatkiem": round(1 / (p * TAX), 2) if p > 0 else None})
+            out.append(_builder(m, tn, team, tpl, legs))
     return out
 
 
 def pick_builders(cands: list[dict]) -> dict[str, list[dict]]:
-    """Per day, within BB_BAND: the likeliest 'safe' builder of each match (counts, more shots,
-    scoring) and the likeliest one with a win; the day's five likeliest safe ones and three
-    likeliest with a win."""
+    """Per day, within BB_BAND: the likeliest builder of each kind in each match (safe: counts, more
+    shots, scoring; with the result: a win or no defeat; whole match: totals and both teams scoring),
+    then the day's likeliest of each kind (BB_PER_KIND)."""
     days: dict[str, list[dict]] = {}
     for c in cands:
         if BB_BAND[0] <= c["p_model"] <= BB_BAND[1]:
-            c["rodzaj"] = "bezpieczny" if c["szablon"] in SAFE_TEMPLATES else "z_wynikiem"
+            c["rodzaj"] = KIND_OF[tuple(c["szablon"].split("+"))]
             days.setdefault(c["day"], []).append(c)
     out = {}
     for day, lst in days.items():
@@ -330,8 +358,7 @@ def pick_builders(cands: list[dict]) -> dict[str, list[dict]]:
             if key not in best or (c["p_model"], len(c["legs"])) > (best[key]["p_model"], len(best[key]["legs"])):
                 best[key] = c
         ranked = sorted(best.values(), key=lambda c: -c["p_model"])
-        chosen = ([c for c in ranked if c["rodzaj"] == "bezpieczny"][:7]
-                  + [c for c in ranked if c["rodzaj"] == "z_wynikiem"][:BB_PER_DAY - 7])
+        chosen = [c for kind, n in BB_PER_KIND.items() for c in [x for x in ranked if x["rodzaj"] == kind][:n]]
         for c in chosen:
             c["why"] = why_builder(c)
         out[day] = chosen
@@ -374,6 +401,7 @@ def run(analysis: dict, factors_of, fits: dict, goals_fit, df, leagues_shown: se
             for s in ("shots", "sot", "corners"):
                 means[f"{side}_{s}"] = m["srednie"][s][side] * f.get((s, side), 1.0)
                 alphas[f"{side}_{s}"] = fits[s].dispersion(side, cup)
+                alphas[f"total_{s}"] = fits[s].dispersion("total", cup)
             means[f"{side}_goals"] = goals_fit.mean(int(team), int(opp), home, cup)
             alphas[f"{side}_goals"] = goals_fit.dispersion(side, cup)
         # the bookmakers' match-winner chances, when there are any, set the goal means

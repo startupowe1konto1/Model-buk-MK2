@@ -777,6 +777,11 @@ def settle_leg(leg: dict, by_fix: dict) -> tuple[str | None, float | str | None]
         mine, theirs = (h, a) if leg["scope"] == "home" else (a, h)
         won = mine > theirs if leg["side"] == "win" else mine >= theirs
         return ("wygrana" if won else "przegrana"), f"{int(h)}:{int(a)}"
+    if leg["side"] == "btts":   # both teams score
+        return ("wygrana" if h >= 1 and a >= 1 else "przegrana"), f"{int(h)}:{int(a)}"
+    if leg["side"] == "win_draw":   # the team does not lose (goals after 90 minutes)
+        mine, theirs = (h, a) if leg["scope"] == "home" else (a, h)
+        return ("wygrana" if mine >= theirs else "przegrana"), f"{int(h)}:{int(a)}"
     if leg["side"] == "more":   # the team's count above the opponent's (a tie loses)
         mine, theirs = (h, a) if leg["scope"] == "home" else (a, h)
         return ("wygrana" if mine > theirs else "przegrana"), float(mine)

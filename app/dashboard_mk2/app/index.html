@@ -232,6 +232,7 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
           <li><b>Graj od</b> to kurs, od którego zakład po podatku 12% wychodzi na plus w dłuższej grze. Poniżej pojedynczy zakład też może wejść, ale na dziesiątkach takich zakładów traci się pieniądze.</li>
           <li>Wpisz kurs z Superbet: od razu widać, ile ten zakład jest wart na 100 zł w dłuższej grze. „Dodaj do zakładów” zapisuje go z Twoim kursem, a po meczu aplikacja podpowiada wynik.</li>
           <li>Dzień bez kuponu to normalny wynik. Sens ma tylko granie od kursu „graj od”; wtedy skuteczność tych zestawów (76% od 15.10) daje zysk.</li>
+          <li>Historia jest wzorcem, nie wyrocznią: mecz sprzed pół roku liczy się o połowę słabiej niż wczorajszy, a sprzed dwóch sezonów prawie wcale (ok. 6%). Do tego dochodzi forma z ostatnich 5 meczów, forma u siebie i na wyjeździe oraz to, ile rywal ostatnio dopuszcza. Zestawy „z wynikiem” i „obie strzelą” opierają gole na aktualnych kursach bukmacherów na wynik meczu.</li>
         </ul>
       </details>
     </div>
@@ -503,7 +504,7 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
   // ================================================================== bet builders: shared logic
   const bbKey = (b) => b.day + "|" + b.fixture_id + "|" + (b.rodzaj || "");
   const legWhat = (l) => { const s = l.opis || "", i = s.indexOf(": "); return i < 0 ? s : s.slice(i + 2); };
-  const kindName = (r) => (r === "z_wynikiem" ? "z wynikiem meczu" : "bezpieczniejszy");
+  const kindName = (r) => (r === "z_wynikiem" ? "z wynikiem meczu" : r === "meczowy" ? "cały mecz" : "bezpieczniejszy");
   // the verdict for a price: green from "graj od", amber within 5% below it, red further below
   function verdict(p, odds) {
     if (!(odds > 1)) return null;
@@ -592,7 +593,9 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       const ul = el("ul", "list");
       const fl = factorsLine(m, b.scope);
       if (fl) ul.append(el("li", null, fl));
-      if (m) {
+      if (m && b.scope === "total") {
+        ul.append(el("li", null, "Wg modelu w tym meczu: " + m.gosp + " średnio " + d1(m.m.shots[0]) + " strzałów i " + d1(m.m.sot[0]) + " celnych, " + m.gosc + " " + d1(m.m.shots[1]) + " i " + d1(m.m.sot[1]) + (m.gole ? "; gole " + d1(m.gole.srednie[0]) + " : " + d1(m.gole.srednie[1]) : "") + "."));
+      } else if (m) {
         const i = b.scope === "home" ? 0 : 1, oppI = 1 - i;
         ul.append(el("li", null, b.druzyna + " wg modelu w tym meczu: średnio " + d1(m.m.shots[i]) + " strzałów, " + d1(m.m.sot[i]) + " celnych" + (m.gole ? ", " + d1(m.gole.srednie[i]) + " gola" : "") + "; rywal: " + d1(m.m.shots[oppI]) + " strzałów."));
       }
@@ -668,9 +671,9 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     lead.replaceChildren();
     if (!bbs.length) lead.append("Na ten dzień model nie ma zestawu z szansą 45–80%. Zajrzyj do innych dni albo złóż własny zestaw w meczu.");
     else {
-      const safe = bbs.filter((b) => b.rodzaj !== "z_wynikiem").length;
+      const safe = bbs.filter((b) => b.rodzaj === "bezpieczny").length, res = bbs.filter((b) => b.rodzaj === "z_wynikiem").length, whole = bbs.length - safe - res;
       lead.append("Sprawdź w Superbet kurs każdego zestawu i wpisz go niżej. ", el("b", null, "Graj tylko od kursu „graj od”"), ", resztę odpuść. ");
-      lead.append(nOf(safe, "zestaw jest bezpieczniejszy", "zestawy są bezpieczniejsze", "zestawów jest bezpieczniejszych") + " (same statystyki), " + nOf(bbs.length - safe, "ma", "mają", "ma") + " w środku wynik meczu, więc wyższy kurs i mniejszą szansę.");
+      lead.append("Bezpieczniejsze (same statystyki): " + safe + " · z wynikiem meczu (wygrana albo „nie przegra”): " + res + " · na cały mecz (strzały i celne obu drużyn, obie strzelą): " + whole + ".");
     }
     const list = $("#dz-list");
     list.replaceChildren(...bbs.map((b) => bbCard(b)));
@@ -739,6 +742,8 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       const mine = n.scope === "home" ? pair[0] : n.scope === "away" ? pair[1] : pair[0] + pair[1];
       const theirs = n.scope === "home" ? pair[1] : pair[0];
       if (n.side === "more") return { r: mine > theirs ? "W" : "P", v: mine + ":" + theirs };
+      if (n.side === "btts") return { r: pair[0] >= 1 && pair[1] >= 1 ? "W" : "P", v: pair[0] + ":" + pair[1] };
+      if (n.side === "win_draw") return { r: mine >= theirs ? "W" : "P", v: pair[0] + ":" + pair[1] };
       if (mine === n.line) return { r: "Z", v: mine };
       return { r: (mine > n.line) === (n.side === "over") ? "W" : "P", v: mine };
     });

@@ -260,9 +260,23 @@ def test_builder_chance_is_above_the_product_for_related_legs():
              "away_shots": 9.0, "away_sot": 3.0, "away_corners": 3.8, "away_goals": 0.9}
     alphas = {d: (1e-4 if d.endswith("goals") else 0.04) for d in dims}
     out = ss.builders_for_match(m, means, alphas, dims, corr)
-    scm = next(b for b in out if b["scope"] == "home" and b["szablon"] == "SCM")
+    scm = next(b for b in out if b["scope"] == "home" and b["szablon"] == "S+C+M")
     assert scm["p_model"] > scm["p_niezalezne"]
     assert [l["side"] for l in scm["legs"]] == ["over", "over", "more"]
+    whole = next(b for b in out if b["scope"] == "total" and b["szablon"] == "TS+TC+B")
+    assert whole["druzyna"] == "Cały mecz" and [l["side"] for l in whole["legs"]] == ["over", "over", "btts"]
+    nd = next(b for b in out if b["scope"] == "away" and b["szablon"] == "S+M+ND")
+    assert nd["legs"][-1]["side"] == "win_draw" and nd["p_model"] < 0.5   # the weaker team rarely avoids defeat here
+
+
+def test_settle_leg_both_score_and_double_chance():
+    rows = pd.DataFrame({"fixture_id": [1, 1], "side": ["home", "away"], "goals": [1.0, 1.0], "total_shots": [10.0, 8.0]})
+    by_fix = {1: rows}
+    assert sd.settle_leg({"fixture_id": 1, "stat": "goals", "scope": "total", "side": "btts"}, by_fix) == ("wygrana", "1:1")
+    assert sd.settle_leg({"fixture_id": 1, "stat": "goals", "scope": "away", "side": "win_draw"}, by_fix) == ("wygrana", "1:1")
+    rows.loc[1, "goals"] = 0.0
+    assert sd.settle_leg({"fixture_id": 1, "stat": "goals", "scope": "total", "side": "btts"}, by_fix)[0] == "przegrana"
+    assert sd.settle_leg({"fixture_id": 1, "stat": "goals", "scope": "away", "side": "win_draw"}, by_fix)[0] == "przegrana"
 
 
 def test_settle_leg_more_than_the_opponent_and_goals():
