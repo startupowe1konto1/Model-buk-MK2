@@ -1,0 +1,23 @@
+{
+ "_comment": "Point-in-time factors on top of the team model (scripts/mk2/eval_factors.py, walk-forward 2025-08..2026-10, ~16k team rows per statistic). b = change of log expected count per one standard deviation of the factor; mean/sd standardize the factor. Factors are residuals log((y+0.5)/(mu+0.5)) against the model: form5 = team's last 5 matches, venue5 = team's last 5 at the same venue, oppc5 = what the opponent conceded in its last 5, ref = referee's shrunk mean residual (sum/(n+20)). Corners: no out-of-sample gain, so no factor. Line-ups and congestion: too small to use.",
+ "max_mult": 1.15,
+ "shots": {
+  "form5": {"b": 0.0195, "mean": -0.0654, "sd": 0.1696},
+  "venue5": {"b": 0.0116, "mean": -0.066, "sd": 0.1648},
+  "oppc5": {"b": 0.0296, "mean": -0.0661, "sd": 0.1752}
+ },
+ "sot": {
+  "form5": {"b": 0.0231, "mean": -0.1308, "sd": 0.253},
+  "venue5": {"b": 0.0161, "mean": -0.1317, "sd": 0.2502},
+  "oppc5": {"b": 0.0271, "mean": -0.1336, "sd": 0.2535}
+ },
+ "fouls": {
+  "form5": {"b": 0.0151, "mean": -0.0516, "sd": 0.1449},
+  "oppc5": {"b": 0.0218, "mean": -0.0516, "sd": 0.1462},
+  "ref": {"b": 0.0208, "mean": -0.0163, "sd": 0.0332}
+ },
+ "cards": {
+  "ref": {"b": 0.0481, "mean": -0.0649, "sd": 0.0787}
+ },
+ "gain_logloss": {"shots": 0.00274, "sot": 0.00151, "corners": 0.00038, "fouls": 0.00407, "cards": 0.00131}
+}

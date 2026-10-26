@@ -38,14 +38,14 @@ SURE_STATS = ("shots", "sot", "corners")
 # than even the corrected model said (eval_sure.py by expected count), so they are left out.
 MIN_MEAN = {"shots": 8.0, "sot": 2.5, "corners": 3.5}
 LAST_N = 10
-SURE_PER_DAY = 12
+SURE_PER_DAY = 0               # near-certain events are not shown any more (user, 2026-10-26)
 SURE_PER_MATCH = 2
 COUPON_BAND = (1.8, 2.6)    # total odds of the coupon made of near-certain events
 COUPON_LEGS = (3, 6)
 COUPON_POOL = 12
 BB_LEG_P = 0.80             # each count leg of a builder at least this likely on its own
 BB_BAND = (0.45, 0.80)      # joint chance of a builder worth showing
-BB_PER_DAY = 8
+BB_PER_DAY = 12
 # S shots, C shots on target, M more shots than the opponent, G scores, W wins (90 minutes)
 SAFE_TEMPLATES = ("SCM", "SCG", "SCMG")
 RESULT_TEMPLATES = ("SCW", "SMW")
@@ -163,6 +163,8 @@ def pick_sure(events: list[dict]) -> dict[str, list[dict]]:
     """The day's list: events with a price at or above the fair one first (best value first), then
     the most demanding ones; at most SURE_PER_MATCH per match and SURE_PER_DAY per day."""
     days: dict[str, list[dict]] = {}
+    if SURE_PER_DAY <= 0:
+        return {}
     for e in events:
         days.setdefault(e["day"], []).append(e)
     out = {}
@@ -328,8 +330,8 @@ def pick_builders(cands: list[dict]) -> dict[str, list[dict]]:
             if key not in best or (c["p_model"], len(c["legs"])) > (best[key]["p_model"], len(best[key]["legs"])):
                 best[key] = c
         ranked = sorted(best.values(), key=lambda c: -c["p_model"])
-        chosen = ([c for c in ranked if c["rodzaj"] == "bezpieczny"][:5]
-                  + [c for c in ranked if c["rodzaj"] == "z_wynikiem"][:BB_PER_DAY - 5])
+        chosen = ([c for c in ranked if c["rodzaj"] == "bezpieczny"][:7]
+                  + [c for c in ranked if c["rodzaj"] == "z_wynikiem"][:BB_PER_DAY - 7])
         for c in chosen:
             c["why"] = why_builder(c)
         out[day] = chosen
@@ -361,6 +363,7 @@ def run(analysis: dict, factors_of, fits: dict, goals_fit, df, leagues_shown: se
 
     dims, corr = load_corr()
     cands = []
+    gole: dict[int, dict] = {}
     for m in shown["mecze"]:
         if m.get("min_n", 0) < sp.MIN_TEAM_MATCHES:
             continue
@@ -378,8 +381,10 @@ def run(analysis: dict, factors_of, fits: dict, goals_fit, df, leagues_shown: se
             p_h, _, p_a = m["wynik_rynek"]
             means["home_goals"], means["away_goals"] = goals_from_market(means["home_goals"], means["away_goals"], p_h, p_a)
             alphas["home_goals"] = alphas["away_goals"] = 1e-4
+        gole[m["fixture_id"]] = {"srednie": [round(means["home_goals"], 2), round(means["away_goals"], 2)],
+                                 "z_rynku": bool(m.get("wynik_rynek"))}
         for b in builders_for_match(m, means, alphas, dims, corr):
             b["gole_z_rynku"] = bool(m.get("wynik_rynek"))
             cands.append(b)
     return {"pewne": pick_sure(events), "kupon_pewne": {d: k for d, k in coupons.items() if k},
-            "bb": pick_builders(cands)}
+            "bb": pick_builders(cands), "gole": gole, "bb_wymiary": dims, "bb_korelacje": np.round(corr, 4).tolist()}

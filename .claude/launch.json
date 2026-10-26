@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mk2-app",
+      "runtimeExecutable": "C:/Users/mkoni/Documents/Model-Buk-Merged-work/app/.venv/Scripts/python.exe",
+      "runtimeArgs": ["C:/Users/mkoni/Documents/Model-Buk-Merged-work/app/dashboard_mk2/tools/serve_app.py", "C:/Users/mkoni/Documents/Model-Buk-Merged-work/app/dashboard_mk2/app", "8765"],
+      "port": 8765
+    }
+  ]
+}

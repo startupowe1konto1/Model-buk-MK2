@@ -48,6 +48,7 @@ sys.path.insert(0, str(HERE.parents[1] / "src"))
 
 import stats_model as sm  # noqa: E402
 import stats_picks as sp  # noqa: E402
+import stats_factors as sf  # noqa: E402
 import stats_sure as ss  # noqa: E402
 from model_buk.ingestion.api_football_tables import (  # noqa: E402
     MATCH_COLUMNS,
@@ -592,6 +593,7 @@ def finished_results(df: pd.DataFrame, days_back: int = 21) -> dict:
         out[str(int(fid))] = {
             "start": h["kickoff"].isoformat(), "liga_id": int(h["league_id"]), "gosp": h["team"], "gosc": a["team"],
             "s": {s: [_r(h[c], 0), _r(a[c], 0)] for s, c in sm.STATS.items()},
+            "gole": [_r(h["goals"], 0), _r(a["goals"], 0)],   # after 90 minutes; missing for AET/PEN
         }
     return out
 
@@ -949,6 +951,8 @@ def main() -> None:
     upcoming = [f for f in upcoming if f["league_id"] in MODEL_LEAGUES]
     odds = latest_odds(od, [f["fixture_id"] for f in upcoming])
     analysis = analysis_for(upcoming, fits, odds, team_match_counts(df, now))
+    # recent form, form at the venue, what the opponent concedes lately, the referee (eval_factors.py)
+    sf.apply(analysis, fits, df, {f["fixture_id"]: f["referee"] for f in upcoming})
     pooled = factors_with_fallback(analysis)
     factors = group_factors(analysis, pooled)
     fac = lambda m: factors[group_of(m["liga_id"])]  # noqa: E731
@@ -1024,7 +1028,7 @@ def main() -> None:
     # Since v5 almost no coupon paid, so the old value-only coupon of the day was missing for days.
     ready_pool: dict[str, list[dict]] = {}
     for c in allowed:
-        if c["n_buk"] >= sp.MIN_BOOKS and by_match[c["fixture_id"]]["start"] > made:
+        if c["n_buk"] >= sp.MIN_BOOKS and by_match[c["fixture_id"]]["start"] > made and c["side"] != "win_draw":
             ready_pool.setdefault(c["day"], []).append(c)
     ready_of_day: dict[str, dict[str, list[dict]]] = {kind: {} for kind in sp.READY}
     for day, pool in ready_pool.items():
@@ -1141,6 +1145,8 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         }
         rec["wyr"] = highlights(rec, teams)
         rec["n"] = [m.get("n_gosp"), m.get("n_gosc")]
+        rec["czynniki"] = m.get("czynniki")
+        rec["gole"] = (extra.get("gole") or {}).get(m["fixture_id"])
         for key in ("home_id", "away_id"):
             rec.pop(key)
         matches.append(rec)
@@ -1340,6 +1346,9 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
                       "alpha_total_puchary": round(f.dispersion("total", True), 5)}
                   for s, f in fits.items()},
         "podatek": 0.88,
+        "bb": {"wymiary": extra.get("bb_wymiary"), "korelacje": extra.get("bb_korelacje"), "miss": ss.BB_MISS,
+               "noga_p": ss.BB_LEG_P, "widelki": list(ss.BB_BAND)},
+        "czynniki": {k: v for k, v in sf.load_config().items() if not k.startswith("_")},
         "mecze": len(matches),
         "z_kursami": sum(1 for m in matches if m["kursy"]),
     }
