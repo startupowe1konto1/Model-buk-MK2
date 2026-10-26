@@ -48,6 +48,7 @@ sys.path.insert(0, str(HERE.parents[1] / "src"))
 
 import stats_model as sm  # noqa: E402
 import stats_picks as sp  # noqa: E402
+import stats_excel as sx  # noqa: E402
 import stats_factors as sf  # noqa: E402
 import stats_sure as ss  # noqa: E402
 from model_buk.ingestion.api_football_tables import (  # noqa: E402
@@ -1361,8 +1362,9 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     write("st_rozliczenia.json", finished)
     write("st_plan.json", plan_items())
     write("st_meta.json", meta)
+    n_xlsx = sx.write_workbook(dest / "typometr.xlsx", picks_out, made)
     print(f"export: {len(matches)} matches, {len(teams)} teams, {sum(len(v['top']) for v in picks_out.values())} picks, "
-          f"{len(results)} days of results -> {dest}")
+          f"{len(results)} days of results, {n_xlsx} builders in the workbook -> {dest}")
 
 
 def _pick(c: dict) -> dict:

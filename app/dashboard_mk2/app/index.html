@@ -242,7 +242,7 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
   <!-- WYNIKI -->
   <section class="page" id="pg-wyniki" role="tabpanel" aria-labelledby="t-wyniki" hidden>
     <div class="card">
-      <div class="head"><h2>Jak to idzie</h2><span class="c-muted">bet buildery od 15.10, stawka 100 zł na każdy</span></div>
+      <div class="head"><h2>Jak to idzie</h2><div class="row"><span class="c-muted">bet buildery od 15.10, stawka 100 zł na każdy</span><button class="btn line sm" id="wy-xlsx" type="button">Pobierz arkusz Excel</button><span id="wy-xlsx-msg"></span></div></div>
       <div class="tiles" id="wy-tiles"></div>
       <div id="wy-chart" style="position: relative"></div>
       <div class="legend" id="wy-legend"></div>
@@ -430,6 +430,7 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
   async function connect() {
     const cl = window.claude;
     if (!cl || typeof cl.use !== "function") { readOnly("Ta kopia strony nie ma połączenia z bazą: możesz przeglądać, ale zakłady się nie zapiszą."); return; }
+    cl.use("downloads").then((d) => { S.downloads = d; render(); }, () => { S.downloads = null; });
     const [db, user] = await Promise.all([cl.use("db"), cl.use("user")]);
     S.user = user;
     if (!db) { readOnly("Tryb tylko do odczytu: zaloguj się na claude.ai, żeby zapisywać zakłady."); return; }
@@ -514,7 +515,7 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
   // what came in for a leg (after the match)
   function legCame(l) {
     if (empty(l.wartosc)) return "";
-    if (l.stat === "goals" && l.side === "more") return "wynik " + l.wartosc;
+    if (l.stat === "goals" && l.side === "more") return "strzelili " + int(l.wartosc);
     if (l.side === "more") return "padło " + int(l.wartosc);
     if (typeof l.wartosc === "string") return "wynik " + l.wartosc;
     return "padło " + int(l.wartosc) + (empty(l.line) ? "" : " (potrzeba " + Math.round(l.line + 0.5) + ")");
@@ -879,6 +880,21 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       } },
     ], "key");
   }
+  // the Excel workbook (built by the pipeline, published next to the page) handed to the viewer to save
+  $("#wy-xlsx").addEventListener("click", async () => {
+    const msg = $("#wy-xlsx-msg");
+    if (!S.downloads) { msg.className = "err"; msg.textContent = "Pobieranie działa po zalogowaniu na claude.ai."; return; }
+    msg.className = "c-muted"; msg.textContent = "Przygotowuję…";
+    try {
+      const r = await fetch("data/typometr.xlsx", { cache: "no-cache" });
+      if (!r.ok) throw new Error(String(r.status));
+      const blob = await r.blob();
+      const name = "Typometr-" + todayKey() + ".xlsx";
+      try { await S.downloads.save({ filename: name, data: blob }); }
+      catch (e) { if (e && e.code === "cancelled") throw e; await S.downloads.save({ filename: name, data: await blob.arrayBuffer() }); }
+      msg.className = "saved"; msg.textContent = "Gotowe";
+    } catch (e) { msg.className = "err"; msg.textContent = e && e.code === "cancelled" ? "" : "Nie udało się pobrać arkusza."; }
+  });
   $("#zk-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const msg = $("#zk-msg");

@@ -92,8 +92,15 @@ def apply(analysis: dict, fits: dict, df: pd.DataFrame, referees: dict[int, str 
     MAX_MULT = float(cfg.get("max_mult", 1.15))
     stats_ = [s for s in cfg if s in fits and isinstance(cfg[s], dict) and "b" in next(iter(cfg[s].values()), {})]
     hist = {s: Factors(df, fits[s], s) for s in stats_}
-    # percentages against the typical team (the factor's mean), so 0 reads as "as usual"
-    pct = lambda x, c: None if x is None else round((math.exp(x - c["mean"]) - 1) * 100)  # noqa: E731
+    # percentages against the typical team (the factor's mean residual), so 0 reads as "as usual"; a factor
+    # the statistic does not use for the adjustment is still shown, against the typical residual
+    typical = {"shots": -0.066, "sot": -0.132, "corners": -0.154, "fouls": -0.051, "cards": -0.193}
+
+    def pct(x, s, f):
+        if x is None:
+            return None
+        mean = (cfg[s].get(f) or {}).get("mean", typical.get(s, 0.0))
+        return round((math.exp(x - mean) - 1) * 100)
     for m in analysis["mecze"]:
         ref = referees.get(m["fixture_id"])
         rec: dict = {"sedzia": ref}
@@ -103,12 +110,10 @@ def apply(analysis: dict, fits: dict, df: pd.DataFrame, referees: dict[int, str 
                 v = hist[s].values(int(team), int(opp), home, ref)
                 mult = multiplier(cfg[s], v)
                 m["srednie"][s][side] *= mult
-                c = cfg[s]
-                entry = {"mult": round(mult, 3), "forma": pct(v["form5"], c.get("form5", c.get("oppc5"))),
-                         "forma_tu": pct(v["venue5"], c.get("venue5", c.get("form5", c.get("oppc5")))),
-                         "rywal_dopuszcza": pct(v["oppc5"], c.get("oppc5", c.get("form5")))}
-                if "ref" in c:
-                    entry["sedzia"] = pct(v["ref"], c["ref"])
+                entry = {"mult": round(mult, 3), "forma": pct(v["form5"], s, "form5"), "forma_tu": pct(v["venue5"], s, "venue5"),
+                         "rywal_dopuszcza": pct(v["oppc5"], s, "oppc5")}
+                if "ref" in cfg[s]:
+                    entry["sedzia"] = pct(v["ref"], s, "ref")
                     entry["sedzia_n"] = v["ref_n"]
                 rec[side][s] = entry
         for s in stats_:
