@@ -880,20 +880,125 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       } },
     ], "key");
   }
-  // the Excel workbook (built by the pipeline, published next to the page) handed to the viewer to save
+  // ================================================================== the Excel workbook
+  // Built in the browser (ExcelJS, loaded on first use) in the style of the user's own experiment sheet:
+  // every proposed builder with its settlement, yellow columns for the user's price, stake and status
+  // (filled from the ledger where the builder was saved), the sheet's formulas, a summary, a simulation.
+  const XLSX_URL = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+  function loadExcelJs() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    return new Promise((res, rej) => { const s = document.createElement("script"); s.src = XLSX_URL; s.onload = () => res(window.ExcelJS); s.onerror = () => rej(new Error("exceljs")); document.head.append(s); });
+  }
+  const PLN = '#,##0.00 "PLN";[Red](#,##0.00 "PLN")', PCTF = "0.0%";
+  const ARIAL = (extra) => Object.assign({ name: "Arial", size: 10 }, extra || {});
+  const FILL = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+  const excelDate = (key) => { const [y, m, d] = (key || todayKey()).split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+  async function buildWorkbook() {
+    const ExcelJS = await loadExcelJs();
+    const wb = new ExcelJS.Workbook();
+    wb.calcProperties.fullCalcOnLoad = true;
+    const ws = wb.addWorksheet("Zestawy", { views: [{ state: "frozen", xSplit: 3, ySplit: 9 }] });
+    const FIRST = 10, LAST = 5000;
+    const set = (addr, value, opts) => { const c = ws.getCell(addr); c.value = value; c.font = ARIAL(opts && opts.font); if (opts && opts.fill) c.fill = FILL(opts.fill); if (opts && opts.numFmt) c.numFmt = opts.numFmt; return c; };
+    set("A1", "Typometr: bet buildery", { font: { bold: true, size: 14 } });
+    set("A2", "Stan z " + when(new Date().toISOString()) + ". Żółte pola uzupełniasz ręcznie (kurs z Superbet, stawka, status); pozostałe kolumny liczą się same. Zakłady zapisane w aplikacji są już wpisane.");
+    [["A4", "Założenia"], ["F4", "Zestawy z aplikacji"], ["I4", "Twoje zakłady"]].forEach(([a, t]) => set(a, t, { font: { bold: true }, fill: "FFEAF2F8" }));
+    set("A5", "Podatek od stawki"); set("C5", 0.12, { fill: "FFFFF2CC", numFmt: PCTF });
+    set("A6", "Stawka na papierze (zł)"); set("C6", 100, { fill: "FFFFF2CC", numFmt: '#,##0.00 "PLN"' });
+    const rng = (c) => c + FIRST + ":" + c + LAST;
+    [["F5", "Rozliczone", "G5", 'COUNTIF(' + rng("K") + ',"Weszło")+COUNTIF(' + rng("K") + ',"Nie weszło")', null],
+      ["F6", "Weszło", "G6", 'COUNTIF(' + rng("K") + ',"Weszło")', null],
+      ["F7", "Skuteczność", "G7", 'IFERROR(G6/G5,"")', PCTF],
+      ["F8", "Zysk przy kursie graj od", "G8", "SUM(" + rng("M") + ")", PLN],
+      ["I5", "Rozliczone", "J5", 'COUNTIF(' + rng("P") + ',"Wygrany")+COUNTIF(' + rng("P") + ',"Przegrany")+COUNTIF(' + rng("P") + ',"Zwrot")', null],
+      ["I6", "Postawione", "J6", 'SUMIF(' + rng("P") + ',"Wygrany",' + rng("O") + ')+SUMIF(' + rng("P") + ',"Przegrany",' + rng("O") + ')+SUMIF(' + rng("P") + ',"Zwrot",' + rng("O") + ')', PLN],
+      ["I7", "Zysk / strata", "J7", "SUM(" + rng("R") + ")", PLN],
+      ["I8", "ROI", "J8", 'IFERROR(J7/J6,"")', PCTF]].forEach(([la, label, va, f, fmt]) => { set(la, label); set(va, { formula: f }, { font: { bold: true }, numFmt: fmt || undefined }); });
+    const headers = ["ID", "Data", "Godzina", "Mecz", "Drużyna", "Zdarzenia", "Rodzaj", "Szansa (model)", "Uczciwy kurs", "Graj od", "Wynik wg aplikacji", "Co padło", 'Zysk przy "graj od"', "Twój kurs", "Stawka", "Status", "Zwrot", "Zysk / strata", "Próg BE", "Przewaga", "EV"];
+    headers.forEach((h, i) => { const c = ws.getCell(9, i + 1); c.value = h; c.font = ARIAL({ bold: true, color: { argb: "FFFFFFFF" } }); c.fill = FILL("FF17324D"); c.alignment = { vertical: "middle", wrapText: true }; });
+    for (let r = FIRST; r <= LAST; r++) {
+      const f = (col, formula, fmt) => { const c = ws.getCell(col + r); c.value = { formula }; c.font = ARIAL(); if (fmt) c.numFmt = fmt; };
+      f("M", 'IF(K' + r + '="Weszło",$C$6*((1-$C$5)*J' + r + '-1),IF(K' + r + '="Nie weszło",-$C$6,""))', PLN);
+      f("Q", 'IF(OR(P' + r + '="",P' + r + '="Oczekuje",O' + r + '=""),"",IF(P' + r + '="Wygrany",O' + r + '*(1-$C$5)*N' + r + ',IF(P' + r + '="Zwrot",O' + r + ',0)))', PLN);
+      f("R", 'IF(Q' + r + '="","",Q' + r + '-O' + r + ')', PLN);
+      f("S", 'IFERROR(1/((1-$C$5)*N' + r + '),"")', PCTF);
+      f("T", 'IF(OR(N' + r + '="",H' + r + '=""),"",H' + r + '-S' + r + ')', PCTF);
+      f("U", 'IF(OR(N' + r + '="",O' + r + '=""),"",O' + r + '*(H' + r + '*(1-$C$5)*N' + r + '-1))', PLN);
+      ["N", "O", "P"].forEach((col) => { const c = ws.getCell(col + r); c.fill = FILL("FFFFF2CC"); c.font = ARIAL(); });
+      ws.getCell("N" + r).numFmt = "0.00"; ws.getCell("O" + r).numFmt = '#,##0.00 "PLN"';
+      ws.getCell("N" + r).dataValidation = { type: "decimal", operator: "greaterThanOrEqual", allowBlank: true, formulae: [1.01] };
+      ws.getCell("O" + r).dataValidation = { type: "decimal", operator: "greaterThanOrEqual", allowBlank: true, formulae: [0.01] };
+      ws.getCell("P" + r).dataValidation = { type: "list", allowBlank: true, formulae: ['"Oczekuje,Wygrany,Przegrany,Zwrot"'] };
+    }
+    const all = st("typy") || {}, rows = [];
+    Object.keys(all).sort().forEach((day) => (all[day].bb || []).forEach((b) => rows.push(b)));
+    rows.sort((a, b) => a.start.localeCompare(b.start) || a.mecz.localeCompare(b.mecz, "pl"));
+    const status = (z) => ({ W: "Wygrany", P: "Przegrany", Z: "Zwrot" }[z.wynik] || "Oczekuje");
+    const used = new Set();
+    let r = FIRST;
+    rows.forEach((b, i) => {
+      const lg = ledgerFor(b); if (lg) used.add(lg.id);
+      const vals = [i + 1, excelDate(dayKey(b.start)), hm(b.start), b.mecz, b.druzyna, b.legs.map(legWhat).join(" + "), kindName(b.rodzaj), b.p_model, b.kurs_uczciwy, b.kurs_min_z_podatkiem,
+        b.wynik === "wygrana" ? "Weszło" : b.wynik === "przegrana" ? "Nie weszło" : "", b.legs.map((l) => (legCame(l) ? legWhat(l) + ": " + legCame(l) : "")).filter(Boolean).join(" · "),
+        null, lg ? Number(lg.kurs) : null, lg ? Number(lg.stawka) : null, lg ? status(lg) : null];
+      vals.forEach((v, j) => { if (v === null || v === undefined) return; const c = ws.getCell(r, j + 1); c.value = v; c.font = ARIAL(); });
+      ws.getCell("B" + r).numFmt = "DD.MM.YYYY"; ws.getCell("H" + r).numFmt = PCTF; ws.getCell("I" + r).numFmt = "0.00"; ws.getCell("J" + r).numFmt = "0.00";
+      r++;
+    });
+    (S.zaklady || []).filter((z) => !used.has(z.id)).sort((a, b) => (a.data || "").localeCompare(b.data || "")).forEach((z) => {
+      const p = Number(z.szansa) || null;
+      const vals = [r - FIRST + 1, excelDate(z.data), "", z.mecz || "", "", z.opis || "", "własny zestaw", p, p ? 1 / p : null, p ? minOdds(p) : null, "", "", null, Number(z.kurs) || null, Number(z.stawka) || null, status(z)];
+      vals.forEach((v, j) => { if (v === null || v === undefined) return; const c = ws.getCell(r, j + 1); c.value = v; c.font = ARIAL(); });
+      ws.getCell("B" + r).numFmt = "DD.MM.YYYY"; ws.getCell("H" + r).numFmt = PCTF; ws.getCell("I" + r).numFmt = "0.00"; ws.getCell("J" + r).numFmt = "0.00";
+      r++;
+    });
+    const widths = { A: 5, B: 11, C: 8, D: 30, E: 20, F: 60, G: 18, H: 11, I: 10, J: 9, K: 13, L: 50, M: 15, N: 10, O: 11, P: 11, Q: 13, R: 13, S: 10, T: 10, U: 13 };
+    Object.entries(widths).forEach(([col, w]) => { ws.getColumn(col).width = w; });
+    ws.autoFilter = "A9:U" + Math.max(FIRST, r - 1);
+    // Symulacja
+    const sim = wb.addWorksheet("Symulacja");
+    const sset = (addr, value, opts) => { const c = sim.getCell(addr); c.value = value; c.font = ARIAL(opts && opts.font); if (opts && opts.fill) c.fill = FILL(opts.fill); if (opts && opts.numFmt) c.numFmt = opts.numFmt; };
+    sset("A1", "Symulacja strategii", { font: { bold: true, size: 14 } });
+    sset("A2", "Ile daje stała stawka na N zestawów przy danym kursie i skuteczności. Zmień żółte założenia.");
+    [["Budżet", "B4", 1000, '#,##0.00 "PLN"', true], ["Liczba zestawów", "B5", 10, "0", true], ["Stawka na zestaw", "B6", { formula: "B4/B5" }, '#,##0.00 "PLN"', false],
+      ["Średni kurs", "B7", 1.55, "0.00", true], ["Podatek od stawki", "B8", { formula: "Zestawy!C5" }, PCTF, false], ["Skuteczność (szacunek)", "B9", 0.76, PCTF, true]]
+      .forEach(([label, addr, val, fmt, inp], i) => { sset("A" + (4 + i), label); sset(addr, val, { numFmt: fmt, fill: inp ? "FFFFF2CC" : null }); });
+    [["Próg skuteczności (zero po podatku)", "1/((1-B8)*B7)", PCTF], ["Zysk na wygranym zestawie", "B6*((1-B8)*B7-1)", PLN], ["Strata na przegranym", "-B6", PLN],
+      ["Minimalna liczba wygranych, żeby nie stracić", "ROUNDUP(B5/((1-B8)*B7),0)", "0"], ["Oczekiwany wynik", "B4*(B9*(1-B8)*B7-1)", PLN], ["Oczekiwane ROI", "F8/B4", PCTF],
+      ["Odchylenie standardowe wyniku", "B6*(1-B8)*B7*SQRT(B5*B9*(1-B9))", PLN], ["Szansa zakończenia na plusie", 'SUMIF(C15:C65,">0",B15:B65)', PCTF]]
+      .forEach(([label, f, fmt], i) => { sset("E" + (4 + i), label); sset("F" + (4 + i), { formula: f }, { numFmt: fmt, font: { bold: true } }); });
+    ["Wygrane zestawy", "Prawdopodobieństwo", "Wynik całkowity"].forEach((h, j) => { const c = sim.getCell(14, j + 1); c.value = h; c.font = ARIAL({ bold: true, color: { argb: "FFFFFFFF" } }); c.fill = FILL("FF17324D"); });
+    for (let k = 0; k <= 50; k++) {
+      const rr = 15 + k;
+      sset("A" + rr, k); sset("B" + rr, { formula: "IF(A" + rr + "<=$B$5,COMBIN($B$5,A" + rr + ")*$B$9^A" + rr + "*(1-$B$9)^($B$5-A" + rr + '),"")' }, { numFmt: "0.00%" });
+      sset("C" + rr, { formula: "IF(A" + rr + "<=$B$5,A" + rr + '*$B$6*(1-$B$8)*$B$7-$B$4,"")' }, { numFmt: PLN });
+    }
+    [["A", 34], ["B", 18], ["C", 18], ["E", 40], ["F", 16]].forEach(([col, w]) => { sim.getColumn(col).width = w; });
+    // Jak korzystać
+    const how = wb.addWorksheet("Jak korzystać");
+    ["Jak korzystać z arkusza", "",
+      "1. „Zestawy” to wszystkie bet buildery z Typometru, od najstarszego. Szansa, uczciwy kurs i „graj od” są z modelu; „Wynik wg aplikacji” i „Co padło” wypełniają się po meczu.",
+      "2. Zakłady zapisane w aplikacji są już wpisane w żółtych kolumnach (kurs, stawka, status). Resztę możesz uzupełnić ręcznie: Zwrot, Zysk, Próg BE, Przewaga i EV policzą się same.",
+      "3. Przewaga = szansa z modelu minus próg BE przy Twoim kursie. Dodatnia znaczy, że kurs jest co najmniej „graj od”.",
+      "4. Podsumowanie u góry: ile zestawów weszło i jaki byłby wynik przy kursie „graj od” (100 zł każdy), obok wynik Twoich zakładów.",
+      "5. „Symulacja” pokazuje, czego spodziewać się po N zestawach przy stałej stawce: próg skuteczności, oczekiwany wynik i rozrzut.",
+      "6. Plik to kopia na dziś. Zmiany w nim nie wracają do aplikacji; nowy stan pobierzesz przyciskiem w zakładce Wyniki.",
+      "", "Podatek 12% od stawki (ustawa o grach hazardowych, art. 73–74)."].forEach((line, i) => { const c = how.getCell("A" + (i + 1)); c.value = line; c.font = ARIAL(i === 0 ? { bold: true, size: 14 } : null); });
+    how.getColumn("A").width = 130;
+    const buf = await wb.xlsx.writeBuffer();
+    return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
   $("#wy-xlsx").addEventListener("click", async () => {
     const msg = $("#wy-xlsx-msg");
     if (!S.downloads) { msg.className = "err"; msg.textContent = "Pobieranie działa po zalogowaniu na claude.ai."; return; }
     msg.className = "c-muted"; msg.textContent = "Przygotowuję…";
     try {
-      const r = await fetch("data/typometr.xlsx", { cache: "no-cache" });
-      if (!r.ok) throw new Error(String(r.status));
-      const blob = await r.blob();
+      const blob = await buildWorkbook();
       const name = "Typometr-" + todayKey() + ".xlsx";
       try { await S.downloads.save({ filename: name, data: blob }); }
       catch (e) { if (e && e.code === "cancelled") throw e; await S.downloads.save({ filename: name, data: await blob.arrayBuffer() }); }
       msg.className = "saved"; msg.textContent = "Gotowe";
-    } catch (e) { msg.className = "err"; msg.textContent = e && e.code === "cancelled" ? "" : "Nie udało się pobrać arkusza."; }
+    } catch (e) { msg.className = "err"; msg.textContent = e && e.code === "cancelled" ? "" : "Nie udało się przygotować arkusza."; }
   });
   $("#zk-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -1166,6 +1271,7 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
   }
   const h0 = (location.hash || "").slice(1);
   if (["wyniki", "mecze"].includes(h0)) S.page = h0;
+  if (window.__writes) window.__tm = { buildWorkbook, S };   // the local test double only: lets the preview exercise the workbook
   load();
   connect();
 })();
