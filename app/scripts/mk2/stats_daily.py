@@ -126,6 +126,8 @@ def init_dbs() -> tuple[sqlite3.Connection, sqlite3.Connection, sqlite3.Connecti
     pr.execute("""create table if not exists predictions (
         made_at text, fixture_id integer, stat text, mu_home real, mu_away real, alpha real, alpha_total real,
         k_home real, k_away real, k_total real, primary key (made_at, fixture_id, stat))""")
+    if "poziom" not in [r[1] for r in pr.execute("pragma table_info(predictions)")]:
+        pr.execute("alter table predictions add column poziom real")    # the level multiplier inside k (1 = none)
     pr.execute("""create table if not exists picks (
         made_at text, day text, fixture_id integer, stat text, scope text, line real, side text,
         p_model real, p_market real, odd real, bookmaker text, ev real, ev_tax real, rank integer,
@@ -776,6 +778,49 @@ def group_of(league_id: int) -> str:
     return "puchary" if league_id in CUPS else "ligi"
 
 
+LEVEL_CFG = HERE.parents[1] / "config" / "mk2" / "poziom.json"
+
+
+def level_multipliers(pr: sqlite3.Connection, df: pd.DataFrame, now: dt.datetime, cfg: dict | None = None) -> dict[str, float]:
+    """This season's level against the forecasts (user, 2026-11-03: the model should catch up with the season
+    faster).  For each statistic listed in config/mk2/poziom.json: the counts of the matches settled in the last
+    okno_dni days against the means forecast before their kick-off (mu x k, an earlier correction taken out), as a log
+    ratio shrunk with n0 team-matches.  eval_level.py decides which statistics get it (walk-forward from 14.10: only
+    cards clearly gained; shots, shots on target and corners gained too little to tell yet)."""
+    if cfg is None:
+        try:
+            cfg = json.loads(LEVEL_CFG.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+    wanted = [s for s in cfg.get("statystyki", []) if s in sm.STATS]
+    if not wanted:
+        return {}
+    n0 = float(cfg.get("n0", 200))
+    now_ts = pd.Timestamp(now)
+    rec = df[(df["kickoff"] >= now_ts - pd.Timedelta(days=float(cfg.get("okno_dni", 28))))
+             & (df["kickoff"] < now_ts - pd.Timedelta(hours=3))]
+    kick = rec.groupby("fixture_id")["kickoff"].first()
+    lvl = "coalesce(poziom, 1.0)" if "poziom" in [r[1] for r in pr.execute("pragma table_info(predictions)")] else "1.0"
+    out = {}
+    for s in wanted:
+        y = rec.pivot_table(index="fixture_id", columns="side", values=sm.STATS[s], aggfunc="first")
+        y = y.dropna(subset=[c for c in ("home", "away") if c in y.columns]) if {"home", "away"} <= set(y.columns) else y.iloc[0:0]
+        if y.empty:
+            continue
+        q = pd.read_sql_query(f"select made_at, fixture_id, mu_home * k_home / {lvl} as mh, mu_away * k_away / {lvl} as ma "
+                              f"from predictions where stat = ? and fixture_id in ({','.join(str(int(i)) for i in y.index)})",
+                              pr, params=[s])
+        q["made"] = pd.to_datetime(q["made_at"], utc=True)
+        q = q[q["made"] < q["fixture_id"].map(kick)].sort_values("made").drop_duplicates("fixture_id", keep="last")
+        if q.empty:
+            continue
+        q = q.join(y, on="fixture_id")
+        n = 2 * len(q)
+        b = n / (n + n0) * math.log((q["home"].sum() + q["away"].sum()) / (q["mh"].sum() + q["ma"].sum()))
+        out[s] = round(math.exp(b), 4)
+    return out
+
+
 def group_factors(analysis: dict, pooled: dict) -> dict[str, dict[tuple[str, str], float]]:
     """Alignment factors for the cups and for the leagues separately.
 
@@ -1338,12 +1383,21 @@ def daily(args: argparse.Namespace) -> None:
     sf.apply(analysis, fits, df, {f["fixture_id"]: f["referee"] for f in upcoming})
     pooled = factors_with_fallback(analysis)
     factors = group_factors(analysis, pooled)
+    # this season's level where the record shows the forecasts off (eval_level.py; config/mk2/poziom.json)
+    levels = level_multipliers(pr, df, now)
+    for gf in factors.values():
+        for key in list(gf):
+            if key[0] in levels:
+                gf[key] *= levels[key[0]]
+    if levels:
+        print("level: " + ", ".join(f"{s} x{v:.3f}" for s, v in levels.items()))
     fac = lambda m: factors[group_of(m["liga_id"])]  # noqa: E731
     made = iso(now)
-    pr.executemany("insert or replace into predictions values (?,?,?,?,?,?,?,?,?,?)", [
+    pr.executemany("insert or replace into predictions (made_at, fixture_id, stat, mu_home, mu_away, alpha, alpha_total, "
+                   "k_home, k_away, k_total, poziom) values (?,?,?,?,?,?,?,?,?,?,?)", [
         (made, m["fixture_id"], s, m["srednie"][s]["home"], m["srednie"][s]["away"],
          fits[s].dispersion("home", m["liga_id"] in CUPS), fits[s].dispersion("total", m["liga_id"] in CUPS),
-         fac(m)[(s, "home")], fac(m)[(s, "away")], fac(m)[(s, "total")])
+         fac(m)[(s, "home")], fac(m)[(s, "away")], fac(m)[(s, "total")], levels.get(s, 1.0))
         for m in analysis["mecze"] for s in sm.STATS])
     pr.commit()
     print(f"forecast: {len(upcoming)} upcoming fixtures, {sum(1 for m in analysis['mecze'] if m['linie'])} with odds")
@@ -1451,6 +1505,7 @@ def daily(args: argparse.Namespace) -> None:
     save_squads(kadry, made)
     extra = ss.run(analysis, fac, fits, goals_fit, df, set(SHOWN), set(CUPS), made, odds, cut, zawodnicy)
     extra["obciecie"], extra["n_kursow"] = cut, n_prices
+    extra["poziom"] = levels
     extra["braki"] = absences(analysis["mecze"], absent, kadry)
     print(f"pewniaczki: {sum(len(v) for v in extra['pewne'].values())}, bet buildery: "
           f"{sum(len(v) for v in extra['bb'].values())}, kupony z pewniaczków: {len(extra['kupon_pewne'])}")
@@ -1796,6 +1851,7 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
                "noga_p": ss.BB_LEG_P, "widelki": list(ss.BB_BAND)},
         "czynniki": {k: v for k, v in sf.load_config().items() if not k.startswith("_")},
         "rynek": {"obciecie": round(extra.get("obciecie", mk.CUT_PRIOR), 4), "n_kursow": extra.get("n_kursow", 0)},
+        "poziom": extra.get("poziom") or {},
         "mecze": len(matches),
         "z_kursami": sum(1 for m in matches if m["kursy"]),
     }

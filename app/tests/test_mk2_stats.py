@@ -690,3 +690,27 @@ def test_selection_multiplier_is_read_from_the_record(tmp_path, monkeypatch):
     assert ss.selection_miss("bb") == 1.2 and ss.selection_miss("zdarzenie") == 1.0
     assert ss.corrected(0.7, ss.BB_MISS * ss.selection_miss("bb")) < ss.corrected(0.7, ss.BB_MISS)
     ss.selection_miss.cache_clear()
+
+
+def test_level_multiplier_compares_counts_with_uncorrected_forecasts():
+    import datetime as dt
+    pr = sqlite3.connect(":memory:")
+    pr.execute("create table predictions (made_at text, fixture_id integer, stat text, mu_home real, mu_away real, alpha real, "
+               "alpha_total real, k_home real, k_away real, k_total real, poziom real)")
+    now = dt.datetime(2026, 11, 3, 12, tzinfo=dt.timezone.utc)
+    rows, preds = [], []
+    for i in range(50):
+        ko = now - dt.timedelta(days=2 + i % 20)
+        for side, y in (("home", 2.0), ("away", 1.0)):
+            rows.append({"fixture_id": i, "side": side, "kickoff": pd.Timestamp(ko), "cards": y})
+        # 2 + 2 cards forecast, logged before kick-off with an earlier correction of 0.9 folded into k
+        preds.append(((ko - dt.timedelta(hours=5)).isoformat().replace("+00:00", "Z"), i, "cards", 2.0, 2.0, 0.1, 0.1, 0.9, 0.9, 0.9, 0.9))
+    old = now - dt.timedelta(days=40)       # outside the window: ignored
+    rows += [{"fixture_id": 99, "side": s, "kickoff": pd.Timestamp(old), "cards": 9.0} for s in ("home", "away")]
+    preds.append(((old - dt.timedelta(hours=5)).isoformat().replace("+00:00", "Z"), 99, "cards", 2.0, 2.0, 0.1, 0.1, 1.0, 1.0, 1.0, 1.0))
+    pr.executemany("insert into predictions values (?,?,?,?,?,?,?,?,?,?,?)", preds)
+    cfg = {"statystyki": ["cards"], "okno_dni": 28, "n0": 200}
+    out = sd.level_multipliers(pr, pd.DataFrame(rows), now, cfg)
+    # 150 cards against 200 forecast (the stored 0.9 taken out), 100 team-matches shrunk with 200
+    assert out["cards"] == pytest.approx(math.exp(100 / 300 * math.log(0.75)), abs=1e-4)
+    assert sd.level_multipliers(pr, pd.DataFrame(rows), now, {"statystyki": []}) == {}

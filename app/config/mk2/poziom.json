@@ -1,0 +1,9 @@
+{
+ "_comment": "Statistics whose forecasts get this season's level (stats_daily.level_multipliers): counts of the last okno_dni days against the means forecast before kick-off, shrunk with n0 team-matches. Chosen by scripts/mk2/eval_level.py (walk-forward on the logged forecasts): a statistic is listed only when the correction clearly improved them. 2026-11-03, 554 matches from 14.10: cards clearly better (match totals +0.0098 log-likelihood per match, 90% from +0.0041); shots (+0.0050), shots on target (+0.0024) and corners not clear yet; fouls and yellow cards worse. Re-check when more matches are settled.",
+ "statystyki": [
+  "cards"
+ ],
+ "okno_dni": 28,
+ "n0": 200,
+ "sprawdzono": "2026-11-03"
+}
