@@ -96,6 +96,10 @@ FORMS = {
 }
 
 
+FORMS.setdefault("fouls", ("faul", "faule", "fauli"))
+FORMS.setdefault("cards", ("kartka", "kartki", "kartek"))
+
+
 def plural(n: int, stat: str) -> str:
     one, few, many = FORMS[stat]
     if n == 1:

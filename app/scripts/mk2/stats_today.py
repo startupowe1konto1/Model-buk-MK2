@@ -39,6 +39,11 @@ BETS: dict[int, tuple[str, str]] = {
     173: ("fouls", "total"), 171: ("fouls", "home"), 170: ("fouls", "away"),
     164: ("offsides", "total"), 167: ("offsides", "home"), 168: ("offsides", "away"),
 }
+# the same markets under names without a stable id (team totals that some bookmakers list as "Player ... Total")
+NAME_BETS: dict[str, tuple[str, str]] = {
+    "Home Player Shots Total": ("shots", "home"), "Away Player Shots Total": ("shots", "away"),
+    "Home Player Shots On Target Total": ("sot", "home"), "Away Player Shots On Target Total": ("sot", "away"),
+}
 VALUE = re.compile(r"^(Over|Under)\s+(\d+(?:\.\d+)?)$")
 
 
@@ -48,7 +53,7 @@ def parse_odds(payload: dict) -> list[dict]:
     for block in payload.get("response", []):
         for bm in block.get("bookmakers", []):
             for bet in bm.get("bets", []):
-                key = BETS.get(bet.get("id"))
+                key = BETS.get(bet.get("id")) or NAME_BETS.get(str(bet.get("name", "")).strip())
                 if not key:
                     continue
                 for v in bet.get("values", []):

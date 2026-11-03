@@ -96,7 +96,26 @@ def load_rows(league_ids: list[int], first_season: int = 2024) -> pd.DataFrame:
     df["cup"] = df["league_id"].isin(list(CUPS)).astype(float)
     goals = np.where(df["side"] == "home", df["home_goals"], df["away_goals"]).astype(float)
     df["goals"] = np.where(df["status_short"] == "FT", goals, np.nan)
-    return fill_known_zeros(df)
+    return fill_known_zeros(clean_counts(df))
+
+
+def clean_counts(df: pd.DataFrame) -> pd.DataFrame:
+    """Counts the provider records but bets cannot use (the colleague's data audit, checked 2026-11-03): a match
+    that went to extra time has its statistics over 120 minutes while every bet is on 90, so it keeps no counts;
+    both teams at 0 shots, corners or fouls - and one team at 0 fouls - is a statistic that was not reported, so
+    it is missing, not zero (a single team without a corner or a shot does happen)."""
+    df[COLUMNS] = df[COLUMNS].astype(float)
+    if "status_short" in df.columns:
+        df.loc[df["status_short"].isin(["AET", "PEN"]), COLUMNS] = np.nan
+    if "fixture_id" in df.columns:
+        for c, also in (("total_shots", ["shots_on_goal"]), ("corners", []), ("fouls", [])):
+            both = df.groupby("fixture_id")[c].transform("max") == 0
+            df.loc[both, [c, *also]] = np.nan
+        df.loc[df["fouls"] == 0, "fouls"] = np.nan
+    return df
+
+
+CARDS_REPORTED = 0.5    # a league-season with more of its yellow-card counts empty than this does not report cards
 
 
 def fill_known_zeros(df: pd.DataFrame) -> pd.DataFrame:
@@ -105,11 +124,17 @@ def fill_known_zeros(df: pd.DataFrame) -> pd.DataFrame:
     The provider leaves cards and offsides empty when there were none (checked against card events
     and players' offsides), so those nulls are zeros in a row whose statistics block is there.  A
     null shot, corner or foul count means the statistic is missing (cup qualifiers often have
-    corners but no shots): such rows are skipped for that statistic, never read as zero.
+    corners but no shots): such rows are skipped for that statistic, never read as zero.  A league-season
+    where most rows have no yellow-card count does not report cards at all: there they stay missing.
     """
     has_block = df[["total_shots", "corners"]].notna().any(axis=1)
+    reported = has_block
+    if {"league_id", "season"} <= set(df.columns):
+        empty = df["yellow_cards"].isna().astype(float).where(has_block)
+        share = empty.groupby([df["league_id"], df["season"]]).transform("mean")
+        reported = has_block & (share <= CARDS_REPORTED)
     for c in ("yellow_cards", "red_cards"):
-        df.loc[df[c].isna() & has_block, c] = 0
+        df.loc[df[c].isna() & reported, c] = 0
     df.loc[df["offsides"].isna() & df["total_shots"].notna(), "offsides"] = 0
     df["cards"] = df["yellow_cards"] + df["red_cards"]
     return df
@@ -144,6 +169,12 @@ class StatFit:
     period_effects: dict[str, float] = field(default_factory=dict)
     alpha_cup: float | None = None        # dispersion of team counts in UEFA cup matches
     alpha_total_cup: float | None = None  # and of their match totals
+
+    def deshrink(self, atak: float, obrona: float) -> None:
+        """Scale the team effects in place: the ridge over-shrinks strong teams (config/mk2/kalibracja.json,
+        estimated on walk-forward windows: shots on target of the best attacks were 13-15% too low)."""
+        self.team_for = {k: v * atak for k, v in self.team_for.items()}
+        self.team_against = {k: v * obrona for k, v in self.team_against.items()}
 
     def dispersion(self, scope: str, cup: bool) -> float:
         """NB2 alpha for a team count (scope home/away) or a match total, in a cup match or not."""

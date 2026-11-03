@@ -2,8 +2,8 @@
 
 A bet builder combines events of one match (e.g. home team at least 12 shots, at least 4 on target,
 more shots than the opponent, scores, wins).  They are far from independent, so their joint chance
-comes from a Gaussian copula over the eight counts of a match
-    [home shots, home shots on target, home corners, home goals, away shots, away sot, away corners, away goals]
+comes from a Gaussian copula over the twelve counts of a match
+    [home shots, home shots on target, home corners, home goals, home fouls, home cards, and the same for the away side]
 with the model's negative-binomial margins (stats_model.fit_stat; goals are the 90-minute score).
 
 The correlations are estimated on the 2025/26 walk-forward forecasts (monthly refits, as in
@@ -35,9 +35,9 @@ import eval_stats_model as ev  # noqa: E402
 import stats_model as sm  # noqa: E402
 from stats_sure import GOALS_FIT  # noqa: E402
 
-COUNTS = ("shots", "sot", "corners", "goals")
+COUNTS = ("shots", "sot", "corners", "goals", "fouls", "cards")
 DIMS = [f"{side}_{s}" for side in ("home", "away") for s in COUNTS]
-K_MAX = {"shots": 70, "sot": 35, "corners": 35, "goals": 15}
+K_MAX = {"shots": 70, "sot": 35, "corners": 35, "goals": 15, "fouls": 60, "cards": 20}
 CONFIG = HERE.parents[1] / "config" / "mk2" / "bb_korelacje.json"
 RNG = np.random.default_rng(20261015)
 
@@ -142,7 +142,7 @@ def main() -> None:
     m = h.join(a, lsuffix="_h", rsuffix="_a", how="inner")
     need = [f"{cols[s]}_{x}" for s in COUNTS for x in ("h", "a")] + [f"mu_{s}_{x}" for s in COUNTS for x in ("h", "a")]
     m = m.dropna(subset=need)
-    print(f"matches with all eight counts: {len(m)}", flush=True)
+    print(f"matches with all counts: {len(m)}", flush=True)
 
     cdfs, ys, scores = {}, {}, {}
     for side, x in (("home", "h"), ("away", "a")):

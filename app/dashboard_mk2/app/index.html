@@ -12,7 +12,7 @@
   --bg: #eef1ee; --surface: #ffffff; --sunk: #f4f6f4; --ink: #15201a; --ink-2: #3d4a43; --muted: #6b776f;
   --line: #d9e0db; --accent: #0f7a4f; --on-accent: #ffffff; --accent-soft: #dcefe4;
   --go: #0f7a4f; --go-soft: #dcefe4; --warn: #a65d03; --warn-soft: #f8ecd5; --stop: #b4322a; --stop-soft: #f9e2df;
-  --s1: #0f7a4f; --s2: #c2410c;
+  --s1: #0f7a4f; --s3: #b7791f; --s2: #c2410c;
   --shadow: 0 1px 2px rgba(21, 32, 26, 0.06), 0 8px 24px rgba(21, 32, 26, 0.06);
   --display: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
   --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
@@ -113,12 +113,55 @@ details.why p, details.why ul { margin: 8px 0 0; font-size: 0.92rem; color: var(
 .legs li { display: flex; gap: 8px; align-items: baseline; font-size: 1.02rem; font-weight: 600; }
 .legs li::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; position: relative; top: -1px; }
 .legs li .came { margin-left: auto; font-size: 0.86rem; font-weight: 600; white-space: nowrap; }
+.tm { flex: none; font: 700 0.72rem/1.5 var(--body); padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); background: var(--sunk); color: var(--ink-2); white-space: nowrap; max-width: 12em; overflow: hidden; text-overflow: ellipsis; }
+.tm.h { background: color-mix(in srgb, var(--s1) 16%, var(--surface)); border-color: color-mix(in srgb, var(--s1) 45%, var(--surface)); }
+.tm.a { background: color-mix(in srgb, var(--s2) 16%, var(--surface)); border-color: color-mix(in srgb, var(--s2) 45%, var(--surface)); }
+.est { margin: 0 16px 10px; padding: 7px 10px; border-radius: 8px; font-size: 0.86rem; border: 1px solid var(--line); background: var(--sunk); }
+.est.go { border-color: var(--go); } .est.warn { border-color: var(--warn); } .est.stop { border-color: var(--stop); }
+.est b { font-weight: 700; }
+.chk { margin: 0 16px 10px; padding: 8px 10px; border-radius: 8px; font-size: 0.88rem; border: 1px solid var(--line); border-left-width: 4px; background: var(--sunk); display: grid; gap: 4px; }
+.chk.go { border-left-color: var(--go); } .chk.warn { border-left-color: var(--warn); } .chk.stop { border-left-color: var(--stop); }
+.chk .list { margin: 0; padding-left: 18px; display: grid; gap: 2px; } .chk .list li.b { font-weight: 600; }
+.chk.stop .chk-h b { color: var(--stop); } .chk.warn .chk-h b { color: var(--warn); } .chk.go .chk-h b { color: var(--go); }
+.abs { margin: 0 16px 8px; font-size: 0.84rem; color: var(--ink-2); } .abs b { font-weight: 700; }
+.lk { padding: 12px 16px; display: grid; gap: 8px; }
+.grid.lkgrid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 40rem), 1fr)); }
+.lk-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; align-items: baseline; }
+.lk-top .m { font: 700 1.05rem var(--display); }
+.lk-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 14px; }
+@media (max-width: 560px) { .lk-cols { grid-template-columns: 1fr; } }
+.lk-col { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.lk-col > b { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.lk-ev { display: flex; gap: 8px; justify-content: space-between; align-items: baseline; font-size: 0.92rem; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.lk-ev span:first-child { min-width: 0; }
+.lk-ev .pv { font: 700 1.02rem var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lk-ev.top .pv { color: var(--accent); }
+.lk-ev.ok { color: var(--go); } .lk-ev.miss { color: var(--stop); }
+.lk-bb { font-size: 0.86rem; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 6px; }
+.lk-sum { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.absrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; font-size: 0.88rem; }
+@media (max-width: 420px) { .absrow { grid-template-columns: 1fr; } }
+.absrow > div { display: grid; gap: 2px; min-width: 0; } .absrow .reg { font-weight: 600; }
+.testy > summary { cursor: pointer; font-weight: 700; padding: 10px 0; }
+.mode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.mode .lab { font-weight: 700; }
+.ako { border: 2px solid var(--accent); } .ako.won { border-color: var(--go); } .ako.lost { border-color: var(--stop); }
+.ako .res { padding: 0 16px 12px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; } .ako .res .vd { font: 700 1.2rem var(--display); }
+.views { display: flex; justify-content: center; margin: 2px 0 4px; }
+#dz-list > .views, #dz-list > .note, #dz-list > .grid, #dz-list > details.testy { grid-column: 1 / -1; }
+.views .seg button { font-size: 1rem; padding: 8px 16px; }
+.ako .legs li { font-size: 0.95rem; }
+.ako .legs li .tm { min-width: 0; }
+.ako .akol { display: grid; gap: 3px; min-width: 0; } .ako .akoev { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; font-weight: 600; }
+.calc-grp { display: grid; gap: 6px; } .calc-grp h3 { margin: 8px 0 0; font: 700 1rem var(--display); }
 .legs li.ok::before { background: var(--go); } .legs li.miss::before { background: var(--stop); } .legs li.miss { color: var(--stop); }
-.bb-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); margin-top: 8px; }
+.bb-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); margin-top: 8px; }
+@media (max-width: 420px) { .bb-nums { grid-template-columns: 1fr 1fr; } .bb-nums > div:last-child { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); } }
 .bb-nums > div { padding: 10px 16px; display: grid; gap: 1px; }
 .bb-nums > div + div { border-left: 1px solid var(--line); }
 .bb-nums .v { font: 700 2rem/1 var(--display); font-variant-numeric: tabular-nums; }
 .bb-nums .s { color: var(--muted); font-size: 0.8rem; }
+.bank { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-weight: 600; } .bank .in { width: 7em; }
 .cbar { position: relative; display: block; height: 6px; border-radius: 3px; background: var(--sunk); border: 1px solid var(--line); margin-top: 6px; }
 .cbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--accent); }
 .bb-price { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; padding: 12px 16px; border-top: 1px dashed var(--line); background: var(--sunk); border-radius: 0 0 var(--r) var(--r); }
@@ -151,7 +194,23 @@ details.day { border: 1px solid var(--line); border-radius: var(--r-sm); backgro
 details.day > summary { cursor: pointer; padding: 10px 14px; line-height: 1.6; display: flex; flex-wrap: wrap; gap: 2px 14px; align-items: baseline; }
 details.day > summary b { font-variant-numeric: tabular-nums; }
 details.day[open] > summary { border-bottom: 1px solid var(--line); }
-details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
+details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 14px; }
+details.day > summary .sg { display: inline-flex; gap: 4px; align-items: baseline; }
+details.day > summary .sg i { font-style: normal; font: 700 0.72rem/1.6 var(--body); padding: 0 7px; border-radius: 999px; }
+details.day > summary .sg.main i { background: var(--accent); color: var(--surface); }
+details.day > summary .sg.test i { background: var(--sunk); color: var(--muted); border: 1px solid var(--line); }
+.dsec { display: grid; gap: 6px; }
+.dsec .dh { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.dsec h4 { margin: 0; font: 700 0.98rem var(--display); }
+.dsec.main h4::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--accent); margin-right: 7px; }
+.dsec.ako-d h4::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; border: 2px solid var(--accent); margin-right: 7px; }
+.dsec.test { padding: 8px; border-radius: 10px; background: var(--sunk); }
+.dsec.test h4 { color: var(--muted); }
+.dsec .gl { font-size: 0.86rem; color: var(--ink-2); }
+.brow.test { opacity: 0.85; }
+.brow .lg { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; font-size: 0.84rem; }
+.brow .lgx { display: inline-flex; gap: 5px; align-items: baseline; } .brow .lgx.miss { color: var(--stop); font-weight: 600; }
+.brow .r span { font-size: 0.82rem; }
 .brow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; padding: 8px 10px; border-radius: 8px; }
 .brow.won { background: var(--go-soft); box-shadow: inset 4px 0 0 var(--go); } .brow.lost { background: var(--stop-soft); box-shadow: inset 4px 0 0 var(--stop); } .brow.wait { background: var(--sunk); }
 .brow .w { font-weight: 600; } .brow .h { color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
@@ -194,6 +253,18 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
 .step { display: inline-flex; align-items: center; gap: 2px; }
 .step button { font: 700 1rem var(--body); width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
 .step b { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }
+.anal { display: grid; gap: 14px; } .anal h3 { margin: 0 0 6px; font: 700 1rem var(--display); } .anal .wrap { overflow-x: auto; }
+.reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+.lad { display: grid; gap: 10px; }
+.lhead { margin: 6px 0 0; font: 700 1.05rem var(--display); } .lhead:first-child { margin-top: 0; }
+.lrow { display: grid; grid-template-columns: minmax(130px, 170px) minmax(0, 1fr); gap: 6px 12px; align-items: start; }
+.lname { font-weight: 600; } .lname small { display: block; color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-grid; justify-items: center; gap: 1px; padding: 5px 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 700 0.9rem/1.1 var(--body); font-variant-numeric: tabular-nums; cursor: pointer; }
+.chip small { font-weight: 400; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.chip.on { border-color: var(--accent); background: var(--accent-soft); }
+.chip.info { cursor: default; }
+@media (max-width: 560px) { .lrow { grid-template-columns: 1fr; } }
 .out { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 10px; }
 .ok5 { display: inline-flex; gap: 3px; vertical-align: -1px; }
 .ok5 i { width: 9px; height: 9px; border-radius: 2px; background: var(--accent); }
@@ -228,10 +299,16 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       <details class="why"><summary>Jak z tego korzystać</summary>
         <ul class="list">
           <li>Bet builder to kilka zdarzeń z jednego meczu na jednym kuponie (w Superbet: „zbuduj zakład”). Wygrywa, gdy wejdą wszystkie.</li>
-          <li><b>Szansa</b> to wyliczenie modelu dla całego zestawu naraz: zdarzenia w jednym meczu są powiązane (dużo strzałów to więcej celnych i częściej gol), więc razem wchodzą częściej, niż wynikałoby z mnożenia. Model liczy to z historii obu drużyn, poziomu ligi, gospodarza oraz formy z ostatnich 5 meczów, formy u siebie i na wyjeździe i tego, ile rywal ostatnio dopuszcza.</li>
-          <li><b>Graj od</b> to kurs, od którego zakład po podatku 12% wychodzi na plus w dłuższej grze. Poniżej pojedynczy zakład też może wejść, ale na dziesiątkach takich zakładów traci się pieniądze.</li>
-          <li>Wpisz kurs z Superbet: od razu widać, ile ten zakład jest wart na 100 zł w dłuższej grze. „Dodaj do zakładów” zapisuje go z Twoim kursem, a po meczu aplikacja podpowiada wynik.</li>
-          <li>Dzień bez kuponu to normalny wynik. Sens ma tylko granie od kursu „graj od”; wtedy skuteczność tych zestawów (76% od 15.10) daje zysk.</li>
+          <li><b>Szansa</b> to wyliczenie modelu dla całego zestawu naraz, czyli że wejdą wszystkie zdarzenia. Zdarzenia w jednym meczu są powiązane (dużo strzałów to więcej celnych i częściej gol), więc razem wchodzą częściej, niż wynikałoby z pomnożenia osobnych szans; w „Dlaczego ten zestaw” widać obie liczby. Model liczy to z historii obu drużyn, poziomu ligi, gospodarza oraz formy z ostatnich 5 meczów, formy u siebie i na wyjeździe i tego, ile rywal ostatnio dopuszcza.</li>
+          <li><b>Opłaca się od</b> to próg kursu. Szansa 62% to uczciwy kurs 1,61 (1 ÷ 0,62), ale podatek 12% od stawki zjada część wygranej, więc na zero wychodzi się dopiero od 1,83. To próg wyliczony z szansy modelu, a nie przewidywanie, jaki kurs da Superbet: realny kurs bywa wyżej (wtedy zakład jest wart grania) albo niżej (odpuść). Poniżej progu pojedynczy zakład też może wejść, ale na dziesiątkach takich zakładów traci się pieniądze.</li>
+          <li><b>Stawka:</b> wpisz u góry swój bank na zakłady, a przy każdym kursie powyżej progu aplikacja podpowie stawkę: ćwierć Kelly'ego (im większa przewaga kursu nad progiem, tym więcej; nigdy więcej niż 5% banku). Wygrana ponad 2280 zł z jednego kuponu płaci jeszcze 10% podatku dochodowego, więc podpowiedź stawki zatrzymuje się przed tą granicą.</li>
+          <li><b>Gdzie i jak grać, żeby zarabiać.</b> Przy 12% podatku pojedynczy zestaw prawie nigdy nie wychodzi na plus, nawet gdy wchodzi często: podatek i marża bukmachera zjadają przewagę. Dwie drogi, które ją ratują: (1) bukmacher, który płaci podatek za Ciebie (Betclic do 1000 zł stawek i na AKO, TOTALbet, Fortuna na AKO od 3 zdarzeń po 1,30 — sprawdź aktualny regulamin i czy mają bet buildery ze strzałami), (2) kupon AKO z 2–3 głównych zestawów z różnych meczów: podatek płacisz raz, przewagi się mnożą, a Superbet dokłada SuperBonus do wygranej na AKO. Ustaw u góry, gdzie grasz, a progi i werdykty przeliczą się same.</li>
+          <li><b>Zawodnicy.</b> Zestawy „z zawodnikiem” mają zdarzenie „co najmniej 1 celny strzał” zawodnika, który wyszedł w pierwszym składzie w co najmniej 4 z 5 ostatnich meczów. Szansa liczy jego udział w celnych strzałach drużyny (sprawdzone na 7,9 tys. występów: model 52% → weszło 53%, 67% → 63%). Gdy zawodnik nie zagra, bukmacher zwraca zakład; kalkulator ma tych zawodników w grupach drużyn.</li>
+          <li><b>Główne i testowe.</b> Na każdy mecz jest jeden główny zestaw: ten, który przy szacowanym kursie jest najbliżej opłacalności. Pozostałe warianty tego meczu (inne progi, inne połączenia) są testowe: zwinięte na dole, liczone osobno, służą do nauki modelu. Warianty jednego meczu wchodzą albo przepadają razem, więc grając kilka naraz grasz w praktyce jeden zakład kilka razy.</li>
+          <li><b>Szacowany kurs</b> to przybliżenie kursu bukmachera: kursy rynkowe na pojedyncze zdarzenia (linie strzałów, celnych, rożnych, kartek, wynik, „kto odda więcej strzałów”) połączone tym samym modelem powiązań, minus część wygranej, którą bukmacher zatrzymuje w zestawach. Uczy się z kursów, które wpisujesz. Kolorowe pola przy nogach mówią, kogo dotyczy zdarzenie: gospodarz, gość albo cały mecz.</li>
+          <li>Gdy Superbet daje inne progi niż tu, kliknij „Zmień progi lub dodaj zdarzenia”: na stronie meczu drabinka pokazuje szansę każdego progu, a kalkulator (obie drużyny i cały mecz naraz) przelicza zestaw po Twoim, także np. „PSG co najmniej 14 strzałów + Le Havre co najmniej 8”.</li>
+          <li>Wpisz kurs z Superbet: od razu widać, ile ten zakład jest wart na 100 zł w dłuższej grze. Wpisany kurs zapisuje się także bez dodawania zakładu, a po meczu Wyniki liczą po nim prawdziwy bilans. „Dodaj do zakładów” zapisuje zakład z Twoim kursem, a po meczu aplikacja podpowiada wynik.</li>
+          <li>Dzień bez kuponu to normalny wynik. Czy strategia zarabia, pokażą dopiero zakłady zapisane z realnym kursem z Superbet; liczby „gdyby kurs = próg opłacalności” w Wynikach są teoretyczne i mówią tylko, czy zestawy wchodzą tak często, jak zakłada model.</li>
           <li>Historia jest wzorcem, nie wyrocznią: mecz sprzed pół roku liczy się o połowę słabiej niż wczorajszy, a sprzed dwóch sezonów prawie wcale (ok. 6%). Do tego dochodzi forma z ostatnich 5 meczów, forma u siebie i na wyjeździe oraz to, ile rywal ostatnio dopuszcza. Zestawy „z wynikiem” i „obie strzelą” opierają gole na aktualnych kursach bukmacherów na wynik meczu.</li>
         </ul>
       </details>
@@ -248,6 +325,10 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       <div id="wy-chart" style="position: relative"></div>
       <div class="legend" id="wy-legend"></div>
       <p class="note" id="wy-note"></p>
+    </div>
+    <div class="card">
+      <div class="head"><h2>Skuteczność i co nie weszło</h2><span class="c-muted" id="wy-anal-sub"></span></div>
+      <div class="anal" id="wy-anal"></div>
     </div>
     <div class="card">
       <div class="head"><h2>Moje zakłady</h2><span class="c-muted" id="zk-sum"></span></div>
@@ -299,6 +380,10 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       <h2 id="mz-title" style="font-size: 1.9rem">Mecz</h2>
       <div class="vs" id="mz-stats"></div>
       <p class="note" id="mz-fact"></p>
+    </div>
+    <div class="card">
+      <div class="head"><h2>Wszystkie zdarzenia z szansą</h2><span class="c-muted">kliknij próg, a trafi do kalkulatora</span></div>
+      <div class="lad" id="mz-lad"></div>
     </div>
     <div class="card" id="mz-bb-card"><div class="head"><h2>Bet buildery w tym meczu</h2></div><div class="grid" id="mz-bb"></div></div>
     <div class="card">
@@ -355,9 +440,9 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
   }
   const dayFull = (key) => { const l = dayLabel(key); return l.includes(dd(key)) ? l : l + ", " + dd(key); };
   const TAX = 0.88;
-  const STAT = { shots: "Strzały", sot: "Celne strzały", corners: "Rożne", fouls: "Faule", cards: "Kartki", goals: "Gole" };
+  const STAT = { shots: "Strzały", sot: "Celne strzały", corners: "Rożne", fouls: "Faule", cards: "Kartki", goals: "Gole", offsides: "Spalone" };
   const FORMS = { shots: ["strzał", "strzały", "strzałów"], sot: ["celny strzał", "celne strzały", "celnych strzałów"],
-    corners: ["rzut rożny", "rzuty rożne", "rzutów rożnych"], goals: ["gol", "gole", "goli"], fouls: ["faul", "faule", "fauli"], cards: ["kartka", "kartki", "kartek"] };
+    corners: ["rzut rożny", "rzuty rożne", "rzutów rożnych"], goals: ["gol", "gole", "goli"], fouls: ["faul", "faule", "fauli"], cards: ["kartka", "kartki", "kartek"], offsides: ["spalony", "spalone", "spalonych"] };
   function plural(n, stat) { const f = FORMS[stat] || ["", "", ""]; if (n === 1) return f[0]; return [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? f[1] : f[2]; }
   const nOf = (n, one, few, many) => n + " " + (n === 1 ? one : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? few : many);
   const st = (k) => S.data["st_" + k];
@@ -381,8 +466,13 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     const cup = isCup(ligaId);
     return scope === "total" ? (cup ? m.alpha_total_puchary : m.alpha_total) : (cup ? m.alpha_puchary : m.alpha);
   };
-  const minOdds = (p) => (p > 0 ? 1 / (p * TAX) : null);
-  const evAt = (p, odds) => p * TAX * odds - 1;
+  // where the user plays: Superbet with the 12% stake tax, or a bookmaker that pays the tax (Betclic, TOTALbet,
+  // Fortuna AKO...); and the bonus on an AKO's net winnings (Superbet SuperBonus / Super Booster), in percent
+  const taxK = () => (mem.get("podatek") === "nie" ? 1 : TAX);
+  const bonusK = () => { const v = parseFloat(mem.get("bonus") || "0"); return Number.isFinite(v) && v > 0 ? Math.min(v, 300) / 100 : 0; };
+  const minOdds = (p) => (p > 0 ? 1 / (p * taxK()) : null);
+  const evAt = (p, odds) => p * taxK() * odds - 1;
+  const taxNote = () => (taxK() === 1 ? "próg bez podatku" : "próg po podatku 12%");
   // negative-binomial tail: P(count > ln) for a half line
   function nbTail(mu, alpha, ln) {
     const a = Math.max(alpha || 0, 1e-6), r = 1 / a, p = r / (r + mu);
@@ -443,8 +533,27 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       if (can === false) readOnly("Masz dostęp tylko do podglądu: zakładów nie da się zapisać.");
     } else S.canWrite = true;
     db.collection("zaklady").orderBy("at", "desc").limit(1000).onSnapshot((s) => { S.zaklady = s.docs.map((d) => Object.assign({ id: d.id }, d.data())); render(); }, (e) => console.warn("db", e && e.code));
+    // prices typed at the builders (also without adding a bet): one document per builder key
+    db.collection("kursy").limit(3000).onSnapshot((s) => { S.kursy = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.bb) S.kursy[x.bb] = Object.assign({ id: d.id }, x); }); render(); }, (e) => console.warn("db", e && e.code));
     render();
   }
+  // the price typed for a builder, kept in the shared database so the results can be settled at real prices
+  const legacyKey = (b) => b.day + "|" + b.fixture_id + "|" + (b.rodzaj || "") + (b.poziom === "wyzej" ? "|wyzej" : "");
+  const legacyUnique = (b) => (((st("typy") || {})[b.day] || {}).bb || []).filter((x) => String(x.fixture_id) === String(b.fixture_id) && x.rodzaj === b.rodzaj && (x.poziom === "wyzej") === (b.poziom === "wyzej")).length === 1;
+  const priceOf = (b) => { const x = S.kursy && (S.kursy[bbKey(b)] || (b.klucz && legacyUnique(b) ? S.kursy[legacyKey(b)] : null)); return x && x.kurs > 1 ? Number(x.kurs) : null; };
+  const priceTimers = {};
+  function storePrice(key, odds) {
+    if (!S.db || !S.canWrite) return;
+    clearTimeout(priceTimers[key]);
+    priceTimers[key] = setTimeout(async () => {
+      const id = key.replace(/[^A-Za-z0-9_.~:@+-]/g, "_"), doc = S.db.collection("kursy").doc(id);
+      try {
+        if (odds > 1) await doc.set({ bb: key, kurs: odds, at: new Date().toISOString(), by: S.me || null });
+        else if (S.kursy && S.kursy[key]) await doc.delete();
+      } catch (e) { console.warn("kurs", e && e.code); }
+    }, 900);
+  }
+  const pnlAtPrice = (b, k) => (b.wynik === "wygrana" ? 100 * (taxK() * k - 1) : -100);
   function readOnly(msg) { S.canWrite = false; const b = $("#ro"); b.textContent = msg; b.hidden = false; render(); }
   async function save(fn, msgEl) {
     if (!S.db || !S.canWrite) { if (msgEl) { msgEl.className = "err"; msgEl.textContent = "Nie zapisano: brak połączenia z bazą."; } return false; }
@@ -474,6 +583,25 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     render();
   }
   function openMatch(id) { S.mecz = String(id); S.calc = null; show("mecz", true); }
+  function openMatchWith(id, b) { const m = matchById(id); S.mecz = String(id); S.calc = m ? calcFromBuilder(m, b) : null; show("mecz", true); }
+  // the calculator preset to a proposed builder: its legs switched on at its thresholds
+  function calcFromBuilder(m, b) {
+    const c = { id: String(m.id), on: {}, k: {} };
+    const T = { shots: "TS", sot: "TC", corners: "TR", fouls: "TF", cards: "TK" }, U = { shots: "S", sot: "C", corners: "R", fouls: "F", cards: "K" };
+    (b.legs || []).forEach((l) => {
+      const k = empty(l.line) ? null : Math.round(l.line + 0.5), pre = l.scope === "home" ? "h" : l.scope === "away" ? "a" : "";
+      let id = null;
+      if (l.scope === "total" || l.side === "btts") id = l.side === "btts" ? "BTTS" : l.stat === "goals" ? "O25" : T[l.stat] || null;
+      else if (l.stat === "player_sot") { const i = ((m.zawodnicy || {})[l.scope] || []).findIndex((p) => String(p.id) === String(l.player_id)); id = i >= 0 ? pre + "P" + (i + 1) : null; }
+      else if (l.stat === "goals") id = pre + (l.side === "more" ? "W" : l.side === "win_draw" ? "ND" : k >= 2 ? "G2" : "G");
+      else if (l.side === "more") id = l.stat === "shots" ? pre + "M" : l.stat === "corners" ? pre + "MR" : null;
+      else id = U[l.stat] ? pre + U[l.stat] : null;
+      if (!id) return;
+      c.on[id] = true;
+      if (k !== null && l.side === "over" && l.stat !== "goals") c.k[id] = k;
+    });
+    return c;
+  }
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => show(b.dataset.p, true)));
   $("#mz-back").addEventListener("click", () => show("mecze", true));
   window.addEventListener("popstate", () => { const h = (location.hash || "").slice(1); show(h === "mecz" && S.mecz ? "mecz" : h, false); });
@@ -502,10 +630,34 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
   }
 
   // ================================================================== bet builders: shared logic
-  const bbKey = (b) => b.day + "|" + b.fixture_id + "|" + (b.rodzaj || "");
+  const bbKey = (b) => b.klucz || (b.day + "|" + b.fixture_id + "|" + (b.rodzaj || "") + (b.poziom && b.poziom !== "pewniej" ? "|" + b.poziom : ""));
+  const KIND_ORDER = ["bezpieczny", "z_wynikiem", "meczowy", "obie", "zawodnik", "mieszany"];
+  // a leg's side of the match: the home team, the away team or the whole match, as a tag before the event
+  function legTag(l, b) {
+    const names = (b && b.mecz ? b.mecz : "").split(" – ");
+    if (l.scope === "total" || l.side === "btts") return el("span", "tm t", "Cały mecz");
+    return el("span", "tm " + (l.scope === "home" ? "h" : "a"), (l.scope === "home" ? names[0] : names[1]) || (l.scope === "home" ? "Gospodarz" : "Gość"));
+  }
+  // the event without the team's name (the tag carries it)
+  function legText(l, b) {
+    const s0 = l.opis || "";
+    if (l.stat === "player_sot") return s0.replace(/ \([^)]*\):/, ":");     // the player's name stays, the team is in the tag
+    const i = s0.indexOf(": ");
+    if (i >= 0) return s0.slice(i + 2);
+    for (const n of (b && b.mecz ? b.mecz.split(" – ") : [])) if (n && s0.startsWith(n + " ")) return s0.slice(n.length + 1);
+    return s0;
+  }
+  const isMain = (b) => b.glowny !== false;
+  const pnlEst = (b) => (b.kurs_szac ? (b.wynik === "wygrana" ? 100 * (taxK() * b.kurs_szac - 1) : -100) : null);
   const legWhat = (l) => { const s = l.opis || "", i = s.indexOf(": "); return i < 0 ? s : s.slice(i + 2); };
-  const kindName = (r) => (r === "z_wynikiem" ? "z wynikiem meczu" : r === "meczowy" ? "cały mecz" : "bezpieczniejszy");
+  const kindName = (r) => (r === "z_wynikiem" ? "z wynikiem meczu" : r === "meczowy" ? "cały mecz" : r === "mieszany" ? "rożne, faule, kartki" : r === "obie" ? "obie drużyny / drużyna + mecz" : r === "zawodnik" ? "z zawodnikiem" : "bezpieczniejszy");
   // the verdict for a price: green from "graj od", amber within 5% below it, red further below
+  // the share of the bankroll to stake: a quarter of the Kelly fraction at this price, at most 5%
+  const stakeShare = (p, odds) => Math.max(0, Math.min(0.05, (p * taxK() * odds - 1) / (taxK() * odds - 1) / 4));
+  // a single win above 2280 zł pays another 10% (income tax), which eats the edge: the stake hint stays below it
+  const PIT_FREE = 2280;
+  const pitCap = (payPerZl) => (payPerZl > 0 ? Math.floor(PIT_FREE / payPerZl) : Infinity);
+  const PIT_NOTE = "nie więcej: wygrana ponad 2280 zł to dodatkowe 10% podatku dochodowego";
   function verdict(p, odds) {
     if (!(odds > 1)) return null;
     const ev = evAt(p, odds), min = minOdds(p);
@@ -530,6 +682,73 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     return bits.length ? "Strzały: " + bits.join(" · ") : "Strzały: bez odchyleń od zwykłego poziomu";
   }
   function ledgerFor(b) { return (S.zaklady || []).find((z) => z.bb === bbKey(b)) || null; }
+  // the chance to judge a typed price by: the one from the check before kick-off when there is one
+  const pNow = (b) => (b.kontrola && b.kontrola.p_model) || b.p_model;
+  const flagged = (b) => !!(b.kontrola && b.kontrola.werdykt === "nie_graj");
+  // players out or doubtful (the injury list): the ones who started at least 2 of the team's last 5 matches by name,
+  // the rest (bench players, long absences the recent form already reflects) as a count
+  function absLine(m) {
+    if (!m || !m.braki) return null;
+    const parts = [];
+    [["home", m.gosp], ["away", m.gosc]].forEach(([side, name]) => {
+      const lst = m.braki[side] || [], key = lst.filter((x) => x.s5 >= 2), rest = lst.length - key.length;
+      if (!lst.length) return;
+      parts.push(name + ": " + (key.length ? key.map((x) => x.n + " (" + x.pow + (x.niepewny ? ", niepewny" : "") + ")").join(", ") + (rest > 0 ? " + " + rest + " spoza ostatnich składów" : "")
+        : "tylko zawodnicy spoza ostatnich składów (" + rest + ")"));
+    });
+    return parts.length ? parts.join(" · ") : null;
+  }
+  // the likeliest single events of a match per side (home, whole match, away) as three columns; the side's first
+  // (the logged one) carries its result once the match is settled
+  const evKey = (e) => [e.stat, e.scope, e.side, e.line, e.player_id || ""].join("|");
+  // a builder's events in one line, grouped by side: "Lech: co najmniej 5 celnych, strzeli gola · w meczu: ..."
+  function bbText(b) {
+    const names = (b.mecz || "").split(" – "), groups = [];
+    [["home", names[0]], ["away", names[1]], ["total", "w meczu"]].forEach(([sc, name]) => {
+      const ls = b.legs.filter((l) => (l.scope === "total" || l.side === "btts" ? "total" : l.scope) === sc);
+      if (ls.length) groups.push(name + ": " + ls.map((l) => legText(l, b)).join(", "));
+    });
+    return groups.join(" · ");
+  }
+  function likelyCols(m, logged) {
+    const ev = (m && m.najpewniejsze) || {}, done = new Map((logged || []).map((e) => [evKey(e), e]));
+    const names = m ? { home: m.gosp, away: m.gosc } : {};
+    const cols = el("div", "lk-cols");
+    [["home", names.home || "Gospodarz"], ["total", "Cały mecz"], ["away", names.away || "Gość"]].forEach(([side, title]) => {
+      const col = el("div", "lk-col");
+      col.append(el("b", null, title));
+      let lst = ev[side] || [];
+      if (!lst.length) lst = (logged || []).filter((e) => e.strona === side);
+      if (!lst.length) col.append(el("span", "c-muted", "nic powyżej 75%"));
+      lst.forEach((e, i) => {
+        const res = done.get(evKey(e)), w = res && res.wynik;
+        const row = el("div", "lk-ev" + (i === 0 ? " top" : "") + (w === "wygrana" ? " ok" : w === "przegrana" ? " miss" : ""));
+        row.append(el("span", null, legText(e, { mecz: m ? m.gosp + " – " + m.gosc : e.mecz }) + (w ? (w === "wygrana" ? " ✓" : w === "przegrana" ? " ✗" : " ↺") + (empty(res.wartosc) ? "" : " (" + legCame(res).replace("padło ", "") + ")") : "")),
+          el("span", "pv", pct(e.p_model)));
+        col.append(row);
+      });
+      cols.append(col);
+    });
+    return cols;
+  }
+  // the check shortly before kick-off (stats_prematch.py): verdict, reasons, the chance and price now
+  function checkBox(b) {
+    const k = b.kontrola;
+    if (!k) return null;
+    const cls = k.werdykt === "nie_graj" ? "stop" : k.werdykt === "uwaga" ? "warn" : "go";
+    const box = el("div", "chk " + cls), head = el("div", "chk-h");
+    head.append(el("b", null, k.werdykt === "nie_graj" ? "Kontrola przed meczem: nie graj" : k.werdykt === "uwaga" ? "Kontrola przed meczem: uwaga" : "Kontrola przed meczem: bez zmian"),
+      el("span", "c-muted", " · " + hm(k.czas) + ", " + k.minut_przed + " min przed meczem · " + (k.sklad_znany ? "składy znane" : "składów jeszcze nie było")));
+    box.append(head);
+    const ul = el("ul", "list");
+    (k.powody || []).forEach((t) => ul.append(el("li", "b", t)));
+    (k.info || []).forEach((t) => ul.append(el("li", null, t)));
+    if (k.p_model) ul.append(el("li", null, "Teraz: szansa " + pct(k.p_model) + (k.p_model_rano ? " (przy propozycji " + pct(k.p_model_rano) + ")" : "")
+      + (k.kurs_szac ? " · szacowany kurs ≈" + dec(k.kurs_szac) + (b.kurs_szac ? " (był ≈" + dec(b.kurs_szac) + ")" : "") : "")
+      + " · opłaca się od " + dec(minOdds(k.p_model)) + (k.kursy_z ? " · kursy rynku z " + hm(k.kursy_z) : "") + "."));
+    box.append(ul);
+    return box;
+  }
   // a builder as a card (today) or as a settled card (results / match page)
   function bbCard(b, opts) {
     opts = opts || {};
@@ -539,26 +758,43 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     const left = el("span");
     left.append(el("b", null, (dayKey(b.start) === todayKey() ? "" : dd(dayKey(b.start)) + ", ") + hm(b.start)), " · " + (m ? ligaName(m.liga_id) + " · " : "") + b.mecz);
     const flags = el("span", "row");
+    flags.append(pill(isMain(b) ? "główny" : "testowy", isMain(b) ? "go" : null));
     flags.append(pill(kindName(b.rodzaj)));
-    if (b.wynik) flags.append(pill(b.wynik === "wygrana" ? "✓ weszło" : "✗ nie weszło", b.wynik === "wygrana" ? "go" : "stop"));
+    if (b.poziom === "wyzej") flags.append(pill("wyższe progi", "dark"));
+    if (b.wynik) flags.append(pill(b.wynik === "wygrana" ? "✓ weszło" : b.wynik === "zwrot" ? "↺ zwrot" : "✗ nie weszło", b.wynik === "wygrana" ? "go" : b.wynik === "zwrot" ? "dark" : "stop"));
     top.append(left, flags);
     const team = el("div", "bb-team", b.druzyna);
     team.append(el("small", null, nOf(b.legs.length, "zdarzenie", "zdarzenia", "zdarzeń") + " w jednym meczu · wygrywa, gdy wejdą wszystkie"));
     const legs = el("ul", "legs");
     b.legs.forEach((l) => {
-      const li = el("li", l.wynik === "wygrana" ? "ok" : l.wynik === "przegrana" ? "miss" : null, legWhat(l));
+      const li = el("li", l.wynik === "wygrana" ? "ok" : l.wynik === "przegrana" ? "miss" : null);
+      li.append(legTag(l, b), el("span", null, legText(l, b)));
       const came = legCame(l);
       if (came) li.append(el("span", "came " + (l.wynik === "wygrana" ? "c-go" : l.wynik === "przegrana" ? "c-stop" : "c-muted"), came));
       legs.append(li);
     });
     const nums = el("div", "bb-nums");
-    const n1 = el("div"), n2 = el("div");
+    const n1 = el("div"), n2 = el("div"), n3 = el("div");
     n1.append(el("span", "lab", "Szansa wg modelu"), el("span", "v", pct(b.p_model)), chanceBar(b.p_model),
-      el("span", "s", "bez powiązań byłoby " + pct(b.p_niezalezne)));
-    n2.append(el("span", "lab", "Graj od kursu"), el("span", "v", dec(b.kurs_min_z_podatkiem)),
-      el("span", "s", "uczciwy kurs " + dec(b.kurs_uczciwy) + " · po podatku 12%"));
-    nums.append(n1, n2);
+      el("span", "s", "że wejdą wszystkie zdarzenia naraz"));
+    n2.append(el("span", "lab", "Szacowany kurs"), el("span", "v", b.kurs_szac ? "≈" + dec(b.kurs_szac) : "—"),
+      el("span", "s", b.kurs_szac ? ((b.rynek_nogi || 0) >= Math.ceil(b.legs.length / 2) ? "z kursów rynkowych, przybliżenie" : "mało kursów rynkowych, zgrubnie") : "brak kursów rynkowych"));
+    n3.append(el("span", "lab", "Opłaca się od"), el("span", "v", dec(minOdds(b.p_model))),
+      el("span", "s", taxNote()));
+    nums.append(n1, n2, n3);
     card.append(top, team, legs, nums);
+    const chk = checkBox(b);
+    if (chk) card.append(chk);
+    const ab = !b.wynik ? absLine(m) : null;
+    if (ab) { const a = el("div", "abs"); a.append(el("b", null, "Kontuzje i kary: "), ab); card.append(a); }
+    if (!b.wynik && b.kurs_szac) {
+      const thr = minOdds(b.p_model), est = b.kurs_szac, cls = est >= thr ? "go" : est >= 0.95 * thr ? "warn" : "stop";
+      const ev = 100 * (taxK() * b.p_model * est - 1);
+      const line = el("div", "est " + cls);
+      line.append(el("b", null, cls === "go" ? "Szacunkowo opłacalny" : cls === "warn" ? "Szacunkowo na granicy" : "Szacunkowo poniżej progu"),
+        ": kurs ≈" + dec(est) + (cls === "stop" ? " przy progu " + dec(thr) + " (≈" + zl0(ev) + " na 100 zł). Graj tylko, jeśli Superbet da co najmniej " + dec(thr) + "." : " przy progu " + dec(thr) + " (≈" + zl0(ev) + " na 100 zł). Sprawdź prawdziwy kurs i wpisz go niżej."));
+      card.append(line);
+    }
     const lg = ledgerFor(b);
     if (!b.wynik && !opts.compact) {
       const price = el("div", "bb-price");
@@ -566,16 +802,24 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       const inp = el("input", "in big");
       inp.type = "number"; inp.step = "0.01"; inp.min = "1.01"; inp.inputMode = "decimal"; inp.id = "k-" + key.replace(/[^a-z0-9]/gi, "_");
       inp.setAttribute("aria-label", "Kurs w Superbet");
-      const remembered = lg ? lg.kurs : mem.get("kurs:" + key);
+      const remembered = lg ? lg.kurs : (priceOf(b) || mem.get("kurs:" + key));
       if (remembered) inp.value = Number(remembered).toFixed(2);
       const v = el("div", "verdict");
       const paint = () => {
-        const odds = parseFloat(inp.value), r = verdict(b.p_model, odds);
+        const odds = parseFloat(inp.value), r = verdict(pNow(b), odds);
         v.className = "verdict" + (r ? " " + r.cls : "");
         v.replaceChildren();
         if (r) v.append(el("span", "vd", r.title), el("span", "vv", r.text));
         else v.append(el("span", "vd c-muted", "—"), el("span", "vv", "wpisz kurs, a policzę, czy to się opłaca"));
+        const bank = Number(mem.get("bank") || 0);
+        if (r && r.cls === "go" && bank > 0) {
+          const f = stakeShare(pNow(b), odds), cap = pitCap(taxK() * odds);
+          v.append(el("span", "vv", bank * f > cap ? "stawka ok. " + NF0.format(cap) + " zł, " + PIT_NOTE + " (ćwierć Kelly'ego dałaby " + NF0.format(bank * f) + " zł)"
+            : "stawka ok. " + pct(f) + " banku (" + zl0(bank * f) + "): ćwierć Kelly'ego, przy Twoim kursie i szansie modelu"));
+        }
+        else if (r && r.cls === "go") v.append(el("span", "vv c-muted", "wpisz bank u góry, a podpowiem stawkę"));
         mem.set("kurs:" + key, Number.isFinite(odds) ? String(odds) : null);
+        if (!lg) storePrice(key, Number.isFinite(odds) ? odds : null);
       };
       inp.addEventListener("input", paint);
       paint();
@@ -587,7 +831,15 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
         add.addEventListener("click", () => { S.open[key] = !S.open[key]; render(); });
         act.append(add);
       }
-      if (m && !opts.inMatch) { const mb = el("button", "btn ghost sm", "Mecz i kalkulator"); mb.type = "button"; mb.addEventListener("click", () => openMatch(m.id)); act.append(mb); }
+      if (m) {
+        const mb = el("button", "btn ghost sm", opts.inMatch ? "Ustaw w kalkulatorze" : "Zmień progi lub dodaj zdarzenia"); mb.type = "button";
+        mb.addEventListener("click", () => {
+          if (!opts.inMatch) { openMatchWith(m.id, b); return; }
+          S.calc = calcFromBuilder(m, b); render();
+          const cal = $("#mz-calc"); if (cal) cal.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+        act.append(mb);
+      }
       const why = el("details", "why");
       why.append(el("summary", null, "Dlaczego ten zestaw"));
       const ul = el("ul", "list");
@@ -600,6 +852,7 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
         ul.append(el("li", null, b.druzyna + " wg modelu w tym meczu: średnio " + d1(m.m.shots[i]) + " strzałów, " + d1(m.m.sot[i]) + " celnych" + (m.gole ? ", " + d1(m.gole.srednie[i]) + " gola" : "") + "; rywal: " + d1(m.m.shots[oppI]) + " strzałów."));
       }
       ul.append(el("li", null, (b.why || "").split(" Opłaca się")[0]));
+      ul.append(el("li", null, "Szansa " + pct(b.p_model) + " to uczciwy kurs " + dec(b.kurs_uczciwy) + " (1 ÷ szansa). Podatek 12% od stawki zjada część wygranej, dlatego na zero wychodzi się dopiero od kursu " + dec(b.kurs_min_z_podatkiem) + " — to jest „opłaca się od”. Kurs wyżej = zakład wart grania, kurs niżej = odpuść."));
       why.append(ul);
       act.append(why);
       price.append(inp, v, act);
@@ -608,8 +861,11 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     } else if (b.wynik) {
       const res = el("div", "res");
       const won = b.wynik === "wygrana";
-      res.append(el("span", "vd " + (won ? "c-go" : "c-stop"), won ? "✓ WESZŁO" : "✗ NIE WESZŁO"));
-      res.append(el("span", "c-muted", "przy kursie graj od " + dec(b.kurs_min_z_podatkiem) + ": " + zl(won ? 100 * (TAX * b.kurs_min_z_podatkiem - 1) : -100) + " na 100 zł"));
+      if (b.wynik === "zwrot") res.append(el("span", "vd c-muted", "↺ ZWROT"), el("span", "c-muted", "zawodnik nie zagrał: bukmacher zwraca stawkę"));
+      else res.append(el("span", "vd " + (won ? "c-go" : "c-stop"), won ? "✓ WESZŁO" : "✗ NIE WESZŁO"));
+      const kp = priceOf(b);
+      if (kp) res.append(el("span", null, "przy wpisanym kursie " + dec(kp) + ": ", el("b", sign(pnlAtPrice(b, kp)), zl(pnlAtPrice(b, kp))), " na 100 zł"));
+      if (b.kurs_szac) res.append(el("span", "c-muted", "przy szacowanym kursie ≈" + dec(b.kurs_szac) + ": " + zl(pnlEst(b)) + " na 100 zł"));
       if (lg) res.append(pill("Twój zakład: " + dec(lg.kurs) + " · " + (lg.wynik ? { W: "wygrana", P: "przegrana", Z: "zwrot" }[lg.wynik] : "czeka na zatwierdzenie"), lg.wynik === "W" ? "go" : lg.wynik === "P" ? "stop" : "dark"));
       card.append(res);
     }
@@ -650,36 +906,237 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     const all = st("typy");
     if (!all) { $("#dz-list").replaceChildren(el("div", "card", "Wczytywanie…")); return; }
     const t = todayKey();
-    const keys = Object.keys(all).filter((k) => k >= t && ((all[k].bb || []).length || (all[k].kupon))).sort();
-    if (!keys.length) keys.push(t);
-    if (!S.day || !keys.includes(S.day)) S.day = keys[0];
+    const from = dayKey(new Date(Date.now() - 7 * 864e5).toISOString());
+    const keys = Object.keys(all).filter((k) => k >= from && ((all[k].bb || []).length || (all[k].kupon))).sort();
+    if (!keys.includes(t)) { keys.push(t); keys.sort(); }
+    if (!S.day || !keys.includes(S.day)) S.day = t;
     $("#dz-days").replaceChildren(...keys.map((k) => {
-      const d = all[k] || {}, n = (d.bb || []).length;
+      const mainB = (all[k] && all[k].bb || []).filter(isMain), n = mainB.length, done = mainB.filter((x) => x.wynik), hit = done.filter((x) => x.wynik === "wygrana").length;
       const b = el("button", "dbtn"); b.type = "button"; b.setAttribute("aria-pressed", k === S.day ? "true" : "false");
-      b.append(el("span", "d1", dayLabel(k)), el("span", "d2", n ? nOf(n, "zestaw", "zestawy", "zestawów") : "brak zestawów"));
+      b.append(el("span", "d1", dayLabel(k)), el("span", "d2", done.length ? "weszło " + hit + " z " + done.length : n ? nOf(n, "główny", "główne", "głównych") : "brak zestawów"));
       b.addEventListener("click", () => { S.day = k; render(); });
       return b;
     }));
     const d = all[S.day] || {};
     const nowIso = new Date().toISOString();
     const live = (b) => (b.wynik || b.start <= nowIso ? 1 : 0);   // still to be played first, then the ones in play or settled
-    const bbs = (d.bb || []).slice().sort((a, b) => live(a) - live(b) || a.start.localeCompare(b.start) || b.p_model - a.p_model);
-    const open = bbs.filter((b) => !live(b));
-    const started = bbs.length - open.length;
-    $("#dz-info").textContent = bbs.length ? nOf(bbs.length, "zestaw", "zestawy", "zestawów") + (started ? ", " + started + " już w grze" : "") : "";
+    const bbs = (d.bb || []).slice().sort((a, b) => live(a) - live(b) || a.start.localeCompare(b.start) || a.mecz.localeCompare(b.mecz, "pl")
+      || KIND_ORDER.indexOf(a.rodzaj) - KIND_ORDER.indexOf(b.rodzaj) || (a.poziom === "wyzej") - (b.poziom === "wyzej") || b.p_model - a.p_model);
+    const mains = bbs.filter(isMain), tests = bbs.filter((b) => !isMain(b));
+    const started = mains.filter((b) => live(b)).length;
+    $("#dz-info").textContent = mains.length ? nOf(mains.length, "główny", "główne", "głównych") + (tests.length ? " + " + tests.length + " testowych" : "") + (started ? " · " + started + " już w grze lub rozliczonych" : "") : "";
     const lead = $("#dz-lead");
     lead.replaceChildren();
     if (!bbs.length) lead.append("Na ten dzień model nie ma zestawu z szansą 45–80%. Zajrzyj do innych dni albo złóż własny zestaw w meczu.");
+    else if (S.day < t) lead.append("Zestawy z " + dd(S.day) + " z wynikami: zielona ramka weszło, czerwona nie weszło. Podsumowania wszystkich dni i przyczyny porażek są w Wynikach.");
     else {
-      const safe = bbs.filter((b) => b.rodzaj === "bezpieczny").length, res = bbs.filter((b) => b.rodzaj === "z_wynikiem").length, whole = bbs.length - safe - res;
-      lead.append("Sprawdź w Superbet kurs każdego zestawu i wpisz go niżej. ", el("b", null, "Graj tylko od kursu „graj od”"), ", resztę odpuść. ");
-      lead.append("Bezpieczniejsze (same statystyki): " + safe + " · z wynikiem meczu (wygrana albo „nie przegra”): " + res + " · na cały mecz (strzały i celne obu drużyn, obie strzelą): " + whole + ".");
+      lead.append(el("b", null, "Najpierw to, co najpewniejsze: "), "w widoku „Najpewniejsze zdarzenia” każdy mecz ma zdarzenia z najwyższą szansą dla gospodarza, gościa i całego meczu; ",
+        el("b", null, "główny zestaw meczu"), " to jego zestaw z najwyższą szansą (przy szacowanym kursie co najmniej 1,35). ",
+        "„Opłaca się od” na kartach to kurs, od którego zakład wychodzi na zero " + (taxK() === 1 ? "(bez podatku)" : "po podatku 12%") + ". ",
+        "Ok. godzinę przed każdym meczem z głównym zestawem (35–65 minut) sprawdzam składy, kontuzje i świeże kursy; wynik kontroli pojawia się na karcie zestawu (gdy składów jeszcze nie ma, sprawdzam je jeszcze raz 5–40 minut przed meczem). ");
+      const mode = el("div", "mode");
+      const seg = el("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Gdzie grasz");
+      [["tak", "Superbet · podatek 12%"], ["nie", "Bez podatku (Betclic, TOTALbet, Fortuna AKO…)"]].forEach(([v, label]) => {
+        const bt = el("button", null, label); bt.type = "button"; bt.setAttribute("aria-selected", (mem.get("podatek") === "nie" ? "nie" : "tak") === v ? "true" : "false");
+        bt.addEventListener("click", () => { mem.set("podatek", v === "nie" ? "nie" : null); render(); });
+        seg.append(bt);
+      });
+      const bonLab = el("label", "bank"), bonInp = el("input", "in num");
+      bonInp.type = "number"; bonInp.min = "0"; bonInp.max = "300"; bonInp.step = "1"; bonInp.id = "dz-bonus"; bonInp.value = mem.get("bonus") || ""; bonInp.placeholder = "0";
+      bonInp.addEventListener("change", () => { mem.set("bonus", bonInp.value && Number(bonInp.value) > 0 ? bonInp.value : null); render(); });
+      bonLab.append("Bonus do wygranej na AKO (SuperBonus / booster): ", bonInp, " %");
+      mode.append(el("span", "lab", "Gdzie grasz:"), seg, bonLab);
+      lead.append(mode);
+      const bankLab = el("label", "bank"), bankInp = el("input", "in num");
+      bankInp.type = "number"; bankInp.min = "0"; bankInp.step = "50"; bankInp.id = "dz-bank"; bankInp.value = mem.get("bank") || ""; bankInp.placeholder = "np. 1000";
+      bankInp.addEventListener("change", () => { mem.set("bank", bankInp.value || null); render(); });
+      bankLab.append("Twój bank na zakłady: ", bankInp, " zł (do podpowiedzi stawki)");
+      lead.append("Testowe warianty (inne progi i połączenia w tych samych meczach) są zwinięte na dole: służą do nauki modelu i liczą się w wynikach osobno. Inne progi niż u bukmachera? Kliknij „Zmień progi lub dodaj zdarzenia”.");
+      lead.append(el("br"), bankLab);
     }
     const list = $("#dz-list");
-    list.replaceChildren(...bbs.map((b) => bbCard(b)));
-    const kb = $("#dz-kupon");
-    kb.replaceChildren();
-    if (d.kupon) kb.append(couponCard(d.kupon));
+    const view = ["bb", "kupony"].includes(mem.get("widok")) ? mem.get("widok") : "pewne";
+    const sw = el("div", "views");
+    const vseg = el("div", "seg"); vseg.setAttribute("role", "tablist"); vseg.setAttribute("aria-label", "Widok dnia");
+    [["pewne", "Najpewniejsze zdarzenia"], ["kupony", "Kupony AKO"], ["bb", "Zestawy (" + mains.length + ")"]].forEach(([v, label]) => {
+      const bt = el("button", null, label); bt.type = "button"; bt.setAttribute("role", "tab"); bt.setAttribute("aria-selected", view === v ? "true" : "false");
+      bt.addEventListener("click", () => { mem.set("widok", v === "pewne" ? null : v); render(); });
+      vseg.append(bt);
+    });
+    sw.append(vseg);
+    list.replaceChildren(sw);
+    if (view === "pewne") {
+      renderLikely(list, d, mains);
+      return;
+    }
+    if (view === "kupony") {
+      const past = S.day < t;
+      const cands = past ? mains.filter((b) => b.kurs_szac || priceOf(b)) : mains.filter((b) => !b.wynik && b.start > nowIso && !flagged(b));
+      list.append(el("p", "note", past
+        ? "Kupony tego dnia ułożone tą samą regułą z danych sprzed meczów (szanse i szacowane kursy), z wynikami."
+        : "Gotowe kupony z najpewniejszych zestawów różnych meczów: najwyższa łączna szansa. Wpisz łączny kurs z kuponu, a policzę, czy się opłaca."));
+      list.append(el("p", "note", "Kupony nie mają wspólnych meczów: gdy jeden zestaw nie wejdzie, przegrywa tylko ten kupon, w którym jest. Najpewniejsze zestawy idą do kuponu z 2, kolejne do kuponu z 3 i z 4."));
+      const set = akoSet(cands), grid = el("div", "grid");
+      [2, 3, 4].forEach((n) => grid.append(akoCard(set, n, past)));
+      list.append(grid);
+      return;
+    }
+    list.append(...mains.map((b) => bbCard(b)));
+    if (tests.length) {
+      const det = el("details", "testy card"); det.open = !!S.open["testy:" + S.day];
+      det.addEventListener("toggle", () => { S.open["testy:" + S.day] = det.open; });
+      det.append(el("summary", null, "Testowe warianty (" + tests.length + ") — do nauki modelu, nie mieszać z głównymi"));
+      const g = el("div", "grid"); g.append(...tests.map((b) => bbCard(b))); det.append(g);
+      list.append(det);
+    }
+  }
+  // the day's matches with their likeliest events (upcoming: from the forecast; started and past: the logged ones, with
+  // results) and each match's main builder, plus the record of the logged events so far
+  function renderLikely(list, d, mains) {
+    const logged = d.zdarzenia || [], byFix = new Map();
+    logged.forEach((e) => { const k = String(e.fixture_id); if (!byFix.has(k)) byFix.set(k, []); byFix.get(k).push(e); });
+    const ms = (st("mecze") || []).filter((m) => dayKey(m.start) === S.day && m.najpewniejsze && ["home", "away", "total"].some((s) => (m.najpewniejsze[s] || []).length));
+    const ids = new Set(ms.map((m) => String(m.id)));
+    const rows = ms.map((m) => ({ m, id: String(m.id), start: m.start, mecz: m.gosp + " – " + m.gosc }))
+      .concat([...byFix.keys()].filter((id) => !ids.has(id)).map((id) => ({ m: null, id, start: byFix.get(id)[0].start, mecz: byFix.get(id)[0].mecz })))
+      .sort((a, b) => a.start.localeCompare(b.start) || a.mecz.localeCompare(b.mecz, "pl"));
+    const rec = (st("wyniki") || {}).zdarzenia;
+    const sum = el("p", "note lk-sum");
+    sum.append(el("span", null, "Szansa wg modelu, że zdarzenie wejdzie. Dla każdej drużyny i całego meczu najpewniejsze zdarzenia (od 75%): do budowania własnych zestawów i kuponów."));
+    if (rec && rec.rozliczone) sum.append(el("b", null, "Najpewniejsze zdarzenie każdej strony: weszło " + rec.trafione + " z " + rec.rozliczone + " (" + pct(rec.trafione / rec.rozliczone) + ", model zakładał " + pct(rec.oczekiwane / rec.rozliczone) + ")."));
+    else sum.append(el("span", "c-muted", "Najpewniejsze zdarzenie każdej strony (pierwsze w kolumnie) zapisuję i rozliczam po meczu; skuteczność pojawi się tu i w Wynikach."));
+    list.append(sum);
+    if (!rows.length) { list.append(el("div", "card", "Na ten dzień nie ma prognoz zdarzeń. Zajrzyj do innych dni.")); return; }
+    const grid = el("div", "grid lkgrid");
+    rows.forEach((r) => {
+      const m = r.m || matchById(r.id), card = el("article", "card lk"), top = el("div", "lk-top");
+      top.append(el("span", "m", r.mecz), el("span", "c-muted", (dayKey(r.start) === todayKey() ? "" : dd(dayKey(r.start)) + ", ") + hm(r.start) + (m ? " · " + ligaName(m.liga_id) : "")));
+      card.append(top, likelyCols(r.m, byFix.get(r.id)));
+      const main = mains.find((b) => String(b.fixture_id) === r.id);
+      if (main) {
+        const bl = el("div", "lk-bb");
+        bl.append(el("b", null, "Najpewniejszy zestaw: "), bbText(main) + " · szansa " + pct(main.p_model)
+          + (main.wynik ? (main.wynik === "wygrana" ? " · ✓ weszło" : main.wynik === "zwrot" ? " · ↺ zwrot" : " · ✗ nie weszło") : ""));
+        card.append(bl);
+      }
+      if (m && !r.m && m.id) card.style.cursor = "default";
+      grid.append(card);
+    });
+    list.append(grid);
+  }
+  // ---- the AKO of main builders from different matches: the stake tax is paid once per coupon and the builders'
+  // edges multiply, so a coupon of builders that each pay without the tax can pay with it too.  Coupons of 2-4
+  // builders (each priced at least AKO_MIN), the likeliest first (user, 2026-11-02: the chance matters more than the price),
+  // the price of each builder the typed one when there is one, else the estimated one.
+  const AKO_MIN = 1.30;
+  function akoPayout(O) { return 1 + (taxK() * O - 1) * (1 + bonusK()); }      // per unit stake, the bonus on net winnings
+  function akoValue(P, O) { return P * akoPayout(O) - 1; }
+  function akoBreakEven(P) { return (1 + (1 / P - 1) / (1 + bonusK())) / taxK(); }
+  function akoGrowth(P, O) {
+    const b = akoPayout(O) - 1; if (!(b > 0)) return -1;
+    const f = (P * (b + 1) - 1) / b; if (!(f > 0)) return akoValue(P, O) - 1;
+    return P * Math.log(1 + f * b) + (1 - P) * Math.log(1 - f);
+  }
+  function akoOptions(cands) {
+    const legs = cands.map((b) => ({ b, p: b.p_model, o: priceOf(b) || b.kurs_szac, typed: !!priceOf(b) })).filter((x) => x.o && x.o >= AKO_MIN && x.p > 0)
+      .sort((x, y) => y.p - x.p || y.o - x.o).slice(0, 12);
+    const out = [];
+    const walk = (start, cur) => {
+      if (cur.length >= 2) { const P = cur.reduce((a, x) => a * x.p, 1), O = cur.reduce((a, x) => a * x.o, 1); out.push({ legs: cur.slice(), P, O, ev: akoValue(P, O), g: akoGrowth(P, O) }); }
+      if (cur.length === 4) return;
+      for (let i = start; i < legs.length; i++) { cur.push(legs[i]); walk(i + 1, cur); cur.pop(); }
+    };
+    walk(0, []);
+    return out.sort((a, b) => b.P - a.P || b.O - a.O);
+  }
+  // the coupons of 2, 3 and 4 builders share no builder (no match), so one builder that fails costs one coupon, not
+  // all of them: the best coupon of 2 first, then the best of 3 from the builders left, then the best of 4
+  function akoSet(cands) {
+    const opts = akoOptions(cands), used = new Set(), out = {};
+    [2, 3, 4].forEach((n) => {
+      const o = opts.find((x) => x.legs.length === n && x.legs.every((l) => !used.has(l.b)));
+      out[n] = o || null;
+      if (o) o.legs.forEach((l) => used.add(l.b));
+    });
+    return { opts, out, n: new Set(opts.flatMap((o) => o.legs.map((l) => l.b))).size };
+  }
+  function akoCard(set, size, past) {
+    const won = (o) => o.legs.every((x) => x.b.wynik === "wygrana"), done = (o) => o.legs.every((x) => x.b.wynik);
+    const best = set.out[size];
+    // the builders of the other coupons: an alternative must leave them alone too
+    const others = new Set();
+    [2, 3, 4].forEach((n) => { if (n !== size && set.out[n]) set.out[n].legs.forEach((l) => others.add(l.b)); });
+    const sec = el("section", "card ako" + (past && best && done(best) ? (won(best) ? " won" : " lost") : ""));
+    const head = el("div", "head");
+    head.append(el("h2", null, "Kupon z " + size + " zestawów"), el("span", "c-muted", (taxK() === 1 ? "bez podatku" : "podatek 12% raz na kupon") + (bonusK() ? " · bonus " + Math.round(bonusK() * 100) + "% do wygranej" : "")));
+    sec.append(head);
+    if (!best) {
+      sec.append(el("p", "note", set.n >= size
+        ? "Za mało innych meczów: pozostałe zestawy są już w kuponach obok, a kupony nie powtarzają meczów."
+        : "Za mało głównych zestawów z kursem co najmniej " + dec(AKO_MIN) + (past ? "." : ", które jeszcze się nie zaczęły.")));
+      return sec;
+    }
+    const ul = el("ul", "legs");
+    best.legs.forEach((x) => {
+      const li = el("li", x.b.wynik === "wygrana" ? "ok" : x.b.wynik === "przegrana" ? "miss" : null);
+      const body = el("span", "akol");
+      body.append(el("b", null, hm(x.b.start) + " " + x.b.mecz));
+      const evs = el("span", "akoev");
+      x.b.legs.forEach((l, j) => { if (j) evs.append(" + "); evs.append(legTag(l, x.b), " " + legText(l, x.b)); });
+      body.append(evs);
+      li.append(body, el("span", "came c-muted", pct(x.p) + " · " + (x.typed ? "kurs " : "≈") + dec(x.o)));
+      ul.append(li);
+    });
+    sec.append(ul);
+    const nums = el("div", "bb-nums");
+    const c1 = el("div"), c2 = el("div"), c3 = el("div");
+    c1.append(el("span", "lab", "Szansa kuponu"), el("span", "v", pct(best.P)), el("span", "s", "wszystkie zestawy naraz (różne mecze)"));
+    c2.append(el("span", "lab", "Łączny kurs"), el("span", "v", "≈" + dec(best.O)), el("span", "s", best.legs.some((x) => !x.typed) ? "szacowany; wpisz kursy przy zestawach" : "z wpisanych kursów"));
+    c3.append(el("span", "lab", "Opłaca się od"), el("span", "v", dec(akoBreakEven(best.P))), el("span", "s", "łącznego kursu"));
+    nums.append(c1, c2, c3);
+    sec.append(nums);
+    if (past) {
+      const res = el("div", "res");
+      if (done(best)) res.append(el("span", "vd " + (won(best) ? "c-go" : "c-stop"), won(best) ? "✓ WESZŁO" : "✗ NIE WESZŁO"),
+        el("span", "c-muted", "przy szacowanym łącznym kursie ≈" + dec(best.O) + ": " + zl(won(best) ? 100 * (akoPayout(best.O) - 1) : -100) + " na 100 zł"));
+      else res.append(el("span", "c-muted", "czeka na wyniki"));
+      sec.append(res);
+      return sec;
+    }
+    const cls = best.ev >= 0 ? "go" : best.ev > -0.05 ? "warn" : "stop";
+    const line = el("div", "est " + cls);
+    line.append(el("b", null, best.ev >= 0 ? "Szacunkowo opłacalny" : "Szacunkowo nieopłacalny"), ": ≈" + zl0(100 * best.ev) + " na 100 zł w dłuższej grze.");
+    const bank = Number(mem.get("bank") || 0);
+    if (best.ev > 0 && bank > 0) {
+      const b = akoPayout(best.O) - 1, f = Math.max(0, Math.min(0.03, (best.P * (b + 1) - 1) / b / 4)), cap = pitCap(akoPayout(best.O));
+      line.append(bank * f > cap ? " Stawka ok. " + NF0.format(cap) + " zł, " + PIT_NOTE + "." : " Stawka ok. " + pct(f) + " banku (" + zl0(bank * f) + "): ćwierć Kelly'ego.");
+    }
+    sec.append(line);
+    const row = el("div", "bb-price");
+    row.append(el("span", "lab", "Łączny kurs z kuponu (wpisz)"));
+    const inp = el("input", "in big"); inp.type = "number"; inp.step = "0.01"; inp.min = "1.01"; inp.inputMode = "decimal"; inp.id = "ako-kurs-" + size; inp.setAttribute("aria-label", "Łączny kurs kuponu z " + size + " zestawów");
+    const memKey = "ako:" + S.day + ":" + best.legs.map((x) => bbKey(x.b)).join(",");
+    if (mem.get(memKey)) inp.value = mem.get(memKey);
+    const v = el("div", "verdict");
+    const paint = () => {
+      const O = parseFloat(inp.value); v.replaceChildren(); mem.set(memKey, O > 1 ? String(O) : null);
+      if (!(O > 1)) { v.className = "verdict"; v.append(el("span", "vv", "wpisz łączny kurs, a policzę, czy kupon się opłaca")); return; }
+      const ev = akoValue(best.P, O), c = ev >= 0 ? "go" : ev > -0.05 ? "warn" : "stop";
+      v.className = "verdict " + c;
+      v.append(el("span", "vd", c === "go" ? "GRAJ" : c === "warn" ? "NA GRANICY" : "NIE GRAJ"), el("span", "vv", "w dłuższej grze " + zl0(100 * ev) + " na 100 zł"));
+    };
+    inp.addEventListener("input", paint); paint();
+    row.append(inp, v);
+    sec.append(row);
+    const alt = set.opts.filter((o) => o !== best && o.legs.length === size && o.legs.every((l) => !others.has(l.b))).slice(0, 2);
+    if (alt.length) {
+      const det = el("details", "why"); det.append(el("summary", null, "Inne kupony z " + size + " zestawów (bez meczów z kuponów obok)"));
+      const al = el("ul", "list");
+      alt.forEach((o) => al.append(el("li", null, o.legs.map((x) => x.b.mecz + " (" + x.b.legs.map((l) => (l.scope === "total" || l.side === "btts" ? "w meczu" : (l.scope === "home" ? x.b.mecz.split(" – ")[0] : x.b.mecz.split(" – ")[1])) + ": " + legText(l, x.b)).join(" + ") + ")").join(" · ") + " — szansa " + pct(o.P) + ", kurs ≈" + dec(o.O) + ", " + zl0(100 * o.ev) + " na 100 zł")));
+      det.append(al); sec.append(det);
+    }
+    if (size === 2) sec.append(el("p", "note", "Dlaczego AKO: podatek 12% płacisz raz od kuponu, a przewaga każdego zestawu (szansa × kurs) mnoży się. Dwa zestawy po +8% bez podatku dają kupon +17%, czyli ok. +3% nawet z podatkiem; trzy dają +26% bez podatku i ok. +11% z podatkiem. Działa tylko wtedy, gdy zestawy mają przewagę; gdy jej nie mają, kupon pogłębia stratę."));
+    return sec;
   }
   // the ready coupon of the day (2-3 events from different matches): secondary, same price logic
   function couponCard(k) {
@@ -695,7 +1152,7 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     });
     legs.style.padding = "0";
     const nums = el("div", "row");
-    nums.append(el("span", null, "Łączny kurs z serwisu: "), el("b", "num", dec(k.kurs)), el("span", null, " · szansa wg modelu "), el("b", "num", pct(k.p_model)), el("span", null, " · graj od "), el("b", "num", dec(minOdds(k.p_model))));
+    nums.append(el("span", null, "Łączny kurs z serwisu: "), el("b", "num", dec(k.kurs)), el("span", null, " · szansa wg modelu "), el("b", "num", pct(k.p_model)), el("span", null, " · opłaca się od "), el("b", "num", dec(minOdds(k.p_model))));
     sec.append(legs, nums);
     if (k.wynik) sec.append(pill(k.wynik === "wygrana" ? "✓ weszło" : "✗ nie weszło", k.wynik === "wygrana" ? "go" : "stop"));
     else {
@@ -727,9 +1184,9 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
   function suggestResult(b) {
     if (b.wynik) return null;
     if (b.bb) {
-      const [day, fid, rodzaj] = b.bb.split("|");
+      const day = b.bb.split("|")[0];
       const lb = ((st("typy") || {})[day] || {}).bb || [];
-      const hit = lb.find((x) => String(x.fixture_id) === fid && x.rodzaj === rodzaj);
+      const hit = lb.find((x) => bbKey(x) === b.bb);
       if (hit && hit.wynik) return { r: hit.wynik === "wygrana" ? "W" : "P", v: hit.legs.map((l) => (empty(l.wartosc) ? "?" : l.wartosc)) };
     }
     if (!b.nogi || !b.nogi.length) return null;
@@ -751,64 +1208,190 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     if (out.some((x) => x === null)) return null;
     return { r: out.every((x) => x.r === "Z") ? "Z" : "W", v: out.map((x) => x.v) };
   }
+  // what came in and what did not: by kind and level, by type of leg, every lost builder with its reason
+  function renderAnaliza() {
+    const box = $("#wy-anal"), sub = $("#wy-anal-sub");
+    if (!box) return;
+    const a = (st("wyniki") || {}).analiza_bb;
+    box.replaceChildren();
+    if (!a || !a.n) { sub.textContent = ""; box.append(el("p", "note", "Pierwsze wnioski po rozliczonych zestawach.")); return; }
+    sub.textContent = "główne: " + a.n + " rozliczonych · weszło " + a.trafione + " · model zakładał " + NF0.format(a.oczekiwane) + (a.testowe && a.testowe.n ? " · testowe: " + a.testowe.trafione + " z " + a.testowe.n : "");
+    const kindOf = (g) => kindName(g.rodzaj) + (g.poziom === "wyzej" ? " · wyższe progi" : "");
+    const gapCls = (v, r) => (v - r.oczek >= 0.03 ? "c-go" : v - r.oczek <= -0.03 ? "c-stop" : "");
+    if (a.wnioski && a.wnioski.length) { const w = el("div"); w.append(el("h3", null, "Wnioski")); const ul = el("ul", "list"); a.wnioski.forEach((t) => ul.append(el("li", null, t))); w.append(ul); box.append(w); }
+    const sec = (title, tbl) => { const d = el("div"); d.append(el("h3", null, title)); const wrap = el("div", "wrap"); wrap.append(tbl); d.append(wrap); box.append(d); return d; };
+    // picking the likeliest can flatter the chances (the "winner's curse"): what we pick against what we promised
+    const sel = a.selekcja;
+    if (sel && (sel.grupy || []).length) {
+      const t0 = el("table", "tbl");
+      table(t0, sel.grupy.map((g) => Object.assign({ key: g.grupa, proc: g.n ? g.trafione / g.n : null, oczek: g.n ? g.oczekiwane / g.n : null,
+                                                    ryn: g.rynek_n ? g.rynek / g.rynek_n : null }, g)), [
+        { f: "nazwa", h: "Co wybieramy", nw: true }, { f: "n", h: "Rozliczone", num: true }, { f: "trafione", h: "Weszło", num: true },
+        { f: "proc", h: "Skuteczność", num: true, fmt: pct, cls: gapCls }, { f: "oczek", h: "Model obiecywał", num: true, fmt: pct },
+        { f: "ryn", h: "Rynek dawał", num: true, fmt: pct }, { f: "korekta", h: "Korekta szans", nw: true }], "key");
+      const d = sec("Czy wybieranie najpewniejszych zawyża szanse?", t0);
+      if (sel.wniosek) d.append(el("p", "note", sel.wniosek));
+    }
+    const t1 = el("table", "tbl");
+    table(t1, (a.grupy || []).map((g) => Object.assign({ key: g.rodzaj + "|" + g.poziom, nazwa: kindOf(g), proc: g.trafione / g.n, oczek: g.oczekiwane / g.n }, g)), [
+      { f: "nazwa", h: "Rodzaj", nw: true }, { f: "n", h: "Zestawy", num: true }, { f: "trafione", h: "Weszło", num: true },
+      { f: "proc", h: "Skuteczność", num: true, fmt: pct, cls: gapCls }, { f: "oczek", h: "Model zakładał", num: true, fmt: pct },
+      { f: "zysk_szac", h: "Przy szac. kursach", num: true, fmt: zl0, cls: (v) => sign(v) }], "key");
+    sec("Rodzaje zestawów", t1);
+    const t2 = el("table", "tbl");
+    table(t2, (a.nogi || []).map((g) => Object.assign({ key: g.typ, proc: g.trafione / g.n, oczek: g.oczekiwane / g.n }, g)), [
+      { f: "typ", h: "Zdarzenie", nw: true }, { f: "n", h: "Nogi", num: true }, { f: "trafione", h: "Weszło", num: true },
+      { f: "proc", h: "Skuteczność", num: true, fmt: pct, cls: gapCls }, { f: "oczek", h: "Model zakładał", num: true, fmt: pct }], "key");
+    sec("Zdarzenia w zestawach", t2);
+    if ((a.przyczyny || []).length) { const d = el("div"); d.append(el("h3", null, "Dlaczego nie weszło")); const row = el("div", "reasons"); a.przyczyny.forEach((x) => row.append(pill(x.przyczyna + " × " + x.n))); d.append(row); box.append(d); }
+    if ((a.przegrane || []).length) {
+      const det = el("details", "why");
+      det.append(el("summary", null, "Przegrane zestawy, od najnowszego (" + a.przegrane.length + ")"));
+      const ul = el("ul", "list");
+      a.przegrane.forEach((x) => {
+        const li = el("li");
+        const legs = (x.nogi || []).map((n) => n.opis + " → padło " + (empty(n.wartosc) ? "?" : n.wartosc) + (n.zabraklo !== undefined ? " (potrzeba " + n.potrzeba + ", zabrakło " + n.zabraklo + ")" : "")).join("; ");
+        li.append(el("b", null, dd(x.dzien) + " " + x.mecz + " · " + x.druzyna), " (" + kindOf(x) + ", " + pct(x.p_model) + "): " + legs + " — ", el("i", null, x.przyczyna));
+        ul.append(li);
+      });
+      det.append(ul);
+      box.append(det);
+    }
+  }
   function renderWyniki() {
-    const bbs = settledBuilders();
+    const all0 = settledBuilders(), bbs = all0.filter(isMain), tests = all0.filter((b) => !isMain(b));
     const hits = bbs.filter((b) => b.wynik === "wygrana").length, exp = bbs.reduce((a, b) => a + b.p_model, 0);
-    const pnl = bbs.reduce((a, b) => a + pnlAtMin(b), 0);
-    const week = bbs.filter((b) => b.day >= dayKey(new Date(Date.now() - 7 * 864e5).toISOString()));
-    const wh = week.filter((b) => b.wynik === "wygrana").length, wp = week.reduce((a, b) => a + pnlAtMin(b), 0);
+    const est = bbs.filter((b) => b.kurs_szac), estP = est.reduce((a, b) => a + pnlEst(b), 0);
+    const th = tests.filter((b) => b.wynik === "wygrana").length, te = tests.reduce((a, b) => a + b.p_model, 0);
+    const testEst = tests.filter((b) => b.kurs_szac), testP = testEst.reduce((a, b) => a + pnlEst(b), 0);
     const real = (S.zaklady || []).filter((z) => z.tryb === "Realny" && z.wynik), realP = real.reduce((a, z) => a + (betPayout(z) || 0) - (Number(z.stawka) || 0), 0);
+    const priced = all0.filter((b) => priceOf(b)), pricedP = priced.reduce((a, b) => a + pnlAtPrice(b, priceOf(b)), 0), pricedH = priced.filter((b) => b.wynik === "wygrana").length;
+    const rk = meta().rynek || {};
+    // the day's AKO coupons by the same rule as on the day page (no match in two coupons) from what was known before
+    // the matches (estimated or typed prices); settled when all their builders are
+    const allT = st("typy") || {};
+    const akoRec = { 2: { n: 0, w: 0, p: 0 }, 3: { n: 0, w: 0, p: 0 }, 4: { n: 0, w: 0, p: 0 } };
+    Object.keys(allT).sort().forEach((day) => {
+      const ms = (allT[day].bb || []).filter((b) => isMain(b) && (b.kurs_szac || priceOf(b)));
+      const set = akoSet(ms);
+      [2, 3, 4].forEach((n) => {
+        const o = set.out[n];
+        if (!o || o.legs.some((x) => !x.b.wynik)) return;
+        const won = o.legs.every((x) => x.b.wynik === "wygrana"), r = akoRec[n];
+        r.n++; if (won) r.w++;
+        r.p += won ? 100 * (akoPayout(o.O) - 1) : -100;
+      });
+    });
     const tile = (k, v, s, cls) => { const t = el("div", "tile"); t.append(el("span", "lab", k), el("span", "v " + (cls || ""), v)); if (s) t.append(el("span", "s", s)); return t; };
+    const akoTile = (n) => { const r = akoRec[n]; return tile("Kupon z " + n + " zestawów, każdego dnia", r.n ? zl0(r.p) : "—", r.n ? r.w + " z " + nOf(r.n, "kuponu", "kuponów", "kuponów") + " weszło · 100 zł na kupon · szac. kurs, " + (taxK() === 1 ? "bez podatku" : "z podatkiem") + (bonusK() ? ", bonus " + Math.round(bonusK() * 100) + "%" : "") : "pierwsze kupony po rozliczeniu", sign(r.p)); };
+    const zw = (st("wyniki") || {}).zdarzenia;
     $("#wy-tiles").replaceChildren(
-      tile("Weszło", bbs.length ? hits + " z " + bbs.length : "—", bbs.length ? pct(hits / bbs.length) + " · model zakładał " + NF0.format(exp) : "pierwsze rozliczenia po meczach"),
-      tile("Przy kursie graj od", bbs.length ? zl0(pnl) : "—", "100 zł na każdy zestaw · " + (bbs.length ? spct(pnl / (100 * bbs.length)) + " stawki" : ""), sign(pnl)),
-      tile("Ostatnie 7 dni", week.length ? wh + " z " + week.length : "—", week.length ? zl0(wp) + " przy kursie graj od" : "", sign(wp)),
-      tile("Twoje realne zakłady", real.length ? zl0(realP) : "—", real.length ? nOf(real.length, "rozliczony", "rozliczone", "rozliczonych") + " · " + real.filter((z) => z.wynik === "W").length + " wygranych" : "zapisz zagrane zestawy z kursem z Superbet", sign(realP)));
-    // running balance by day: paper at "graj od", and the real ledger
+      tile("Najpewniejsze zdarzenia: weszło", zw && zw.rozliczone ? zw.trafione + " z " + zw.rozliczone : "—", zw && zw.rozliczone ? pct(zw.trafione / zw.rozliczone) + " · model zakładał " + pct(zw.oczekiwane / zw.rozliczone) + " · pierwsze zdarzenie każdej strony meczu" : "liczone od 2.11, po pierwszych meczach"),
+      tile("Główne: weszło", bbs.length ? hits + " z " + bbs.length : "—", bbs.length ? pct(hits / bbs.length) + " · model zakładał " + NF0.format(exp) + " · jeden zestaw na mecz" : "pierwsze rozliczenia po meczach"),
+      tile("Główne pojedynczo, szac. kursy", est.length ? zl0(estP) : "—", est.length ? "100 zł na zestaw · " + spct(estP / (100 * est.length)) + " stawki · " + (taxK() === 1 ? "bez podatku" : "z podatkiem 12%") + " · szacunek" : "", sign(estP)),
+      tile("Przy wpisanych kursach Superbet", priced.length ? zl0(pricedP) : "—", priced.length ? pricedH + " z " + priced.length + " wycenionych · 100 zł na zestaw · " + spct(pricedP / (100 * priced.length)) + " stawki" : "wpisz kurs przy zestawie, a po meczu policzę bilans po nim", sign(pricedP)),
+      tile("Twoje realne zakłady", real.length ? zl0(realP) : "—", real.length ? nOf(real.length, "rozliczony", "rozliczone", "rozliczonych") + " · " + real.filter((z) => z.wynik === "W").length + " wygranych" : "zapisz zagrane zestawy z kursem z Superbet", sign(realP)),
+      akoTile(2), akoTile(3), akoTile(4),
+      tile("Testowe: weszło", tests.length ? th + " z " + tests.length : "—", tests.length ? pct(th / tests.length) + " · model zakładał " + NF0.format(te) + (testEst.length ? " · szac. " + zl0(testP) + " (" + spct(testP / (100 * testEst.length)) + ")" : "") + " · osobno od głównych" : ""));
+    // running balance by day: main proposals at estimated prices, typed prices, the real ledger
     const byDay = new Map();
-    bbs.forEach((b) => byDay.set(b.day, (byDay.get(b.day) || 0) + pnlAtMin(b)));
+    est.forEach((b) => byDay.set(b.day, (byDay.get(b.day) || 0) + pnlEst(b)));
     const realDay = new Map();
     real.forEach((z) => { if (z.data) realDay.set(z.data, (realDay.get(z.data) || 0) + (betPayout(z) || 0) - (Number(z.stawka) || 0)); });
-    const days = [...new Set([...byDay.keys(), ...realDay.keys()])].sort();
-    let c1 = 0, c2 = 0;
-    const pts = days.map((d) => { c1 += byDay.get(d) || 0; c2 += realDay.get(d) || 0; return { d, a: c1, b: c2 }; });
+    const pricedDay = new Map();
+    priced.forEach((b) => pricedDay.set(b.day, (pricedDay.get(b.day) || 0) + pnlAtPrice(b, priceOf(b))));
+    const days = [...new Set([...byDay.keys(), ...realDay.keys(), ...pricedDay.keys()])].sort();
+    let c1 = 0, c2 = 0, c3 = 0;
+    const pts = days.map((d) => { c1 += byDay.get(d) || 0; c2 += realDay.get(d) || 0; c3 += pricedDay.get(d) || 0; return { d, a: c1, b: c2, c: c3 }; });
     const chart = $("#wy-chart"), legend = $("#wy-legend");
     chart.replaceChildren(); legend.replaceChildren();
     if (pts.length >= 2) {
-      const series = [["a", "Przy kursie graj od (na papierze)", "var(--s1)"]];
+      const series = [["a", "Główne przy szacowanych kursach", "var(--s1)"]];
+      if (priced.length) series.push(["c", "Przy wpisanych kursach Superbet", "var(--s3)"]);
       if (real.length) series.push(["b", "Twoje realne zakłady", "var(--s2)"]);
       chart.append(balanceChart(pts, series));
       series.forEach(([k, label, color]) => { const x = el("span"), i = el("i"); i.style.background = color; x.append(i, label + " ", el("b", sign(pts[pts.length - 1][k]), zl0(pts[pts.length - 1][k]))); legend.append(x); });
     }
-    const safe = bbs.filter((b) => b.rodzaj !== "z_wynikiem"), res = bbs.filter((b) => b.rodzaj === "z_wynikiem");
-    const part = (lst, name) => (lst.length ? name + ": " + lst.filter((b) => b.wynik === "wygrana").length + " z " + lst.length + " (" + zl0(lst.reduce((a, b) => a + pnlAtMin(b), 0)) + ")" : null);
-    $("#wy-note").textContent = bbs.length ? [part(safe, "Bezpieczniejsze"), part(res, "Z wynikiem meczu")].filter(Boolean).join(" · ") + ". Kursów bet builderów nie ma w serwisie kursowym, dlatego wynik „na papierze” liczę przy kursie „graj od”; prawdziwy wynik dają tylko zakłady zapisane z kursem z Superbet." : "";
+    $("#wy-note").textContent = bbs.length ? "Liczę główne propozycje (jeden zestaw na mecz), bo warianty tego samego meczu wchodzą albo przepadają razem. Szacowany kurs to przybliżenie: kursy bukmacherów na pojedyncze zdarzenia (linie strzałów, celnych, rożnych, kartek, wynik meczu), połączone tym samym modelem powiązań, minus część wygranej, którą bukmacher zatrzymuje w zestawach (teraz ok. " + Math.round(100 * (rk.obciecie || 0.3)) + "%, uczy się z wpisanych kursów: " + (rk.n_kursow || 0) + "). Prawdziwy wynik dają tylko kursy wpisane z Superbet. Dni sprzed 29.10 dostały główne zestawy i szacowane kursy wstecz, z danych sprzed meczów." : "";
     renderLedger();
+    renderAnaliza();
     // day by day, newest first
     const box = $("#wy-dni");
     box.replaceChildren();
     const all = st("typy") || {};
     const dayKeys = Object.keys(all).filter((k) => (all[k].bb || []).some((b) => b.wynik)).sort().reverse();
     if (!dayKeys.length) box.append(el("p", "note", "Rozpiska pojawi się po pierwszych rozegranych meczach."));
+    // one settled builder as a row: the events with their team tags, what came in, the result at the estimated price
+    const brow = (b) => {
+      const r = el("div", "brow " + (b.wynik === "wygrana" ? "won" : b.wynik === "zwrot" ? "wait" : "lost") + (isMain(b) ? "" : " test"));
+      const w = el("div");
+      const ev = el("div", "w");
+      ev.append(el("span", "c-muted", hm(b.start) + " · " + b.mecz + " · "), b.druzyna);
+      w.append(ev);
+      const legsRow = el("div", "lg");
+      b.legs.forEach((l) => { const x = el("span", "lgx " + (l.wynik === "wygrana" ? "ok" : l.wynik === "przegrana" ? "miss" : "")); x.append(legTag(l, b), " " + legText(l, b) + (legCame(l) ? " → " + legCame(l) : "")); legsRow.append(x); });
+      w.append(legsRow);
+      const rr = el("div", "r"), pe = pnlEst(b), kp = priceOf(b);
+      rr.append(el("b", null, b.wynik === "wygrana" ? "✓ WESZŁO" : b.wynik === "zwrot" ? "↺ ZWROT" : "✗ NIE WESZŁO"));
+      if (b.wynik !== "zwrot" && pe !== null) rr.append(el("span", sign(pe), "≈" + zl0(pe) + " (kurs ≈" + dec(b.kurs_szac) + ")"));
+      if (b.wynik !== "zwrot" && kp) rr.append(el("span", sign(pnlAtPrice(b, kp)), zl0(pnlAtPrice(b, kp)) + " (wpisany " + dec(kp) + ")"));
+      rr.append(el("span", "c-muted", "szansa " + pct(b.p_model) + " · próg " + dec(minOdds(b.p_model))));
+      r.append(w, rr);
+      return r;
+    };
+    // a group's line: came in, and the result at estimated / typed prices (100 zł each)
+    const groupLine = (lst) => {
+      const done = lst.filter((b) => b.wynik === "wygrana" || b.wynik === "przegrana"), h = done.filter((b) => b.wynik === "wygrana").length;
+      const est = done.filter((b) => b.kurs_szac), p = est.reduce((a, b) => a + pnlEst(b), 0);
+      const pr = done.filter((b) => priceOf(b)), prP = pr.reduce((a, b) => a + pnlAtPrice(b, priceOf(b)), 0);
+      const line = el("span", "gl");
+      line.append("weszło " + h + " z " + done.length);
+      if (est.length) line.append(" · szac. ", el("b", sign(p), zl0(p)));
+      if (pr.length) line.append(" · po wpisanych ", el("b", sign(prP), zl0(prP)));
+      return { line, h, n: done.length, p };
+    };
     dayKeys.forEach((k, i) => {
-      const lst = (all[k].bb || []).filter((b) => b.wynik);
-      const h = lst.filter((b) => b.wynik === "wygrana").length, p = lst.reduce((a, b) => a + pnlAtMin(b), 0);
+      const every = (all[k].bb || []).filter((b) => b.wynik), lst = every.filter(isMain), tl = every.filter((b) => !isMain(b));
+      const gm = groupLine(lst), gt = groupLine(tl);
       const det = el("details", "day"); det.open = i === 0;
       const sm = el("summary");
-      sm.append(el("b", null, dayFull(k)), el("span", null, "weszło " + h + " z " + lst.length));
-      const z = el("span"); z.append("przy kursie graj od ", el("b", sign(p), zl0(p))); sm.append(z);
+      const sMain = el("span", "sg main"); sMain.append(el("i", null, "Główne"), " " + gm.h + " z " + gm.n + " · ", el("b", sign(gm.p), zl0(gm.p)));
+      sm.append(el("b", null, dayFull(k)), sMain);
+      if (tl.length) { const sTest = el("span", "sg test"); sTest.append(el("i", null, "Testowe"), " " + gt.h + " z " + gt.n + " · ", el("b", sign(gt.p), zl0(gt.p))); sm.append(sTest); }
       det.append(sm);
       const inner = el("div", "inner");
-      lst.slice().sort((a, b) => a.start.localeCompare(b.start)).forEach((b) => {
-        const r = el("div", "brow " + (b.wynik === "wygrana" ? "won" : "lost"));
-        const w = el("div");
-        w.append(el("div", "w", b.druzyna + ": " + b.legs.map(legWhat).join(" + ")));
-        w.append(el("div", "h", hm(b.start) + " · " + b.mecz + " · " + b.legs.map((l) => legWhat(l) + ": " + (legCame(l) || "?")).join(" · ")));
-        const rr = el("div", "r");
-        rr.append(el("b", null, b.wynik === "wygrana" ? "✓ WESZŁO" : "✗ NIE WESZŁO"), el("span", "c-muted", "szansa " + pct(b.p_model) + " · graj od " + dec(b.kurs_min_z_podatkiem)));
-        r.append(w, rr);
-        inner.append(r);
-      });
+      // main proposals
+      const secM = el("section", "dsec main");
+      const hM = el("div", "dh"); hM.append(el("h4", null, "Główne propozycje · jeden zestaw na mecz"), gm.line); secM.append(hM);
+      if (lst.length) lst.slice().sort((a, b) => a.start.localeCompare(b.start)).forEach((b) => secM.append(brow(b)));
+      else secM.append(el("p", "note", "Tego dnia nie było głównych propozycji."));
+      inner.append(secM);
+      // the day's AKO coupons from the main proposals (the same rule as on the day page, pre-match data)
+      const ms = (all[k].bb || []).filter((b) => isMain(b) && (b.kurs_szac || priceOf(b)));
+      const set = akoSet(ms), coupons = [2, 3, 4].map((n) => set.out[n]).filter((o) => o && o.legs.every((x) => x.b.wynik));
+      if (coupons.length) {
+        const secA = el("section", "dsec ako-d");
+        const hA = el("div", "dh"); hA.append(el("h4", null, "Kupony AKO z głównych · bez wspólnych meczów"));
+        secA.append(hA);
+        coupons.forEach((o) => {
+          const won = o.legs.every((x) => x.b.wynik === "wygrana"), pz = won ? 100 * (akoPayout(o.O) - 1) : -100;
+          const r = el("div", "brow " + (won ? "won" : "lost"));
+          const w = el("div");
+          w.append(el("div", "w", "Kupon z " + o.legs.length + " zestawów"), el("div", "h", o.legs.map((x) => x.b.mecz + (x.b.wynik === "wygrana" ? " ✓" : " ✗")).join(" · ")));
+          const rr = el("div", "r");
+          rr.append(el("b", null, won ? "✓ WESZŁO" : "✗ NIE WESZŁO"), el("span", sign(pz), "≈" + zl0(pz) + " (kurs ≈" + dec(o.O) + ")"), el("span", "c-muted", "szansa " + pct(o.P)));
+          r.append(w, rr);
+          secA.append(r);
+        });
+        inner.append(secA);
+      }
+      // test variants
+      if (tl.length) {
+        const secT = el("section", "dsec test");
+        const hT = el("div", "dh"); hT.append(el("h4", null, "Testowe warianty · do nauki modelu, nie sumuj z głównymi"), gt.line); secT.append(hT);
+        tl.slice().sort((a, b) => a.start.localeCompare(b.start) || a.mecz.localeCompare(b.mecz, "pl")).forEach((b) => secT.append(brow(b)));
+        inner.append(secT);
+      }
       det.append(inner);
       box.append(det);
     });
@@ -911,19 +1494,19 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     set("A5", "Podatek od stawki"); set("C5", 0.12, { fill: "FFFFF2CC", numFmt: PCTF });
     set("A6", "Stawka na papierze (zł)"); set("C6", 100, { fill: "FFFFF2CC", numFmt: '#,##0.00 "PLN"' });
     const rng = (c) => c + FIRST + ":" + c + LAST;
-    [["F5", "Rozliczone", "G5", 'COUNTIF(' + rng("K") + ',"Weszło")+COUNTIF(' + rng("K") + ',"Nie weszło")', null],
-      ["F6", "Weszło", "G6", 'COUNTIF(' + rng("K") + ',"Weszło")', null],
-      ["F7", "Skuteczność", "G7", 'IFERROR(G6/G5,"")', PCTF],
-      ["F8", "Zysk przy kursie graj od", "G8", "SUM(" + rng("M") + ")", PLN],
+    [["F5", "Główne rozliczone", "G5", 'COUNTIFS(' + rng("K") + ',"Weszło",' + rng("V") + ',"główny")+COUNTIFS(' + rng("K") + ',"Nie weszło",' + rng("V") + ',"główny")', null],
+      ["F6", "Główne: weszło", "G6", 'COUNTIFS(' + rng("K") + ',"Weszło",' + rng("V") + ',"główny")', null],
+      ["F7", "Skuteczność głównych", "G7", 'IFERROR(G6/G5,"")', PCTF],
+      ["F8", "Główne przy szac. kursach", "G8", 'SUMIFS(' + rng("M") + ',' + rng("V") + ',"główny")', PLN],
       ["I5", "Rozliczone", "J5", 'COUNTIF(' + rng("P") + ',"Wygrany")+COUNTIF(' + rng("P") + ',"Przegrany")+COUNTIF(' + rng("P") + ',"Zwrot")', null],
       ["I6", "Postawione", "J6", 'SUMIF(' + rng("P") + ',"Wygrany",' + rng("O") + ')+SUMIF(' + rng("P") + ',"Przegrany",' + rng("O") + ')+SUMIF(' + rng("P") + ',"Zwrot",' + rng("O") + ')', PLN],
       ["I7", "Zysk / strata", "J7", "SUM(" + rng("R") + ")", PLN],
       ["I8", "ROI", "J8", 'IFERROR(J7/J6,"")', PCTF]].forEach(([la, label, va, f, fmt]) => { set(la, label); set(va, { formula: f }, { font: { bold: true }, numFmt: fmt || undefined }); });
-    const headers = ["ID", "Data", "Godzina", "Mecz", "Drużyna", "Zdarzenia", "Rodzaj", "Szansa (model)", "Uczciwy kurs", "Graj od", "Wynik wg aplikacji", "Co padło", 'Zysk przy "graj od"', "Twój kurs", "Stawka", "Status", "Zwrot", "Zysk / strata", "Próg BE", "Przewaga", "EV"];
+    const headers = ["ID", "Data", "Godzina", "Mecz", "Drużyna", "Zdarzenia", "Rodzaj", "Szansa (model)", "Uczciwy kurs", "Opłaca się od", "Wynik wg aplikacji", "Co padło", "Przy szac. kursie", "Twój kurs", "Stawka", "Status", "Zwrot", "Zysk / strata", "Próg BE", "Przewaga", "EV", "Typ", "Szac. kurs"];
     headers.forEach((h, i) => { const c = ws.getCell(9, i + 1); c.value = h; c.font = ARIAL({ bold: true, color: { argb: "FFFFFFFF" } }); c.fill = FILL("FF17324D"); c.alignment = { vertical: "middle", wrapText: true }; });
     for (let r = FIRST; r <= LAST; r++) {
       const f = (col, formula, fmt) => { const c = ws.getCell(col + r); c.value = { formula }; c.font = ARIAL(); if (fmt) c.numFmt = fmt; };
-      f("M", 'IF(K' + r + '="Weszło",$C$6*((1-$C$5)*J' + r + '-1),IF(K' + r + '="Nie weszło",-$C$6,""))', PLN);
+      f("M", 'IF(OR(W' + r + '="",K' + r + '=""),"",IF(K' + r + '="Weszło",$C$6*((1-$C$5)*W' + r + '-1),-$C$6))', PLN);
       f("Q", 'IF(OR(P' + r + '="",P' + r + '="Oczekuje",O' + r + '=""),"",IF(P' + r + '="Wygrany",O' + r + '*(1-$C$5)*N' + r + ',IF(P' + r + '="Zwrot",O' + r + ',0)))', PLN);
       f("R", 'IF(Q' + r + '="","",Q' + r + '-O' + r + ')', PLN);
       f("S", 'IFERROR(1/((1-$C$5)*N' + r + '),"")', PCTF);
@@ -943,11 +1526,11 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     let r = FIRST;
     rows.forEach((b, i) => {
       const lg = ledgerFor(b); if (lg) used.add(lg.id);
-      const vals = [i + 1, excelDate(dayKey(b.start)), hm(b.start), b.mecz, b.druzyna, b.legs.map(legWhat).join(" + "), kindName(b.rodzaj), b.p_model, b.kurs_uczciwy, b.kurs_min_z_podatkiem,
+      const vals = [i + 1, excelDate(dayKey(b.start)), hm(b.start), b.mecz, b.druzyna, b.legs.map(legWhat).join(" + "), kindName(b.rodzaj) + (b.poziom === "wyzej" ? " · wyższe progi" : ""), b.p_model, b.kurs_uczciwy, b.kurs_min_z_podatkiem,
         b.wynik === "wygrana" ? "Weszło" : b.wynik === "przegrana" ? "Nie weszło" : "", b.legs.map((l) => (legCame(l) ? legWhat(l) + ": " + legCame(l) : "")).filter(Boolean).join(" · "),
-        null, lg ? Number(lg.kurs) : null, lg ? Number(lg.stawka) : null, lg ? status(lg) : null];
+        null, lg ? Number(lg.kurs) : (priceOf(b) || null), lg ? Number(lg.stawka) : null, lg ? status(lg) : null, null, null, null, null, null, isMain(b) ? "główny" : "testowy", b.kurs_szac || null];
       vals.forEach((v, j) => { if (v === null || v === undefined) return; const c = ws.getCell(r, j + 1); c.value = v; c.font = ARIAL(); });
-      ws.getCell("B" + r).numFmt = "DD.MM.YYYY"; ws.getCell("H" + r).numFmt = PCTF; ws.getCell("I" + r).numFmt = "0.00"; ws.getCell("J" + r).numFmt = "0.00";
+      ws.getCell("B" + r).numFmt = "DD.MM.YYYY"; ws.getCell("H" + r).numFmt = PCTF; ws.getCell("I" + r).numFmt = "0.00"; ws.getCell("J" + r).numFmt = "0.00"; ws.getCell("W" + r).numFmt = "0.00";
       r++;
     });
     (S.zaklady || []).filter((z) => !used.has(z.id)).sort((a, b) => (a.data || "").localeCompare(b.data || "")).forEach((z) => {
@@ -957,9 +1540,9 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       ws.getCell("B" + r).numFmt = "DD.MM.YYYY"; ws.getCell("H" + r).numFmt = PCTF; ws.getCell("I" + r).numFmt = "0.00"; ws.getCell("J" + r).numFmt = "0.00";
       r++;
     });
-    const widths = { A: 5, B: 11, C: 8, D: 30, E: 20, F: 60, G: 18, H: 11, I: 10, J: 9, K: 13, L: 50, M: 15, N: 10, O: 11, P: 11, Q: 13, R: 13, S: 10, T: 10, U: 13 };
+    const widths = { A: 5, B: 11, C: 8, D: 30, E: 20, F: 60, G: 18, H: 11, I: 10, J: 9, K: 13, L: 50, M: 15, N: 10, O: 11, P: 11, Q: 13, R: 13, S: 10, T: 10, U: 13, V: 10, W: 10 };
     Object.entries(widths).forEach(([col, w]) => { ws.getColumn(col).width = w; });
-    ws.autoFilter = "A9:U" + Math.max(FIRST, r - 1);
+    ws.autoFilter = "A9:W" + Math.max(FIRST, r - 1);
     // Symulacja
     const sim = wb.addWorksheet("Symulacja");
     const sset = (addr, value, opts) => { const c = sim.getCell(addr); c.value = value; c.font = ARIAL(opts && opts.font); if (opts && opts.fill) c.fill = FILL(opts.fill); if (opts && opts.numFmt) c.numFmt = opts.numFmt; };
@@ -982,10 +1565,10 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     // Jak korzystać
     const how = wb.addWorksheet("Jak korzystać");
     ["Jak korzystać z arkusza", "",
-      "1. „Zestawy” to wszystkie bet buildery z Typometru, od najstarszego. Szansa, uczciwy kurs i „graj od” są z modelu; „Wynik wg aplikacji” i „Co padło” wypełniają się po meczu.",
+      "1. „Zestawy” to wszystkie bet buildery z Typometru, od najstarszego. Szansa, uczciwy kurs i „opłaca się od” są z modelu; „Wynik wg aplikacji” i „Co padło” wypełniają się po meczu.",
       "2. Zakłady zapisane w aplikacji są już wpisane w żółtych kolumnach (kurs, stawka, status). Resztę możesz uzupełnić ręcznie: Zwrot, Zysk, Próg BE, Przewaga i EV policzą się same.",
-      "3. Przewaga = szansa z modelu minus próg BE przy Twoim kursie. Dodatnia znaczy, że kurs jest co najmniej „graj od”.",
-      "4. Podsumowanie u góry: ile zestawów weszło i jaki byłby wynik przy kursie „graj od” (100 zł każdy), obok wynik Twoich zakładów.",
+      "3. Przewaga = szansa z modelu minus próg BE przy Twoim kursie. Dodatnia znaczy, że kurs jest co najmniej „opłaca się od”.",
+      "4. Podsumowanie u góry liczy główne propozycje (jeden zestaw na mecz): ile weszło i wynik przy szacowanym kursie (100 zł każdy), obok wynik Twoich zakładów. Kolumna „Typ” odróżnia główne od testowych.",
       "5. „Symulacja” pokazuje, czego spodziewać się po N zestawach przy stałej stawce: próg skuteczności, oczekiwany wynik i rozrzut.",
       "6. Plik to kopia na dziś. Zmiany w nim nie wracają do aplikacji; nowy stan pobierzesz przyciskiem w zakładce Wyniki.",
       "", "Podatek 12% od stawki (ustawa o grach hazardowych, art. 73–74)."].forEach((line, i) => { const c = how.getCell("A" + (i + 1)); c.value = line; c.font = ARIAL(i === 0 ? { bold: true, size: 14 } : null); });
@@ -1072,6 +1655,20 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
 
   // ================================================================== Mecz: averages, builders, calculator
   // Gaussian-copula simulation of a match's counts (as scripts/mk2/stats_sure.py does), in the browser
+  // log-gamma (Lanczos) and the player's chance of '>= 1' for each team count (beta-binomial share, as the pipeline)
+  function lgamma(x) {
+    const g = 7, c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgamma(1 - x);
+    x -= 1; let a = c[0]; const t = x + g + 0.5;
+    for (let i = 1; i < g + 2; i++) a += c[i] / (x + i);
+    return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+  }
+  const KAPPA_SOT = 7.5;
+  function atLeastOne(share, nmax) {
+    const a = Math.max(share, 1e-4) * KAPPA_SOT, b = Math.max(1 - share, 1e-4) * KAPPA_SOT, lb = lgamma(a) + lgamma(b) - lgamma(a + b), q = [];
+    for (let n = 0; n <= nmax; n++) q.push(1 - Math.exp(lgamma(a) + lgamma(b + n) - lgamma(a + b + n) - lb));
+    return q;
+  }
   function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   function cholesky(A) {
     const n = A.length, L = A.map(() => new Array(n).fill(0));
@@ -1088,17 +1685,23 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     for (let k = 0; k <= kmax; k++) { if (k > 0) pmf *= ((k - 1 + r) / k) * (1 - p); c += pmf; out[k] = c; }
     out[kmax] = 1; return out;
   }
-  const KMAX = { shots: 70, sot: 35, corners: 35, goals: 15 };
-  let simCache = { id: null, X: null };
-  function simulate(m) {
-    if (simCache.id === String(m.id)) return simCache.X;
+  const KMAX = { shots: 70, sot: 35, corners: 35, goals: 15, fouls: 60, cards: 20 };
+  const copulaHas = (stat) => (((meta().bb || {}).wymiary) || []).includes("home_" + stat);
+  const simCache = new Map();
+  // the copula draws of a match: with the model's means, or (market) with the bookmakers' means from the same
+  // random numbers, so the two chances of a builder differ only by the means
+  function simulate(m, market) {
+    const ck = String(m.id) + (market ? ":r" : "");
+    if (simCache.has(ck)) return simCache.get(ck);
+    if (market && !m.rynek) return null;
     const bb = meta().bb; if (!bb || !bb.korelacje) return null;
     const dims = bb.wymiary, L = cholesky(bb.korelacje), n = 20000;
     const means = {}, alphas = {};
     ["home", "away"].forEach((side, i) => {
-      ["shots", "sot", "corners"].forEach((s) => { means[side + "_" + s] = m.m[s][i]; alphas[side + "_" + s] = alphaOf(s, side, m.liga_id); });
+      dims.filter((d) => d.startsWith(side + "_") && !d.endsWith("_goals")).forEach((d) => { const s = d.slice(side.length + 1); means[d] = m.m[s] && !empty(m.m[s][i]) ? m.m[s][i] : 0.01; alphas[d] = alphaOf(s, side, m.liga_id); });
       means[side + "_goals"] = m.gole ? m.gole.srednie[i] : (i ? 1.15 : 1.45); alphas[side + "_goals"] = 1e-4;
     });
+    if (market) dims.forEach((d) => { if (!empty(m.rynek[d])) means[d] = m.rynek[d]; });
     const cdfs = dims.map((d) => nbCdf(means[d], alphas[d], KMAX[d.split("_")[1]]));
     const rnd = mulberry(Number(m.id) % 2147483647);
     const X = {}; dims.forEach((d) => { X[d] = new Int16Array(n); });
@@ -1112,29 +1715,40 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
         X[dims[i]][t] = lo;
       }
     }
-    simCache = { id: String(m.id), X, means };
+    if (simCache.size > 6) simCache.clear();
+    ["home", "away"].forEach((side, si) => ((m.zawodnicy || {})[side] || []).forEach((p) => {
+      const q = atLeastOne(p.s, 60), r2 = mulberry((Number(m.id) + 7919 * Number(p.id) + si) % 2147483647), arr = new Int8Array(n), N = X[side + "_sot"];
+      for (let t = 0; t < n; t++) arr[t] = r2() < q[Math.min(N[t], 60)] ? 1 : 0;
+      X["pl" + p.id] = arr;
+    }));
+    simCache.set(ck, X);
     return X;
   }
   // the legs a viewer can pick: id, label, test(X, t) -> boolean, default threshold
-  function legDefs(m, side) {
-    const opp = side === "home" ? "away" : "home", tn = side === "home" ? m.gosp : m.gosc, on = side === "home" ? m.gosc : m.gosp;
-    const i = side === "home" ? 0 : 1;
-    const th = (stat, level) => { const mu = m.m[stat][i], a = alphaOf(stat, side, m.liga_id); let best = 1; for (let k = 1; k < 60; k++) { if (atLeast(mu, a, k) >= level) best = k; else break; } return best; };
-    const thT = (stat, level) => { const mu = m.m[stat][2] !== undefined ? m.m[stat][2] : m.m[stat][0] + m.m[stat][1], a = alphaOf(stat, "total", m.liga_id); let best = 1; for (let k = 1; k < 80; k++) { if (atLeast(mu, a, k) >= level) best = k; else break; } return best; };
-    const cnt = (id, stat, label) => ({ id, stat, scope: side, side: "over", k: th(stat, 0.8), min: 1, max: 40, label: (k) => tn + ": co najmniej " + k + " " + plural(k, stat), test: (X, t, k) => X[side + "_" + stat][t] >= k });
-    return [
-      cnt("S", "shots", "strzały"), cnt("C", "sot", "celne"), cnt("R", "corners", "rożne"),
-      { id: "M", stat: "shots", scope: side, side: "more", label: () => tn + ": więcej strzałów niż " + on, test: (X, t) => X[side + "_shots"][t] > X[opp + "_shots"][t] },
-      { id: "MR", stat: "corners", scope: side, side: "more", label: () => tn + ": więcej rożnych niż " + on, test: (X, t) => X[side + "_corners"][t] > X[opp + "_corners"][t] },
-      { id: "G", stat: "goals", scope: side, side: "over", line: 0.5, label: () => tn + " strzeli gola", test: (X, t) => X[side + "_goals"][t] >= 1 },
-      { id: "G2", stat: "goals", scope: side, side: "over", line: 1.5, label: () => tn + ": co najmniej 2 gole", test: (X, t) => X[side + "_goals"][t] >= 2 },
-      { id: "W", stat: "goals", scope: side, side: "more", label: () => tn + " wygra mecz (90 minut)", test: (X, t) => X[side + "_goals"][t] > X[opp + "_goals"][t] },
-      { id: "ND", stat: "goals", scope: side, side: "win_draw", label: () => tn + " nie przegra (wygra albo remis)", test: (X, t) => X[side + "_goals"][t] >= X[opp + "_goals"][t] },
-      { id: "TS", stat: "shots", scope: "total", side: "over", k: thT("shots", 0.8), min: 1, max: 60, label: (k) => "W meczu: co najmniej " + k + " " + plural(k, "shots"), test: (X, t, k) => X.home_shots[t] + X.away_shots[t] >= k },
-      { id: "TR", stat: "corners", scope: "total", side: "over", k: thT("corners", 0.8), min: 1, max: 30, label: (k) => "W meczu: co najmniej " + k + " " + plural(k, "corners"), test: (X, t, k) => X.home_corners[t] + X.away_corners[t] >= k },
-      { id: "BTTS", stat: "goals", scope: "total", side: "btts", label: () => "Obie drużyny strzelą gola", test: (X, t) => X.home_goals[t] >= 1 && X.away_goals[t] >= 1 },
-      { id: "O25", stat: "goals", scope: "total", side: "over", line: 2.5, label: () => "W meczu: co najmniej 3 gole", test: (X, t) => X.home_goals[t] + X.away_goals[t] >= 3 },
-    ];
+  function legDefs(m) {
+    const thr = (mu, a, level) => { let best = 1; for (let k = 1; k < 90; k++) { if (atLeast(mu, a, k) >= level) best = k; else break; } return best; };
+    const defs = [];
+    [["home", "h", m.gosp, m.gosc, 0], ["away", "a", m.gosc, m.gosp, 1]].forEach(([side, pre, tn, on, i]) => {
+      const opp = side === "home" ? "away" : "home";
+      const cnt = (code, stat) => ({ id: pre + code, grp: side, stat, scope: side, side: "over", k: m.m[stat] ? thr(m.m[stat][i], alphaOf(stat, side, m.liga_id), 0.8) : 1, min: 1, max: 60, dim: side + "_" + stat,
+        label: (k) => "co najmniej " + k + " " + plural(k, stat), full: (k) => tn + ": co najmniej " + k + " " + plural(k, stat), test: (X, t, k) => X[side + "_" + stat][t] >= k });
+      defs.push(cnt("S", "shots"), cnt("C", "sot"), cnt("R", "corners"), cnt("F", "fouls"), cnt("K", "cards"),
+        { id: pre + "M", grp: side, stat: "shots", scope: side, side: "more", label: () => "więcej strzałów niż " + on, full: () => tn + ": więcej strzałów niż " + on, test: (X, t) => X[side + "_shots"][t] > X[opp + "_shots"][t] },
+        { id: pre + "MR", grp: side, stat: "corners", scope: side, side: "more", label: () => "więcej rożnych niż " + on, full: () => tn + ": więcej rożnych niż " + on, test: (X, t) => X[side + "_corners"][t] > X[opp + "_corners"][t] },
+        { id: pre + "G", grp: side, stat: "goals", scope: side, side: "over", line: 0.5, label: () => "strzeli gola", full: () => tn + " strzeli gola", test: (X, t) => X[side + "_goals"][t] >= 1 },
+        { id: pre + "G2", grp: side, stat: "goals", scope: side, side: "over", line: 1.5, label: () => "co najmniej 2 gole", full: () => tn + ": co najmniej 2 gole", test: (X, t) => X[side + "_goals"][t] >= 2 },
+        { id: pre + "W", grp: side, stat: "goals", scope: side, side: "more", label: () => "wygra mecz (90 minut)", full: () => tn + " wygra mecz (90 minut)", test: (X, t) => X[side + "_goals"][t] > X[opp + "_goals"][t] },
+        { id: pre + "ND", grp: side, stat: "goals", scope: side, side: "win_draw", label: () => "nie przegra (wygra albo remis)", full: () => tn + " nie przegra (wygra albo remis)", test: (X, t) => X[side + "_goals"][t] >= X[opp + "_goals"][t] });
+      ((m.zawodnicy || {})[side] || []).forEach((p, i) => defs.push({ id: pre + "P" + (i + 1), grp: side, stat: "player_sot", scope: side, side: "over", line: 0.5, player_id: p.id, dim: "pl" + p.id,
+        label: () => p.n + ": co najmniej 1 celny strzał", full: () => p.n + " (" + tn + "): co najmniej 1 celny strzał", test: (X, t) => X["pl" + p.id][t] >= 1 }));
+    });
+    const tot = (id, stat) => { const v = m.m[stat]; const mu = v ? (!empty(v[2]) ? v[2] : v[0] + v[1]) : 0;
+      return { id, grp: "total", stat, scope: "total", side: "over", k: v ? thr(mu, alphaOf(stat, "total", m.liga_id), 0.8) : 1, min: 1, max: 80, dim: "home_" + stat,
+        label: (k) => "co najmniej " + k + " " + plural(k, stat), full: (k) => "W meczu: co najmniej " + k + " " + plural(k, stat), test: (X, t, k) => X["home_" + stat][t] + X["away_" + stat][t] >= k }; };
+    defs.push(tot("TS", "shots"), tot("TC", "sot"), tot("TR", "corners"), tot("TF", "fouls"), tot("TK", "cards"),
+      { id: "BTTS", grp: "total", stat: "goals", scope: "total", side: "btts", label: () => "obie drużyny strzelą gola", full: () => "Obie drużyny strzelą gola", test: (X, t) => X.home_goals[t] >= 1 && X.away_goals[t] >= 1 },
+      { id: "O25", grp: "total", stat: "goals", scope: "total", side: "over", line: 2.5, label: () => "co najmniej 3 gole", full: () => "W meczu: co najmniej 3 gole", test: (X, t) => X.home_goals[t] + X.away_goals[t] >= 3 });
+    return defs;
   }
   function renderMecz() {
     const m = matchById(S.mecz);
@@ -1159,13 +1773,35 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       if (s === "goals" && m.gole) box.append(el("span", "l", m.gole.z_rynku ? "gole dopasowane do kursów na wynik meczu" : "gole z modelu (brak kursów na wynik)"));
       stats.append(box);
     });
+    if (m.najpewniejsze && ["home", "away", "total"].some((s) => (m.najpewniejsze[s] || []).length)) {
+      const box = el("div", "stat");
+      box.append(el("span", "l", "Najpewniejsze zdarzenia (szansa wg modelu, od 75%)"), likelyCols(m, ((st("typy") || {})[dayKey(m.start)] || {}).zdarzenia));
+      stats.append(box);
+    }
+    if (m.braki && ((m.braki.home || []).length || (m.braki.away || []).length)) {
+      const box = el("div", "stat"), row = el("div", "absrow");
+      box.append(el("span", "l", "Nie zagrają albo pod znakiem zapytania (lista kontuzji i kar)"));
+      [["home", m.gosp], ["away", m.gosc]].forEach(([side, name]) => {
+        const col = el("div");
+        col.append(el("b", null, name));
+        const lst = m.braki[side] || [];
+        if (!lst.length) col.append(el("span", "c-muted", "nikogo na liście"));
+        lst.forEach((x) => col.append(el("span", x.s5 >= 3 ? "reg" : "c-muted", x.n + " — " + x.pow + (x.niepewny ? " (niepewny)" : "")
+          + (x.s5 ? " · w ostatnich 5 meczach " + x.s5 + "× w podstawowym składzie" : "") + (x.u >= 0.1 ? " · ok. " + pct(x.u) + " strzałów zespołu" : ""))));
+        row.append(col);
+      });
+      box.append(row);
+      stats.append(box);
+    }
     $("#mz-fact").textContent = (m.wyr || []).join(" ") + (m.czynniki && m.czynniki.sedzia && m.czynniki.home && m.czynniki.home.cards && !empty(m.czynniki.home.cards.sedzia) ? " Sędzia " + m.czynniki.sedzia + ": kartek " + (m.czynniki.home.cards.sedzia > 0 ? "+" : "") + m.czynniki.home.cards.sedzia + "% względem przeciętnego sędziego (na podstawie " + m.czynniki.home.cards.sedzia_n + " meczów)." : "");
     // builders of this match (every day: proposed and settled)
     const bbs = [];
     Object.values(st("typy") || {}).forEach((d) => (d.bb || []).forEach((b) => { if (String(b.fixture_id) === String(m.id)) bbs.push(b); }));
     const bbBox = $("#mz-bb");
+    bbs.sort((a, b) => (isMain(b) - isMain(a)) || a.day.localeCompare(b.day) || b.p_model - a.p_model);
     bbBox.replaceChildren(...bbs.map((b) => bbCard(b, { inMatch: true })));
     $("#mz-bb-card").hidden = !bbs.length;
+    renderLadder(m);
     renderCalc(m);
     // last matches of both teams
     const last = $("#mz-last");
@@ -1181,21 +1817,66 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
     });
     renderKursy(m);
   }
+  function calcState(m) {
+    const fav = m.m.shots && m.m.shots[1] > m.m.shots[0] ? "a" : "h";
+    if (!S.calc || S.calc.id !== String(m.id)) S.calc = { id: String(m.id), on: { [fav + "S"]: true, [fav + "C"]: true, [fav + "M"]: true }, k: {}, fresh: true };   // fresh: the default selection, replaced by the first ladder click
+    return S.calc;
+  }
+  // every count event of the match as a ladder of thresholds with the model's chance and the break-even price
+  const LADDER_STATS = ["shots", "sot", "corners", "fouls", "cards", "offsides"];
+  const LADDER_IDS = { shots: ["S", "TS"], sot: ["C", "TC"], corners: ["R", "TR"], fouls: ["F", "TF"], cards: ["K", "TK"] };
+  function renderLadder(m) {
+    const box = $("#mz-lad");
+    if (!box) return;
+    box.replaceChildren();
+    const c = calcState(m);
+    const scopes = [["home", m.gosp, 0], ["away", m.gosc, 1], ["total", "Cały mecz", 2]];
+    scopes.forEach(([scope, name, i]) => {
+      box.append(el("h3", "lhead", name + (scope === "home" ? " · gospodarz" : scope === "away" ? " · gość" : " · obie drużyny razem")));
+      LADDER_STATS.forEach((stat) => {
+        const vals = m.m[stat]; if (!vals) return;
+        const mu = !empty(vals[i]) ? vals[i] : (i === 2 && !empty(vals[0]) && !empty(vals[1]) ? vals[0] + vals[1] : null);
+        if (mu === null || !(mu > 0)) return;
+        const a = alphaOf(stat, scope, m.liga_id), ids = copulaHas(stat) ? LADDER_IDS[stat] : null, id = ids ? (scope === "total" ? ids[1] : (scope === "home" ? "h" : "a") + ids[0]) : null;
+        const row = el("div", "lrow"), nm = el("div", "lname", STAT[stat] || stat);
+        nm.append(el("small", null, "średnio " + d1(mu) + " wg modelu"));
+        const chips = el("div", "chips");
+        for (let k = 1; k < 90; k++) {
+          const p = atLeast(mu, a, k);
+          if (p > 0.95) continue;
+          if (p < 0.10) break;
+          const on = id && c.on[id] && c.k[id] === k;
+          const chip = el(id ? "button" : "span", "chip" + (id ? "" : " info") + (on ? " on" : ""));
+          if (id) chip.type = "button";
+          chip.append(el("b", null, "≥" + k), el("small", null, pct(p) + " · od " + dec(minOdds(p))));
+          chip.title = "co najmniej " + k + " " + plural(k, stat) + ": szansa " + pct(p) + ", opłaca się od " + dec(minOdds(p));
+          if (id) chip.addEventListener("click", () => {
+            if (c.fresh) { c.on = {}; c.k = {}; c.fresh = false; }
+            c.k[id] = k; c.on[id] = true; render();
+            const cal = $("#mz-calc"); if (cal) cal.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+          chips.append(chip);
+        }
+        row.append(nm, chips);
+        box.append(row);
+      });
+    });
+    box.append(el("p", "note", "Każdy próg: szansa „co najmniej tyle” wg modelu i kurs, od którego taki pojedynczy próg opłaca się po podatku 12%. " + (copulaHas("fouls") ? "Strzały, celne, rożne, faule i kartki klikasz do kalkulatora niżej; spalone są poza nim." : "Strzały, celne i rożne klikasz do kalkulatora niżej; faule, kartki i spalone są poza nim, bo model nie zna ich powiązań z resztą zdarzeń, więc licz je osobno.")));
+  }
   function renderCalc(m) {
     const box = $("#mz-calc");
-    if (!S.calc || S.calc.id !== String(m.id)) S.calc = { id: String(m.id), side: "home", on: { S: true, C: true, M: true }, k: {} };
-    const c = S.calc;
+    const c = calcState(m);
     box.replaceChildren();
-    const seg = el("div", "seg");
-    [["home", m.gosp], ["away", m.gosc]].forEach(([side, name]) => { const b = el("button", null, name); b.type = "button"; b.setAttribute("aria-selected", c.side === side ? "true" : "false"); b.addEventListener("click", () => { c.side = side; c.k = {}; render(); }); seg.append(b); });
-    box.append(seg);
-    const defs = legDefs(m, c.side);
     const X = simulate(m);
+    const defs = legDefs(m).filter((d) => !d.dim || (X && X[d.dim]));   // fouls and cards only when the copula knows them
     const picks = el("div", "legs-pick");
+    const groups = { home: el("div", "calc-grp"), away: el("div", "calc-grp"), total: el("div", "calc-grp") };
+    groups.home.append(el("h3", null, m.gosp + " · gospodarz")); groups.away.append(el("h3", null, m.gosc + " · gość")); groups.total.append(el("h3", null, "Cały mecz · obie drużyny razem"));
+    picks.append(groups.home, groups.away, groups.total);
     defs.forEach((d) => {
       const k = c.k[d.id] !== undefined ? c.k[d.id] : d.k;
       const row = el("label", "lp" + (c.on[d.id] ? " on" : ""));
-      const cb = el("input"); cb.type = "checkbox"; cb.checked = !!c.on[d.id]; cb.id = "leg-" + d.id; cb.addEventListener("change", () => { c.on[d.id] = cb.checked; render(); });
+      const cb = el("input"); cb.type = "checkbox"; cb.checked = !!c.on[d.id]; cb.id = "leg-" + d.id; cb.addEventListener("change", () => { c.on[d.id] = cb.checked; c.fresh = false; render(); });
       const text = el("div");
       text.append(el("div", "t", d.label(k)));
       if (X) { let h = 0; for (let t = 0; t < X.home_shots.length; t++) if (d.test(X, t, k)) h++; text.append(el("div", "p", "samo to zdarzenie: " + pct(h / X.home_shots.length))); }
@@ -1203,12 +1884,12 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       if (d.k !== undefined) {
         const stp = el("span", "step");
         const minus = el("button", null, "−"), plus = el("button", null, "+"); minus.type = plus.type = "button";
-        minus.addEventListener("click", (e) => { e.preventDefault(); c.k[d.id] = Math.max(d.min, k - 1); c.on[d.id] = true; render(); });
-        plus.addEventListener("click", (e) => { e.preventDefault(); c.k[d.id] = Math.min(d.max, k + 1); c.on[d.id] = true; render(); });
+        minus.addEventListener("click", (e) => { e.preventDefault(); c.k[d.id] = Math.max(d.min, k - 1); c.on[d.id] = true; c.fresh = false; render(); });
+        plus.addEventListener("click", (e) => { e.preventDefault(); c.k[d.id] = Math.min(d.max, k + 1); c.on[d.id] = true; c.fresh = false; render(); });
         stp.append(minus, el("b", null, String(k)), plus);
         row.append(stp);
       } else row.append(el("span"));
-      picks.append(row);
+      groups[d.grp].append(row);
     });
     box.append(picks);
     const chosen = defs.filter((d) => c.on[d.id]);
@@ -1223,7 +1904,12 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       const miss = (meta().bb && meta().bb.miss) || 1.03;
       const p = Math.max(0.001, 1 - (1 - hit / n) * miss);
       const tile = (k, v, s, cls) => { const t = el("div", "tile"); t.append(el("span", "lab", k), el("span", "v " + (cls || ""), v)); if (s) t.append(el("span", "s", s)); return t; };
-      out.append(tile("Szansa wg modelu", pct(p), "bez powiązań " + pct(indep)), tile("Uczciwy kurs", dec(1 / p), "bez marży i podatku"), tile("Graj od", dec(minOdds(p)), "po podatku 12%", "c-go"));
+      const XM = simulate(m, true);
+      let est = null;
+      if (XM) { let hm = 0; for (let t = 0; t < n; t++) { let ok = true; for (let j = 0; j < chosen.length; j++) if (!chosen[j].test(XM, t, ks[j])) { ok = false; break; } if (ok) hm++; } const pm = hm / n; if (pm > 0 && pm < 1) est = 1 + (1 / pm - 1) * (1 - ((meta().rynek || {}).obciecie || 0.3)); }
+      out.append(tile("Szansa wg modelu", pct(p), "że wejdą wszystkie naraz; pomnożone osobno dałyby " + pct(indep)),
+        tile("Szacowany kurs", est ? "≈" + dec(est) : "—", est ? "z kursów rynkowych, przybliżenie" : "brak kursów rynkowych dla tego meczu"),
+        tile("Opłaca się od", dec(minOdds(p)), "próg po podatku 12% · uczciwy kurs bez podatku " + dec(1 / p), "c-go"));
       const priceRow = el("div", "row");
       const inp = el("input", "in big"); inp.type = "number"; inp.step = "0.01"; inp.min = "1.01"; inp.id = "calc-kurs"; inp.value = c.kurs || ""; inp.setAttribute("aria-label", "Kurs w Superbet");
       const v = el("div", "verdict");
@@ -1233,11 +1919,9 @@ details.day > .inner { padding: 8px 14px 12px; display: grid; gap: 8px; }
       const msg = el("span");
       add.addEventListener("click", () => {
         const k = parseFloat(inp.value); if (!(k > 1)) { msg.className = "err"; msg.textContent = "Najpierw wpisz kurs."; return; }
-        const side = c.side, tn = side === "home" ? m.gosp : m.gosc;
         const doc = { data: dayKey(m.start), mecz: m.gosp + " – " + m.gosc, rozgr: ligaName(m.liga_id), rodzaj: "Bet builder", buk: "Superbet",
-          opis: chosen.map((d, j) => d.label(ks[j])).join(" + "), kurs: k, stawka: Number(mem.get("stawka") || 100), tryb: mem.get("tryb") || "Realny", szansa: p, wynik: "",
-          nogi: chosen.map((d, j) => ({ fixture_id: m.id, stat: d.stat, scope: d.scope, line: d.side === "over" ? (d.line !== undefined ? d.line : ks[j] - 0.5) : null, side: d.side })), ...stamp() };
-        void tn;
+          opis: chosen.map((d, j) => d.full(ks[j])).join(" + "), kurs: k, stawka: Number(mem.get("stawka") || 100), tryb: mem.get("tryb") || "Realny", szansa: p, wynik: "",
+          nogi: chosen.map((d, j) => Object.assign({ fixture_id: m.id, stat: d.stat, scope: d.scope, line: d.side === "over" ? (d.line !== undefined ? d.line : ks[j] - 0.5) : null, side: d.side }, d.player_id ? { player_id: d.player_id } : {})), ...stamp() };
         save((db) => db.collection("zaklady").doc().set(doc), msg);
       });
       priceRow.append(el("span", "lab", "Kurs w Superbet"), inp, v, add, msg);

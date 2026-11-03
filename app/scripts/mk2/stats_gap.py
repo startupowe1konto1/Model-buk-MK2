@@ -41,6 +41,7 @@ from model_buk.ingestion.api_football_tables import (  # noqa: E402
 )
 
 BASE_URL = "https://v3.football.api-sports.io"
+FREE_INTERVAL = 6.5     # seconds between requests on the free plan (10 a minute allowed)
 FINISHED = {"FT", "AET", "PEN"}
 DATA = Path(os.environ.get("MODEL_BUK_DATA") or Path.home() / "Documents" / "Model-Buk-Data")
 OUT = Path(os.environ.get("MODEL_BUK_MK2_OUT") or Path.home() / "Documents" / "Model-Buk-Data-MK2")
@@ -73,24 +74,63 @@ def api_key() -> str:
     return value
 
 
+def free_key() -> str:
+    """The free-plan key (API_FOOTBALL_KEY_FREE): the fallback when the Pro account is suspended or expired."""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as k:
+            value = winreg.QueryValueEx(k, "API_FOOTBALL_KEY_FREE")[0].strip()
+            if value:
+                return value
+    except (ImportError, OSError):
+        pass
+    return os.environ.get("API_FOOTBALL_KEY_FREE", "").strip()
+
+
 class Client:
-    def __init__(self, key: str, max_requests: int, reserve: int):
+    def __init__(self, key: str, max_requests: int, reserve: int, free: bool = False):
         self.session = requests.Session()
         self.session.headers["x-apisports-key"] = key
         self.max_requests = max_requests
         self.reserve = reserve
         self.used = 0
         self.remaining: int | None = None
+        self.free = free        # the free plan: 100 requests a day, fixtures by id, calendar yesterday..tomorrow
+        self._last = 0.0        # time of the previous request: the free plan is paced
+
+    def probe(self) -> dict:
+        """The account behind this key, from /status: {"ok", "plan", "used", "limit"} or {"ok": False, "error"}."""
+        try:
+            data = self.session.get(BASE_URL + "/status", timeout=30).json()
+        except (requests.RequestException, ValueError) as exc:
+            return {"ok": False, "error": str(exc)}
+        errors = data.get("errors") or {}
+        if isinstance(errors, dict) and errors:
+            return {"ok": False, "error": "; ".join(str(v) for v in errors.values())}
+        resp = data.get("response") or {}
+        sub, req = resp.get("subscription") or {}, resp.get("requests") or {}
+        if not sub.get("active"):
+            return {"ok": False, "error": f"plan {sub.get('plan')} inactive"}
+        return {"ok": True, "plan": sub.get("plan"), "used": int(req.get("current") or 0), "limit": int(req.get("limit_day") or 0)}
 
     def get(self, endpoint: str, params: dict) -> dict:
         if self.used >= self.max_requests:
             raise RuntimeError(f"stopped: this run already used {self.used} requests")
         if self.remaining is not None and self.remaining <= self.reserve:
             raise RuntimeError(f"stopped: account has {self.remaining} requests left today (reserve {self.reserve})")
-        for attempt in range(3):
+        for attempt in range(4):
+            if self.free:
+                wait = FREE_INTERVAL - (time.monotonic() - self._last)
+                if wait > 0:
+                    time.sleep(wait)
             try:
                 r = self.session.get(BASE_URL + endpoint, params=params, timeout=60)
+                self._last = time.monotonic()
                 self.used += 1
+                if r.status_code == 429:        # the per-minute limit: wait it out and try again
+                    time.sleep(65)
+                    continue
                 left = r.headers.get("x-ratelimit-requests-remaining")
                 if left is not None and left.isdigit():
                     self.remaining = int(left)
@@ -101,10 +141,44 @@ class Client:
                 time.sleep(0.25)
                 return data
             except (requests.RequestException, ValueError) as exc:
-                if attempt == 2:
+                if attempt == 3:
                     raise
                 time.sleep(2 * (attempt + 1))
         raise AssertionError("unreachable")
+
+
+FREE_DAILY = 100     # the free plan's daily quota
+FREE_SPARE = 6       # left unused, for a manual check
+
+
+def _as_free(client: Client, used: int, max_requests: int) -> Client:
+    client.free = True
+    client.reserve = 0
+    client.max_requests = max(0, min(max_requests, FREE_DAILY - FREE_SPARE - used))
+    return client
+
+
+def open_client(max_requests: int, reserve: int) -> Client:
+    """The Pro key; when its account is suspended, expired or already on the free plan, the free plan with what
+    is left of the day's quota (the key API_FOOTBALL_KEY_FREE when the Pro key no longer answers).  The free
+    plan serves fixtures one by one (``/fixtures?id=``, which carries the statistics, events, line-ups and
+    player statistics) or by date within yesterday..tomorrow, 100 requests a day."""
+    pro = Client(api_key(), max_requests, reserve)
+    st = pro.probe()
+    if st["ok"] and st.get("plan") != "Free":
+        return pro
+    if st["ok"]:
+        print(f"API: the account is on the free plan ({st['used']} of {st['limit']} requests used today)")
+        return _as_free(pro, st["used"], max_requests)
+    key = free_key()
+    if not key:
+        raise SystemExit(f"API: {st['error']}; no free key (API_FOOTBALL_KEY_FREE) to fall back on")
+    free = Client(key, max_requests, 0)
+    fs = free.probe()
+    if not fs["ok"]:
+        raise SystemExit(f"API: Pro key: {st['error']}; free key: {fs['error']}")
+    print(f"API: the Pro account is unavailable ({st['error']}); free plan, {fs['used']} of {fs['limit']} requests used today")
+    return _as_free(free, fs["used"], max_requests)
 
 
 def snapshot_with_stats(fixture_ids: list[int]) -> set[int]:
@@ -125,6 +199,8 @@ def open_gap_db(path: Path) -> sqlite3.Connection:
     con.execute(f"create table if not exists matches ({', '.join(MATCH_COLUMNS)}, primary key (fixture_id))")
     con.execute(f"create table if not exists team_match_stats ({', '.join(TEAM_MATCH_STATS_COLUMNS)}, "
                 "primary key (fixture_id, team_id))")
+    import stats_players
+    stats_players.ensure_table(con)
     return con
 
 

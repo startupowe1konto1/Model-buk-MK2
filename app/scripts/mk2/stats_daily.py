@@ -30,12 +30,16 @@ Usage (from app/):
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import gzip
 import json
+from collections import Counter
 import math
+import os
 import sqlite3
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -48,7 +52,9 @@ sys.path.insert(0, str(HERE.parents[1] / "src"))
 
 import stats_model as sm  # noqa: E402
 import stats_picks as sp  # noqa: E402
-import stats_factors as sf  # noqa: E402
+import stats_factors as sf
+import stats_market as mk
+import stats_players as spl  # noqa: E402
 import stats_sure as ss  # noqa: E402
 from model_buk.ingestion.api_football_tables import (  # noqa: E402
     MATCH_COLUMNS,
@@ -57,19 +63,29 @@ from model_buk.ingestion.api_football_tables import (  # noqa: E402
     parse_team_match_stats,
 )
 from stats_config import CUPS, EXTRA, MODEL_LEAGUES, SHORT, SHOWN, TOP15  # noqa: E402
-from stats_gap import Client, api_key, open_gap_db  # noqa: E402
+from stats_gap import Client, open_client, open_gap_db  # noqa: E402
 from stats_today import parse_odds  # noqa: E402
 
 FINISHED = {"FT", "AET", "PEN"}
 NOT_STARTED = {"NS", "TBD"}
 DEAD = {"PST", "CANC", "ABD", "AWD", "WO"}
 STATS_DIR = sm.OUT / "stats"
+DEFAULT_LEDGER = STATS_DIR / "ledger"                       # the app's ledger dumped by ArtifactData (kursy/, zaklady/)
+_DESKTOP = Path.home() / "OneDrive" / "Pulpit"
+DEFAULT_XLSX = _DESKTOP / "Typometr.xlsx" if _DESKTOP.exists() else None   # the always-current workbook, Windows only
 # The day's highlighted picks ("typy dnia"); every other match with prices gets its best bet too
 # (user, 2026-10-15: bet on every match, study as many events as possible).
 TOP_PER_DAY = 5
 ALL_PER_DAY = 240      # up to one bet per match in each of the three odds bands
 STAKE = 100.0          # zł on every paper bet and coupon (user, 2026-10-15)
 TAX = 0.88
+# The free API plan (100 requests a day) cannot cover a weekend: its requests go first to settling the logged
+# bet builders, then to the day's injuries and odds, and some are kept for the checks shortly before kick-off
+# (stats_prematch.py); the other finished fixtures (model data only) wait for a quieter day.
+FREE_ODDS_KEEP = 25
+PREMATCH_PER_MAIN = 2       # each main builder not started yet: the line-ups and the odds (a second look when there is room)
+INJURY_REFRESH_H = {0: 3.0, 1: 10.0}     # today's injury list is fetched again after 3 hours, tomorrow's after 10
+LOCK = sm.OUT / "stats" / "run.lock"
 
 
 def utcnow() -> dt.datetime:
@@ -95,6 +111,11 @@ def init_dbs() -> tuple[sqlite3.Connection, sqlite3.Connection, sqlite3.Connecti
         fixture_id integer primary key, league_id integer, season integer, round text, kickoff_utc text,
         status text, referee text, home_id integer, home text, away_id integer, away text,
         home_goals integer, away_goals integer, venue text, fetched_at text)""")
+    # players out (injured, suspended: 'Missing Fixture') or doubtful ('Questionable') per fixture
+    fx.execute("""create table if not exists injuries (
+        fixture_id integer, team_id integer, player_id integer, player text, type text, reason text, fetched_at text,
+        primary key (fixture_id, player_id))""")
+    fx.execute("create table if not exists injuries_fetch (day text primary key, fetched_at text, n_rows integer)")
     od = open_db("odds.sqlite")
     od.execute("""create table if not exists odds (
         fetched_at text, fixture_id integer, bookmaker text, stat text, scope text, line real, side text,
@@ -144,19 +165,17 @@ def step_calendar(client: Client, fx: sqlite3.Connection, back: int, days: int) 
     today = dt.date.today()
     n = 0
     now = iso(utcnow())
-    for offset in range(-back, days + 1):
+    offsets = [o for o in range(-back, days + 1) if not client.free or -1 <= o <= 1]
+    if client.free and len(offsets) < back + days + 1:
+        print("calendar: free plan, only yesterday, today and tomorrow are available")
+    for offset in offsets:
         day = (today + dt.timedelta(days=offset)).isoformat()
-        data = client.get("/fixtures", {"date": day})
-        rows = []
-        for f in data.get("response", []):
-            lid = f["league"]["id"]
-            if lid not in MODEL_LEAGUES:
-                continue
-            fxb, t, g = f["fixture"], f["teams"], f.get("goals") or {}
-            rows.append((fxb["id"], lid, f["league"]["season"], f["league"].get("round"), fxb["date"],
-                         fxb["status"]["short"], fxb.get("referee"), t["home"]["id"], t["home"]["name"],
-                         t["away"]["id"], t["away"]["name"], g.get("home"), g.get("away"),
-                         (fxb.get("venue") or {}).get("name"), now))
+        try:
+            data = client.get("/fixtures", {"date": day})
+        except (RuntimeError, OSError) as exc:
+            print(f"calendar: {exc}")
+            break
+        rows = [fixture_row(f, now) for f in data.get("response", []) if f["league"]["id"] in MODEL_LEAGUES]
         fx.executemany("insert or replace into fixtures values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         fx.commit()
         n += len(rows)
@@ -183,33 +202,78 @@ def have_stats(ids: list[int]) -> set[int]:
     return out
 
 
-def step_results(client: Client, fx: sqlite3.Connection) -> int:
+def fixture_row(f: dict, now: str) -> tuple:
+    """A row of the fixtures table from an API fixture object (the calendar and the by-id refresh)."""
+    fxb, t, g = f["fixture"], f["teams"], f.get("goals") or {}
+    return (fxb["id"], f["league"]["id"], f["league"]["season"], f["league"].get("round"), fxb["date"],
+            fxb["status"]["short"], fxb.get("referee"), t["home"]["id"], t["home"]["name"],
+            t["away"]["id"], t["away"]["name"], g.get("home"), g.get("away"), (fxb.get("venue") or {}).get("name"), now)
+
+
+def step_results(client: Client, fx: sqlite3.Connection, pr: sqlite3.Connection | None = None, keep: int = 0) -> int:
+    """Statistics of finished fixtures.  On the free plan one request a fixture: those with logged bet builders
+    first (they get settled), then those with logged singles, then the rest (model data only) while more than
+    ``keep`` requests are left (kept for the odds, the injuries and the checks before kick-off)."""
     cutoff = iso(utcnow() - dt.timedelta(hours=2))
     rows = fx.execute("select fixture_id, league_id from fixtures where status in ('FT','AET','PEN') "
                       "and kickoff_utc < ?", (cutoff,)).fetchall()
     ids = [r["fixture_id"] for r in rows]
     todo = [i for i in ids if i not in have_stats(ids)]
-    print(f"results: {len(ids)} finished, {len(todo)} without statistics yet")
-    if not todo:
+    codes = {r["fixture_id"]: SHORT.get(r["league_id"], str(r["league_id"])) for r in rows}
+    stale: list[int] = []
+    if client.free:
+        # the free plan has no calendar beyond yesterday..tomorrow: past fixtures still marked as not played are
+        # refreshed one by one (the by-id response carries the statistics as well)
+        old = fx.execute("select fixture_id, league_id from fixtures where status not in "
+                         "('FT','AET','PEN','PST','CANC','ABD','AWD','WO') and kickoff_utc < ? and kickoff_utc > ? "
+                         "order by kickoff_utc", (cutoff, iso(utcnow() - dt.timedelta(days=10)))).fetchall()
+        stale = [r["fixture_id"] for r in old if r["league_id"] in MODEL_LEAGUES]
+        codes.update({r["fixture_id"]: SHORT.get(r["league_id"], str(r["league_id"])) for r in old})
+    print(f"results: {len(ids)} finished, {len(todo)} without statistics yet"
+          + (f", {len(stale)} past fixtures to refresh one by one" if stale else ""))
+    if not todo and not stale:
         return 0
     gap = open_gap_db(STATS_DIR / "gap.sqlite")
     raw = STATS_DIR / "raw"
     raw.mkdir(parents=True, exist_ok=True)
     stamp = utcnow().strftime("%Y%m%dT%H%M%SZ")
-    codes = {r["fixture_id"]: SHORT.get(r["league_id"], str(r["league_id"])) for r in rows}
     added = 0
-    for n, i in enumerate(range(0, len(todo), 20)):
-        chunk = todo[i:i + 20]
-        data = client.get("/fixtures", {"ids": "-".join(map(str, chunk))})
+    builders: set[int] = set()
+    if client.free:
+        ids_free = list(dict.fromkeys(stale + todo))
+        if pr is not None:
+            builders = {r[0] for r in pr.execute("select distinct fixture_id from extras")}
+            singles = {r[0] for r in pr.execute("select distinct fixture_id from picks")}
+            ids_free.sort(key=lambda i: (i not in builders, i not in singles))     # stable: kick-off order within
+        queue = [[i] for i in ids_free]
+    else:
+        queue = [todo[i:i + 20] for i in range(0, len(todo), 20)]
+    for n, chunk in enumerate(queue):
+        if client.free and chunk[0] not in builders and client.max_requests - client.used <= keep:
+            print(f"results: {len(queue) - n} fixtures without bet builders left for a later run "
+                  f"({keep} requests kept for injuries, odds and the checks before kick-off)")
+            break
+        try:
+            data = client.get("/fixtures", {"id": chunk[0]} if client.free else {"ids": "-".join(map(str, chunk))})
+        except (RuntimeError, OSError) as exc:
+            print(f"results: {exc}")
+            break
         name = f"daily_ids_{stamp}_{n:03d}.json.gz"
         with gzip.open(raw / name, "wt", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False)
         ms, ss = [], []
         for f in data.get("response", []):
             fid = f["fixture"]["id"]
+            if client.free:
+                fx.execute("insert or replace into fixtures values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", fixture_row(f, iso(utcnow())))
+                fx.commit()
+                if f["fixture"]["status"]["short"] not in FINISHED:
+                    continue
             stats_rows = parse_team_match_stats(f)
             if len(stats_rows) < 2:      # provider has not filled the statistics yet: try again next run
                 continue
+            if f.get("players"):
+                spl.store_players(gap, f)
             ms.append(parse_match(f, league_code=codes.get(fid), fetched_at=iso(utcnow()), batch_file=name))
             ss.extend(stats_rows)
         gap.executemany(f"insert or replace into matches values ({','.join('?' * len(MATCH_COLUMNS))})",
@@ -226,41 +290,206 @@ def step_results(client: Client, fx: sqlite3.Connection) -> int:
 
 # ---------------------------------------------------------------------------- 3. odds
 
+def store_odds(od: sqlite3.Connection, fixture_id: int, payload: dict) -> int:
+    """One /odds response into the archive (statistics lines, match result, the extra markets) with its time."""
+    stamp = iso(utcnow())
+    quotes = parse_odds(payload) + parse_result_odds(payload) + mk.parse_extra_odds(payload)
+    od.executemany("insert or replace into odds values (?,?,?,?,?,?,?,?)",
+                   [(stamp, fixture_id, q["bookmaker"], q["stat"], q["scope"], q["line"], q["side"], q["odd"])
+                    for q in quotes])
+    od.execute("insert or replace into odds_fetch values (?,?,?)", (fixture_id, stamp, len(quotes)))
+    od.commit()
+    return len(quotes)
+
+
 def step_odds(client: Client, fx: sqlite3.Connection, od: sqlite3.Connection, hours: float,
-              refresh_hours: float, limit: int) -> int:
+              refresh_hours: float, limit: int, keep: int = 0) -> int:
+    """Odds of the shown competitions' fixtures within ``hours``.  On the free plan: today and tomorrow, fixtures
+    without odds first, then those fetched ``refresh_hours`` ago, at most 25 a run and never into the
+    ``keep`` requests left for the checks before kick-off (which refresh the main builders' odds)."""
     now = utcnow()
+    if client.free:                  # the free plan's budget: today and tomorrow only, refreshed once a day, 25 a run
+        hours, refresh_hours = min(hours, 36.0), max(refresh_hours, 20.0)
+        limit = min(limit, 25, max(0, client.max_requests - client.used - keep))
     upto = iso(now + dt.timedelta(hours=hours))
     rows = fx.execute("select fixture_id, kickoff_utc, league_id from fixtures where status in ('NS','TBD') "
                       "and kickoff_utc > ? and kickoff_utc < ? order by kickoff_utc", (iso(now), upto)).fetchall()
     rows = [r for r in rows if r["league_id"] in SHOWN]
     last = {r[0]: r[1] for r in od.execute("select fixture_id, max(fetched_at) from odds_fetch group by fixture_id")}
+    if client.free:
+        rows.sort(key=lambda r: r["fixture_id"] in last)        # stable: fixtures without odds first, by kick-off
     fetched = 0
     for r in rows:
-        if fetched >= limit:
-            print(f"odds: limit {limit} reached")
-            break
         kick = dt.datetime.fromisoformat(r["kickoff_utc"].replace("Z", "+00:00"))
         prev = last.get(r["fixture_id"])
         if prev:
             age_h = (now - dt.datetime.fromisoformat(prev.replace("Z", "+00:00"))).total_seconds() / 3600
-            soon = (kick - now).total_seconds() / 3600 < 3
+            soon = (kick - now).total_seconds() / 3600 < 3 and not client.free
             if age_h < (0.75 if soon else refresh_hours):
                 continue
+        if fetched >= limit:
+            print(f"odds: limit {limit} reached")
+            break
         try:
             payload = client.get("/odds", {"fixture": r["fixture_id"]})
-        except RuntimeError as exc:
+        except (RuntimeError, OSError) as exc:
             print(f"odds: {exc}")
             break
-        stamp = iso(utcnow())
-        quotes = parse_odds(payload) + parse_result_odds(payload)
-        od.executemany("insert or replace into odds values (?,?,?,?,?,?,?,?)",
-                       [(stamp, r["fixture_id"], q["bookmaker"], q["stat"], q["scope"], q["line"], q["side"], q["odd"])
-                        for q in quotes])
-        od.execute("insert or replace into odds_fetch values (?,?,?)", (r["fixture_id"], stamp, len(quotes)))
-        od.commit()
+        store_odds(od, r["fixture_id"], payload)
         fetched += 1
     print(f"odds: {fetched} fixtures fetched ({len(rows)} upcoming within {hours:g} h)")
     return fetched
+
+
+# ---------------------------------------------------------------------------- 3b. injuries
+
+INJURY_PL = {
+    "Knee Injury": "uraz kolana", "Muscle Injury": "uraz mięśnia", "Thigh Injury": "uraz uda", "Leg Injury": "uraz nogi",
+    "Ankle Injury": "uraz kostki", "Hamstring Injury": "uraz mięśnia dwugłowego", "Shoulder Injury": "uraz barku",
+    "Groin Injury": "uraz pachwiny", "Foot Injury": "uraz stopy", "Hip Injury": "uraz biodra", "Lower-Body Injury": "uraz nogi",
+    "Achilles Tendon Injury": "uraz ścięgna Achillesa", "Calf Injury": "uraz łydki", "Back Injury": "uraz pleców",
+    "Arm Injury": "uraz ręki", "Hand Injury": "uraz dłoni", "Tendon Injury": "uraz ścięgna", "Ribs Injury": "uraz żeber",
+    "Face Injury": "uraz twarzy", "Head Injury": "uraz głowy", "Concussion": "wstrząśnienie mózgu", "Knock": "stłuczenie",
+    "Broken Leg": "złamanie nogi", "Broken jawbone": "złamanie szczęki", "Hernia": "przepuklina", "Illness": "choroba",
+    "Health problems": "problemy zdrowotne", "Injury": "kontuzja", "Yellow Cards": "pauza za kartki",
+    "Red Card": "pauza za czerwoną kartkę", "Suspended": "zawieszenie", "Inactive": "poza kadrą",
+    "Coach's decision": "decyzja trenera", "Doping": "zawieszenie (doping)", "Personal Reasons": "sprawy osobiste",
+    "International duty": "reprezentacja", "Loan agreement": "warunki wypożyczenia",
+}
+
+
+def injury_pl(reason: str | None) -> str:
+    """The provider's reason for a player's absence, in Polish."""
+    r = (reason or "").strip()
+    if r in INJURY_PL:
+        return INJURY_PL[r]
+    low = r.lower()
+    if "broken" in low or "fracture" in low:
+        return "złamanie"
+    if "injur" in low:
+        return "kontuzja"
+    if "suspen" in low or "card" in low:
+        return "zawieszenie"
+    return "nieobecność"
+
+
+def step_injuries(client: Client, fx: sqlite3.Connection) -> int:
+    """Players out (injured, suspended: 'Missing Fixture') or doubtful ('Questionable') for today's and
+    tomorrow's fixtures: /injuries?date=D, one request a day for every competition (the free plan has it too),
+    fetched again after INJURY_REFRESH_H hours.  The day's rows replace the earlier ones of its fixtures."""
+    now = utcnow()
+    raw = STATS_DIR / "raw"
+    raw.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for offset, refresh in INJURY_REFRESH_H.items():
+        day = (now + dt.timedelta(days=offset)).date().isoformat()
+        prev = fx.execute("select fetched_at from injuries_fetch where day = ?", (day,)).fetchone()
+        if prev and (now - dt.datetime.fromisoformat(prev[0].replace("Z", "+00:00"))).total_seconds() / 3600 < refresh:
+            continue
+        try:
+            data = client.get("/injuries", {"date": day})
+        except (RuntimeError, OSError) as exc:
+            print(f"injuries: {exc}")
+            break
+        stamp = iso(utcnow())
+        with gzip.open(raw / f"injuries_{day}_{stamp.replace(':', '')}.json.gz", "wt", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
+        ours = [r[0] for r in fx.execute("select fixture_id from fixtures where substr(kickoff_utc, 1, 10) = ?", (day,))]
+        known = set(ours)
+        rows = {}
+        for x in data.get("response") or []:
+            fid, pl = x["fixture"]["id"], x.get("player") or {}
+            if fid in known and pl.get("id"):
+                rows[(fid, pl["id"])] = (fid, x["team"]["id"], pl["id"], pl.get("name"), pl.get("type"), pl.get("reason"), stamp)
+        if ours:
+            fx.execute(f"delete from injuries where fixture_id in ({','.join('?' * len(ours))})", ours)
+        fx.executemany("insert or replace into injuries values (?,?,?,?,?,?,?)", list(rows.values()))
+        fx.execute("insert or replace into injuries_fetch values (?,?,?)", (day, stamp, len(rows)))
+        fx.commit()
+        n += len(rows)
+        print(f"injuries {day}: {len(rows)} players out or doubtful in {len({k[0] for k in rows})} fixtures")
+    return n
+
+
+def injuries_of(fx: sqlite3.Connection, fixture_ids: list[int]) -> dict[int, dict[int, dict]]:
+    """fixture -> player -> {team_id, player, type, reason} from the injury lists."""
+    out: dict[int, dict[int, dict]] = {}
+    for i in range(0, len(fixture_ids), 500):
+        chunk = fixture_ids[i:i + 500]
+        for r in fx.execute(f"select * from injuries where fixture_id in ({','.join('?' * len(chunk))})", chunk):
+            out.setdefault(r["fixture_id"], {})[r["player_id"]] = {"team_id": r["team_id"], "player": r["player"],
+                                                                   "type": r["type"], "reason": r["reason"]}
+    return out
+
+
+def absences(mecze: list[dict], absent: dict[int, dict[int, dict]], kadry: dict[int, dict]) -> dict[int, dict]:
+    """Per match and side the players out or doubtful, for the app: name, reason in Polish, doubtful or not, his
+    starts in the team's last 5 matches and his share of the team's shots (from the squads), regulars first."""
+    out: dict[int, dict] = {}
+    for m in mecze:
+        rows = absent.get(m["fixture_id"])
+        if not rows:
+            continue
+        rec: dict[str, list] = {"home": [], "away": []}
+        for pid, r in rows.items():
+            side = "home" if r["team_id"] == m["home_id"] else "away" if r["team_id"] == m["away_id"] else None
+            if side is None:
+                continue
+            use = next((p for p in (kadry.get(m["fixture_id"]) or {}).get(side, []) if p["id"] == pid), None)
+            rec[side].append({"n": r["player"], "pow": injury_pl(r["reason"]), "niepewny": r["type"] == "Questionable",
+                              "s5": use["s5"] if use else 0, "u": use["s_shots"] if use else None})
+        for side in rec:
+            rec[side].sort(key=lambda x: (-x["s5"], -(x["u"] or 0.0), x["n"] or ""))
+        out[m["fixture_id"]] = rec
+    return out
+
+
+def save_squads(kadry: dict[int, dict], made: str) -> None:
+    """The squads of the upcoming matches for the checks before kick-off (stats_prematch.py), local only."""
+    (STATS_DIR / "kadry.json").write_text(json.dumps({"made": made, "mecze": {str(k): v for k, v in kadry.items()}},
+                                                     ensure_ascii=False), encoding="utf-8")
+
+
+def prematch_need(pr: sqlite3.Connection, now: dt.datetime) -> int:
+    """Requests to keep for today's checks before kick-off (the API's day ends at 00:00 UTC): PREMATCH_PER_MAIN
+    for each match with a main builder not started yet whose line-up has not been checked."""
+    end = dt.datetime.combine(now.date() + dt.timedelta(days=1), dt.time(0), tzinfo=dt.timezone.utc)
+    due = set()
+    for fid, payload in pr.execute("select fixture_id, payload from extras where kind = 'bb' and start > ? and start < ?",
+                                   (iso(now), iso(end))):
+        p = json.loads(payload or "{}")
+        if p.get("glowny") and not (p.get("kontrola") or {}).get("sklad_znany"):
+            due.add(fid)
+    return PREMATCH_PER_MAIN * len(due)
+
+
+@contextlib.contextmanager
+def run_lock(wait_min: float = 15.0):
+    """One run at a time: the daily pipeline and the checks before kick-off write the same databases and files.
+    Waits up to ``wait_min`` minutes for another run; a lock older than 40 minutes is a crashed run's."""
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + wait_min * 60
+    while True:
+        try:
+            fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            break
+        except FileExistsError:
+            try:
+                age = time.time() - LOCK.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if age > 2400:
+                LOCK.unlink(missing_ok=True)
+                continue
+            if time.monotonic() > deadline:
+                raise SystemExit("another run is still working (run.lock); try again later")
+            time.sleep(10)
+    try:
+        yield
+    finally:
+        LOCK.unlink(missing_ok=True)
 
 
 RESULT_SIDES = {1: {"Home": "home", "Draw": "draw", "Away": "away"},          # match winner
@@ -306,6 +535,111 @@ def result_probs(rows: list[dict]) -> tuple[float, float, float] | None:
     med = np.median(np.array(probs), axis=0)
     med = med / med.sum()
     return float(med[0]), float(med[1]), float(med[2])
+
+
+# ---------------------------------------------------------------------------- builders: the market's view
+
+def legacy_key(p: dict) -> str:
+    """The app's key of a builder logged before keys carried the template (day | match | kind [| wyzej])."""
+    return f"{p.get('day')}|{p.get('fixture_id')}|{p.get('rodzaj', '')}" + ("|wyzej" if p.get("poziom") == "wyzej" else "")
+
+
+def market_view_of_logged(pr: sqlite3.Connection, od: sqlite3.Connection, fx: sqlite3.Connection, fits: dict) -> int:
+    """Logged builders without the market's view get it once, from what was known before kick-off: the
+    model's means of the last forecast before the match (predictions), the last odds fetch before it, goals
+    from the match odds.  The market's joint chance (p_rynek) is written into the logged payload."""
+    dims, corr = ss.load_corr()
+    stats_ = [d.split("_", 1)[1] for d in dims if d.startswith("home_") and not d.endswith("_goals")]
+    rows = [dict(r) for r in pr.execute("select day, key, fixture_id, start, legs, payload from extras where kind = 'bb'")]
+    todo = [r for r in rows if "p_rynek" not in json.loads(r["payload"] or "{}")]
+    cache: dict[int, dict | None] = {}
+    done = 0
+    for r in todo:
+        fid, start = r["fixture_id"], r["start"]
+        if fid not in cache:
+            cache[fid] = None
+            means, alphas = {}, {}
+            lg = fx.execute("select league_id from fixtures where fixture_id = ?", (fid,)).fetchone()
+            cup = bool(lg) and lg[0] in CUPS
+            for s in stats_:
+                q = pr.execute("select mu_home, mu_away from predictions where fixture_id = ? and stat = ? and made_at <= ? "
+                               "order by made_at desc limit 1", (fid, s, start)).fetchone()
+                if q is None:
+                    break
+                means[f"home_{s}"], means[f"away_{s}"] = float(q[0]), float(q[1])
+                for side in ("home", "away", "total"):
+                    alphas[f"{side}_{s}"] = fits[s].dispersion(side, cup)
+            if len(means) == 2 * len(stats_):
+                last = od.execute("select max(fetched_at) from odds where fixture_id = ? and fetched_at <= ?", (fid, start)).fetchone()
+                odds_rows = ([dict(x) for x in od.execute("select bookmaker, stat, scope, line, side, odd from odds "
+                                                          "where fixture_id = ? and fetched_at = ?", (fid, last[0]))]
+                             if last and last[0] else [])
+                res = result_probs(odds_rows)
+                means["home_goals"], means["away_goals"] = (ss.goals_from_market(1.45, 1.15, res[0], res[2]) if res else (1.45, 1.15))
+                alphas["home_goals"] = alphas["away_goals"] = 1e-4
+                mkt, _ = mk.market_means(means, alphas, odds_rows, dims, corr)
+                cache[fid] = ss.simulate(mkt, alphas, dims, corr, seed=int(fid) % (2 ** 31))
+        X = cache[fid]
+        if X is None:
+            continue
+        payload = json.loads(r["payload"] or "{}")
+        try:
+            payload["p_rynek"] = round(mk.joint_chance(X, json.loads(r["legs"])), 4)
+        except KeyError:            # a leg the copula cannot price
+            continue
+        payload["rynek_wstecz"] = True
+        pr.execute("update extras set payload = ? where day = ? and kind = 'bb' and key = ?",
+                   (json.dumps(payload, ensure_ascii=False), r["day"], r["key"]))
+        done += 1
+    pr.commit()
+    return done
+
+
+def bookmaker_cut(pr: sqlite3.Connection, ledger: dict) -> tuple[float, int]:
+    """The bookmaker's cut of builders' net winnings from the prices typed in the app, matched by key."""
+    prices = ledger.get("kursy", {})
+    pairs = []
+    if prices:
+        payloads = [json.loads(x or "{}") for (x,) in pr.execute("select payload from extras where kind = 'bb'")]
+        same = Counter(legacy_key(p) for p in payloads)       # an old key names a builder only when it is the one of its kind
+        for p in payloads:
+            price = prices.get(p.get("klucz") or legacy_key(p)) or (prices.get(legacy_key(p)) if same[legacy_key(p)] == 1 else None)
+            if price and 1.10 <= price <= 50 and p.get("p_rynek"):      # 1.01 and the like are typing slips
+                pairs.append((price, p["p_rynek"]))
+    return mk.calibrate_cut(pairs)
+
+
+def estimate(p: dict, cut: float) -> dict:
+    """The builder's estimated bookmaker price and value at the current cut (from its market chance)."""
+    est = mk.estimated_price(p.get("p_rynek"), cut)
+    return {"kurs_szac": est, "ev_szac": round(p["p_model"] * TAX_KEEP * est - 1, 4) if est else None}
+
+
+def mark_logged_mains(pr: sqlite3.Connection, cut: float) -> int:
+    """Days logged before the main proposals existed get them by the same rule (pre-match data only)."""
+    rows = [dict(r) for r in pr.execute("select day, key, fixture_id, payload from extras where kind = 'bb'")]
+    by_day: dict[str, list[dict]] = {}
+    for r in rows:
+        r["p"] = json.loads(r["payload"] or "{}")
+        by_day.setdefault(r["day"], []).append(r)
+    n = 0
+    for day, lst in by_day.items():
+        if any("glowny" in r["p"] for r in lst):
+            continue
+        cands = []
+        for r in lst:
+            c = dict(r["p"])
+            c.update(estimate(c, cut))
+            c["_key"] = r["key"]
+            cands.append(c)
+        main_keys = {c["_key"] for c in ss.choose_mains(cands)}
+        for r in lst:
+            r["p"]["glowny"] = r["key"] in main_keys
+            pr.execute("update extras set payload = ? where day = ? and kind = 'bb' and key = ?",
+                       (json.dumps(r["p"], ensure_ascii=False), day, r["key"]))
+            n += r["p"]["glowny"]
+    pr.commit()
+    return n
 
 
 def result_candidates(analysis: dict, goals_fit, odds: dict[int, list[dict]]) -> list[dict]:
@@ -763,11 +1097,22 @@ def why_ready(k: dict, alts: list[dict]) -> str:
 
 # ---------------------------------------------------------------------------- 9. settle paper picks and coupons
 
+PLAYERS: dict[tuple[int, int], tuple[float, float, float]] = {}     # (fixture, player) -> (minutes, shots, sot)
+
+
 def settle_leg(leg: dict, by_fix: dict) -> tuple[str | None, float | str | None]:
     """The result of one bet and what came in (the count, or the score '2:1' for match-result bets)."""
     g = by_fix.get(leg["fixture_id"])
     if g is None or len(g) != 2:
         return None, None
+    if "status_short" in g and g["status_short"].isin(["AET", "PEN"]).any():
+        return "zwrot", None      # extra time: the provider's counts and score cover 120 minutes, the bets 90
+    if leg["stat"].startswith("player_"):        # a player's count; a player who did not play voids the leg
+        rec = PLAYERS.get((int(leg["fixture_id"]), int(leg.get("player_id") or 0)))
+        if rec is None or rec[0] <= 0:
+            return "zwrot", None
+        val = rec[2] if leg["stat"] == "player_sot" else rec[1]
+        return ("wygrana" if (val > leg["line"]) == (leg["side"] == "over") else "przegrana"), val
     col = "goals" if leg["stat"] == "wynik" else sm.STATS.get(leg["stat"]) or sm.EXTRA_STATS[leg["stat"]]
     h = g[g["side"] == "home"][col].iloc[0]
     a = g[g["side"] == "away"][col].iloc[0]
@@ -846,6 +1191,9 @@ def settle_extras(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
     """Logged near-certain events and bet builders: in when every leg came in."""
     rows = [dict(r) for r in pr.execute("select * from extras order by day, kind, p_model desc")]
     by_fix = {fid: g for fid, g in df.groupby("fixture_id")}
+    need = {int(l["fixture_id"]) for r in rows for l in json.loads(r["legs"]) if str(l.get("stat", "")).startswith("player_")}
+    PLAYERS.clear()
+    PLAYERS.update(spl.player_lookup(need))
     for r in rows:
         legs = json.loads(r["legs"])
         res = [settle_leg(l, by_fix) for l in legs]
@@ -854,29 +1202,38 @@ def settle_extras(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
         r["legs"] = legs
         r["payload"] = json.loads(r["payload"]) if r.get("payload") else {}
         r["wynik"] = ("przegrana" if any(w == "przegrana" for w, _ in res)
-                      else "wygrana" if all(w == "wygrana" for w, _ in res) else None)
+                      else None if any(w is None for w, _ in res)
+                      else "zwrot" if any(w == "zwrot" for w, _ in res)
+                      else "wygrana")
     return rows
 
 
 def log_extras(pr: sqlite3.Connection, extra: dict, kickoff: dict, made: str) -> None:
     """Near-certain events, bet builders and the coupon of near-certain events of matches not started
     yet: the day's rows are replaced by this run's; rows of started matches stay (they get settled)."""
-    days = (set(extra["pewne"]) | set(extra["bb"]) | set(extra["kupon_pewne"])
+    days = (set(extra["pewne"]) | set(extra["bb"]) | set(extra["kupon_pewne"]) | set(extra.get("zdarzenia") or {})
             | {r[0] for r in pr.execute("select distinct day from extras where day >= ?", (made[:10],))}
             | {r[0] for r in pr.execute("select day from coupons where kind = 'pewne' and day >= ?", (made[:10],))})
     for day in sorted(days):
-        rows = [dict(r) for r in pr.execute("select key, fixture_id from extras where day = ?", (day,))]
+        rows = [dict(r) for r in pr.execute("select key, fixture_id, payload from extras where day = ?", (day,))]
+        # a match whose main builder was checked shortly before kick-off (stats_prematch.py) keeps its builders:
+        # the check, and what the user may have bet on, are about them
+        checked = {r["fixture_id"] for r in rows if "kontrola" in json.loads(r["payload"] or "{}")}
         for r in rows:
-            if kickoff.get(r["fixture_id"], "") > made:
+            if kickoff.get(r["fixture_id"], "") > made and r["fixture_id"] not in checked:
                 pr.execute("delete from extras where day = ? and key = ?", (day, r["key"]))
-        for kind, lst in (("pewniak", extra["pewne"].get(day, [])), ("bb", extra["bb"].get(day, []))):
+        for kind, lst in (("pewniak", extra["pewne"].get(day, [])), ("bb", extra["bb"].get(day, [])),
+                          ("zdarzenie", (extra.get("zdarzenia") or {}).get(day, []))):
             for e in lst:
-                if kickoff.get(e["fixture_id"], "") <= made:
+                if kickoff.get(e["fixture_id"], "") <= made or e["fixture_id"] in checked:
                     continue
                 key = (f"{e['fixture_id']}:{e['stat']}:{e['scope']}" if kind == "pewniak"
-                       else f"{e['fixture_id']}:{e['rodzaj']}")
-                legs = ([{k: e[k] for k in ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis")}]
-                        if kind == "pewniak" else e["legs"])
+                       else f"{e['fixture_id']}:{e['stat']}:{e['scope']}:{e['side']}:{e.get('line')}:{e.get('player_id', '')}"
+                       if kind == "zdarzenie"
+                       else f"{e['fixture_id']}:{e['rodzaj']}:{e.get('poziom', 'pewniej')}:{e['szablon']}")
+                legs = ([{k: e[k] for k in ("fixture_id", "mecz", "stat", "scope", "line", "side", "opis") if k in e}
+                         | ({"player_id": e["player_id"]} if e.get("player_id") else {})]
+                        if kind in ("pewniak", "zdarzenie") else e["legs"])
                 pr.execute("insert or ignore into extras values (?,?,?,?,?,?,?,?,?,?,?)", (
                     made, day, kind, key, e["fixture_id"], e["start"], json.dumps(legs, ensure_ascii=False),
                     e["p_model"], e.get("kurs"), json.dumps(e, ensure_ascii=False, default=float), sp.RULES))
@@ -917,7 +1274,7 @@ def settle_coupons(pr: sqlite3.Connection, df: pd.DataFrame) -> list[dict]:
 
 # ---------------------------------------------------------------------------- main
 
-def main() -> None:
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--days", type=int, default=7, help="calendar days ahead")
     p.add_argument("--back", type=int, default=3, help="calendar days back (results)")
@@ -926,20 +1283,37 @@ def main() -> None:
     p.add_argument("--odds-limit", type=int, default=200)
     p.add_argument("--max-requests", type=int, default=600)
     p.add_argument("--reserve", type=int, default=3000)
-    p.add_argument("--skip", default="", help="comma list: calendar,results,odds,picks,export")
+    p.add_argument("--skip", default="", help="comma list: calendar,results,injuries,odds,picks,export")
     p.add_argument("--dest", default=str(HERE.parents[1] / "dashboard_mk2" / "app" / "data"))
     p.add_argument("--half-life", type=float, default=180.0)
-    args = p.parse_args()
+    p.add_argument("--xlsx", default=str(DEFAULT_XLSX) if DEFAULT_XLSX else "", help="the Excel workbook to refresh (empty: none)")
+    p.add_argument("--ledger", default=str(DEFAULT_LEDGER) if DEFAULT_LEDGER.exists() else "",
+                   help="folder with the app's ledger dumped by ArtifactData (kursy/, zaklady/)")
+    return p.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    with run_lock():
+        daily(args)
+
+
+def daily(args: argparse.Namespace) -> None:
     skip = {s.strip() for s in args.skip.split(",") if s.strip()}
 
     fx, od, pr = init_dbs()
-    client = Client(api_key(), args.max_requests, args.reserve)
+    client = open_client(args.max_requests, args.reserve)
+    keep = prematch_need(pr, utcnow()) if client.free else 0
+    if client.free:
+        print(f"API: {keep} requests kept for the checks before kick-off")
     if "calendar" not in skip:
         step_calendar(client, fx, args.back, args.days)
     if "results" not in skip:
-        step_results(client, fx)
+        step_results(client, fx, pr, FREE_ODDS_KEEP + keep + 2)
+    if "injuries" not in skip:
+        step_injuries(client, fx)
     if "odds" not in skip:
-        step_odds(client, fx, od, args.odds_hours, args.odds_refresh, args.odds_limit)
+        step_odds(client, fx, od, args.odds_hours, args.odds_refresh, args.odds_limit, keep)
 
     # forecast
     now = utcnow()
@@ -947,6 +1321,10 @@ def main() -> None:
     leagues = sm.home_league(df)
     asof = pd.Timestamp(now)
     fits = {s: sm.fit_stat(df, s, asof, half_life_days=args.half_life, leagues=leagues) for s in sm.STATS}
+    kalibracja = json.loads((HERE.parents[1] / "config" / "mk2" / "kalibracja.json").read_text(encoding="utf-8"))
+    for s, f in fits.items():
+        if s in kalibracja:
+            f.deshrink(kalibracja[s]["atak"], kalibracja[s]["obrona"])
     goals_fit = sm.fit_stat(df, "goals", asof, leagues=leagues, **ss.GOALS_FIT)
     horizon = iso(now + dt.timedelta(days=args.days + 1))
     since = iso(now - dt.timedelta(hours=3))
@@ -1045,7 +1423,35 @@ def main() -> None:
                 ready_of_day[kind][day] = ks
 
     # near-certain events, a coupon made of them and same-match bet builders (stats_sure.py)
-    extra = ss.run(analysis, fac, fits, goals_fit, df, set(SHOWN), set(CUPS), made)
+    ledger = load_ledger(args.ledger or None)
+    n_retro = market_view_of_logged(pr, od, fx, fits)
+    cut, n_prices = bookmaker_cut(pr, ledger)
+    n_main = mark_logged_mains(pr, cut)
+    print(f"market: {n_retro} logged builders priced from the market, bookmaker's cut {cut:.3f} "
+          f"from {n_prices} typed prices, {n_main} earlier main proposals marked")
+    zawodnicy: dict[int, dict] = {}
+    kadry: dict[int, dict] = {}
+    absent = injuries_of(fx, [m["fixture_id"] for m in analysis["mecze"]])
+    try:
+        pl_rows = spl.load_players(list(MODEL_LEAGUES), since=(now - dt.timedelta(days=200)).date().isoformat())
+        teams_rows = sm.fill_known_zeros(df[df["kickoff"] >= pd.Timestamp(now - dt.timedelta(days=200))])
+        for m in analysis["mecze"]:
+            if m["liga_id"] in SHOWN and m["start"] > made:
+                # a player out or doubtful (the injury list) is not offered: bookmakers void a bet on a player
+                # who does not play, and a doubtful one may come on late
+                out = set(absent.get(m["fixture_id"], {}))
+                zawodnicy[m["fixture_id"]] = {side: spl.profiles(pl_rows, teams_rows, int(m[f"{side}_id"]), pd.Timestamp(now), out)
+                                              for side in ("home", "away")}
+                kadry[m["fixture_id"]] = {side: spl.squad(pl_rows, teams_rows, int(m[f"{side}_id"]), pd.Timestamp(now))
+                                          for side in ("home", "away")}
+    except Exception as e:      # the player legs are an addition: never fail the run on them
+        print(f"players: skipped ({e})")
+    print(f"players: likely starters for {sum(1 for z in zawodnicy.values() if z['home'] or z['away'])} matches, "
+          f"injury lists for {len(absent)} fixtures")
+    save_squads(kadry, made)
+    extra = ss.run(analysis, fac, fits, goals_fit, df, set(SHOWN), set(CUPS), made, odds, cut, zawodnicy)
+    extra["obciecie"], extra["n_kursow"] = cut, n_prices
+    extra["braki"] = absences(analysis["mecze"], absent, kadry)
     print(f"pewniaczki: {sum(len(v) for v in extra['pewne'].values())}, bet buildery: "
           f"{sum(len(v) for v in extra['bb'].values())}, kupony z pewniaczków: {len(extra['kupon_pewne'])}")
 
@@ -1102,7 +1508,8 @@ def main() -> None:
         pr.commit()
 
     if "export" not in skip:
-        export(Path(args.dest), analysis, factors, fits, df, teams, upcoming, days, ready_of_day, pr, fx, made, extra)
+        export(Path(args.dest), analysis, factors, fits, df, teams, upcoming, days, ready_of_day, pr, fx, made, extra,
+               xlsx=args.xlsx or None, ledger=ledger)
     print(f"requests used {client.used}, account remaining {client.remaining}")
 
 
@@ -1126,7 +1533,7 @@ def plan_items() -> list[dict]:
 
 def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFrame, teams: dict,
            upcoming: list, days: dict, ready_of_day: dict, pr: sqlite3.Connection, fx: sqlite3.Connection,
-           made: str, extra: dict | None = None) -> None:
+           made: str, extra: dict | None = None, xlsx: str | None = None, ledger: dict | None = None) -> None:
     extra = extra or {"pewne": {}, "bb": {}, "kupon_pewne": {}}
     dest.mkdir(parents=True, exist_ok=True)
     by_id = {f["fixture_id"]: f for f in upcoming}
@@ -1152,6 +1559,10 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         rec["n"] = [m.get("n_gosp"), m.get("n_gosc")]
         rec["czynniki"] = m.get("czynniki")
         rec["gole"] = (extra.get("gole") or {}).get(m["fixture_id"])
+        rec["rynek"] = (extra.get("rynek") or {}).get(m["fixture_id"])
+        rec["zawodnicy"] = (extra.get("zawodnicy") or {}).get(m["fixture_id"])
+        rec["braki"] = (extra.get("braki") or {}).get(m["fixture_id"])
+        rec["najpewniejsze"] = (extra.get("najpewniejsze") or {}).get(m["fixture_id"])
         for key in ("home_id", "away_id"):
             rec.pop(key)
         matches.append(rec)
@@ -1234,8 +1645,12 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         """A logged near-certain event or builder as the app shows it, with its result."""
         out = dict(r["payload"])
         out.update({"wynik": r["wynik"], "zapisano": r["made_at"]})
-        if r["kind"] == "pewniak":
+        if r["kind"] == "bb":
+            out.update(estimate(out, extra.get("obciecie", mk.CUT_PRIOR)))
+            out.setdefault("glowny", False)
+        if r["kind"] in ("pewniak", "zdarzenie"):
             out["wartosc"] = r["legs"][0].get("wartosc")     # what came in, as with the picks
+            out["legs"] = r["legs"]
         else:
             out["legs"] = r["legs"]
         return out
@@ -1257,10 +1672,13 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
         # near-certain events and builders: the logged ones (with results) where there are any
         picks_out[day]["pewne"] = ([logged_extra(r) for r in logged_x[(day, "pewniak")]] if (day, "pewniak") in logged_x
                                    else extra["pewne"].get(day, []))
-        picks_out[day]["bb"] = ([logged_extra(r) for r in logged_x[(day, "bb")]] if (day, "bb") in logged_x
+        picks_out[day]["bb"] = (ss.prune([logged_extra(r) for r in logged_x[(day, "bb")]]) if (day, "bb") in logged_x
                                 else extra["bb"].get(day, []))
         picks_out[day]["kupon_pewne"] = (logged_coupon(logged_cp[day]) if day in logged_cp
                                          else extra["kupon_pewne"].get(day))
+        # the likeliest event of each side of every match (logged, with results once settled)
+        picks_out[day]["zdarzenia"] = ([logged_extra(r) for r in logged_x[(day, "zdarzenie")]] if (day, "zdarzenie") in logged_x
+                                       else (extra.get("zdarzenia") or {}).get(day, []))
 
     # results: what came in and what did not, per day and in total
     def tally(items: list[dict]) -> dict:
@@ -1293,11 +1711,31 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     old_rows = [s for s in settled if not s.get("rules")]
     day_coupons = [c for c in coupons if c["kind"] == "2"]
 
+    # the logged builders as the app shows them (the same pruning as for new days, from pre-match data only)
+    shown_bb = []
+    by_day_bb: dict[str, list[dict]] = {}
+    for r in extras:
+        if r["kind"] == "bb":
+            by_day_bb.setdefault(r["day"], []).append(r)
+    for day, rs in by_day_bb.items():
+        views = []
+        for r in rs:
+            v = {**(r.get("payload") or {}), "p_model": r["p_model"], "fixture_id": r["fixture_id"], "legs": r["legs"], "_row": r}
+            v.update(estimate(v, extra.get("obciecie", mk.CUT_PRIOR)))
+            views.append(v)
+        shown_bb += [v["_row"] for v in ss.prune(views)]
+
     def hits(rows: list[dict]) -> dict:
         """Logged near-certain events or builders: how many came in, against the model's expectation."""
         done = [r for r in rows if r["wynik"]]
         return {"n": len(rows), "rozliczone": len(done), "trafione": sum(r["wynik"] == "wygrana" for r in done),
                 "oczekiwane": round(sum(r["p_model"] for r in done), 2)}
+    # what came in against what was promised, and whether picking the likeliest flatters the chances
+    analiza_bb = builder_analysis(shown_bb, extra.get("obciecie", mk.CUT_PRIOR))
+    analiza_bb["selekcja"] = selection_check([r for r in shown_bb if (r.get("payload") or {}).get("glowny")],
+                                             [r for r in shown_bb if not (r.get("payload") or {}).get("glowny")],
+                                             [r for r in extras if r["kind"] == "zdarzenie"])
+    save_selection(analiza_bb["selekcja"]["mnozniki"], made)
     # money: every paper bet ever logged (the old rules' day included; it is also shown on its own)
     cur_p = [logged_pick(s) for s in settled]
     cur_c = [logged_coupon(c) for c in day_coupons]
@@ -1335,7 +1773,10 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
               "stare_zasady": {"typy": tally([logged_pick(s) for s in old_rows]),
                                "kupony": tally([logged_coupon(c) for c in day_coupons if not c.get("rules")])},
               "pewniaki": hits([r for r in extras if r["kind"] == "pewniak"]),
-              "bet_buildery": hits([r for r in extras if r["kind"] == "bb"]),
+              "zdarzenia": hits([r for r in extras if r["kind"] == "zdarzenie"]),
+              "bet_buildery": hits([r for r in shown_bb if (r.get("payload") or {}).get("glowny")]),
+              "bet_buildery_testowe": hits([r for r in shown_bb if not (r.get("payload") or {}).get("glowny")]),
+              "analiza_bb": analiza_bb,
               "kupony_pewne": tally([logged_coupon(c) for c in coupons if c["kind"] == "pewne"]),
               "prognozy": track,
               "analiza": miss_analysis(cur_p),
@@ -1351,9 +1792,10 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
                       "alpha_total_puchary": round(f.dispersion("total", True), 5)}
                   for s, f in fits.items()},
         "podatek": 0.88,
-        "bb": {"wymiary": extra.get("bb_wymiary"), "korelacje": extra.get("bb_korelacje"), "miss": ss.BB_MISS,
+        "bb": {"wymiary": extra.get("bb_wymiary"), "korelacje": extra.get("bb_korelacje"), "miss": ss.BB_MISS * ss.selection_miss("bb"),
                "noga_p": ss.BB_LEG_P, "widelki": list(ss.BB_BAND)},
         "czynniki": {k: v for k, v in sf.load_config().items() if not k.startswith("_")},
+        "rynek": {"obciecie": round(extra.get("obciecie", mk.CUT_PRIOR), 4), "n_kursow": extra.get("n_kursow", 0)},
         "mecze": len(matches),
         "z_kursami": sum(1 for m in matches if m["kursy"]),
     }
@@ -1363,6 +1805,13 @@ def export(dest: Path, analysis: dict, factors: dict, fits: dict, df: pd.DataFra
     write("st_druzyny.json", teams)
     write("st_typy.json", picks_out)
     write("st_wyniki.json", wyniki)
+    if xlsx:
+        try:
+            import stats_excel as sx
+            n_x = sx.write_workbook(Path(xlsx), picks_out, made, wyniki.get("analiza_bb"), ledger)
+            print(f"excel: {n_x} builders -> {xlsx}")
+        except Exception as e:  # the workbook is a convenience: never fail the run on it
+            print(f"excel: failed ({e})")
     write("st_rozliczenia.json", finished)
     write("st_plan.json", plan_items())
     write("st_meta.json", meta)
@@ -1451,6 +1900,248 @@ def _hits(rows: list[dict]) -> dict:
     return {"n": len(rows), "trafione": sum(r["wynik"] == "wygrana" for r in rows),
             "oczekiwane": round(float(p.sum()), 1), "odchylenie": round(float(np.sqrt((p * (1 - p)).sum())), 1),
             "zysk": zysk, "roi": round(zysk / (STAKE * len(rows)), 4) if rows else None}
+
+
+# ---------------------------------------------------------------------------- builders: what did not come in
+
+LEG_TYPES = (("strzały w meczu", lambda l: l.get("stat") == "shots" and l.get("scope") == "total"),
+             ("celne w meczu", lambda l: l.get("stat") == "sot" and l.get("scope") == "total"),
+             ("rożne w meczu", lambda l: l.get("stat") == "corners" and l.get("scope") == "total"),
+             ("faule w meczu", lambda l: l.get("stat") == "fouls" and l.get("scope") == "total"),
+             ("kartki w meczu", lambda l: l.get("stat") == "cards" and l.get("scope") == "total"),
+             ("obie strzelą", lambda l: l.get("side") == "btts"),
+             ("wygrana", lambda l: l.get("stat") == "goals" and l.get("side") == "more"),
+             ("nie przegra", lambda l: l.get("side") == "win_draw"),
+             ("gol", lambda l: l.get("stat") == "goals"),
+             ("więcej strzałów", lambda l: l.get("stat") == "shots" and l.get("side") == "more"),
+             ("więcej rożnych", lambda l: l.get("stat") == "corners" and l.get("side") == "more"),
+             ("strzały", lambda l: l.get("stat") == "shots"),
+             ("celne", lambda l: l.get("stat") == "sot"),
+             ("rożne", lambda l: l.get("stat") == "corners"),
+             ("faule", lambda l: l.get("stat") == "fouls"),
+             ("celny strzał zawodnika", lambda l: l.get("stat") == "player_sot"),
+             ("kartki", lambda l: l.get("stat") == "cards"))
+KIND_RANK = {"bezpieczny": 0, "z_wynikiem": 1, "meczowy": 2, "mieszany": 3, "obie": 4, "zawodnik": 5}
+TAX_KEEP = 0.88
+
+
+def leg_type(l: dict) -> str:
+    for name, test in LEG_TYPES:
+        if test(l):
+            return name
+    return str(l.get("stat"))
+
+
+SEL_K = 30.0        # pseudo-misses on both sides: a correction needs misses well beyond the promised ones
+SEL_MIN_PTS = 1.0   # a correction smaller than this many points at the group's typical chance is noise: none
+SEL_MAX = 1.5
+
+
+def selection_check(main: list[dict], test: list[dict], events: list[dict]) -> dict:
+    """Do the proposals we pick come in as often as promised?  Picking the likeliest of many candidates can flatter
+    their chances (the colleague's register: promised 39%, came in 23%; user, 2026-11-03: lower them where needed).
+    Per group: settled, came in, promised (the chance shown), the market's where known, and a miss multiplier for new
+    proposals - misses against promised misses with SEL_K pseudo-misses on both sides, 1.0 when it would lower the
+    typical chance by less than SEL_MIN_PTS points, at most SEL_MAX; builders take the main ones' (the tests are
+    shown to compare).  Promised misses use the chance before an earlier correction (payload p_bez_selekcji), so a
+    correction does not undo itself."""
+    out = []
+    for key, name, rows in (("glowne", "Główne zestawy", main), ("testowe", "Testowe zestawy", test),
+                            ("zdarzenia", "Najpewniejsze zdarzenia", events)):
+        done = [r for r in rows if r.get("wynik") in ("wygrana", "przegrana")]
+        pay = [r.get("payload") or {} for r in done]
+        p = [float(r["p_model"]) for r in done]
+        p0 = [float(pl.get("p_bez_selekcji") or r["p_model"]) for r, pl in zip(done, pay)]
+        miss = sum(r["wynik"] == "przegrana" for r in done)
+        miss_p = sum(1 - x for x in p0)
+        f = (miss + SEL_K) / (miss_p + SEL_K) if done else 1.0
+        mean_p = sum(p0) / len(p0) if p0 else 0.0
+        f = 1.0 if 100 * (1 - mean_p) * (f - 1) < SEL_MIN_PTS else round(min(f, SEL_MAX), 3)
+        market = [float(pl["p_rynek"]) for pl in pay if pl.get("p_rynek")]
+        out.append({"grupa": key, "nazwa": name, "n": len(done), "trafione": len(done) - miss,
+                    "oczekiwane": round(sum(p), 1), "rynek": round(sum(market), 1), "rynek_n": len(market),
+                    "braki": miss, "braki_obiecane": round(miss_p, 1), "mnoznik": f,
+                    "korekta": ("tylko porównanie" if key == "testowe" else "bez zmian" if f == 1.0
+                                else f"szanse niżej o ok. {100 * (1 - mean_p) * (f - 1):.0f} pkt")})
+    by = {g["grupa"]: g for g in out}
+    mult = {"bb": by["glowne"]["mnoznik"], "zdarzenie": by["zdarzenia"]["mnoznik"]}
+    g0 = by["glowne"]
+    if not g0["n"]:
+        text = "Pierwsza ocena po rozliczeniu głównych zestawów."
+    elif all(v == 1.0 for v in mult.values()):
+        text = (f"Wybierane typy wchodzą tak często, jak obiecujemy (główne zestawy: {g0['trafione']} z {g0['n']}, model "
+                f"zakładał {g0['oczekiwane']:.0f}). Wybieranie najpewniejszych nie zawyża szans, więc niczego nie obniżamy; "
+                "sprawdzamy to po każdym rozliczeniu.")
+    else:
+        parts = [f"{by[k]['nazwa'].lower()}: {by[k]['korekta']}" for k in ("glowne", "zdarzenia") if by[k]["mnoznik"] > 1]
+        text = "Wybierane typy wchodzą rzadziej, niż obiecujemy, więc szanse nowych propozycji są obniżone (" + "; ".join(parts) + ")."
+    return {"grupy": out, "mnozniki": mult, "wniosek": text}
+
+
+def save_selection(mult: dict, made: str) -> None:
+    """The multipliers for the next proposals (stats_sure.selection_miss reads them)."""
+    try:
+        ss.SEL_FILE.write_text(json.dumps({**mult, "utworzono": made}), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def builder_analysis(rows: list[dict], cut: float = mk.CUT_PRIOR) -> dict:
+    """The main proposals' analysis (builder_analysis_of) with a short summary of the test variants."""
+    main = [r for r in rows if (r.get("payload") or {}).get("glowny")]
+    test = [r for r in rows if not (r.get("payload") or {}).get("glowny")]
+    out = builder_analysis_of(main, cut)
+    t = builder_analysis_of(test, cut)
+    out["testowe"] = {k: t[k] for k in ("n", "trafione", "oczekiwane", "grupy", "nogi", "przyczyny")}
+    return out
+
+
+def builder_analysis_of(rows: list[dict], cut: float = mk.CUT_PRIOR) -> dict:
+    """The settled builders (user, 2026-10-27: "analizować to, co nie wchodzi i wyciągnąć z tego wnioski"):
+    hit rates against the model by kind and level and by type of leg, every lost builder with the legs
+    that failed and by how much, a reason for each loss, and plain conclusions."""
+    done = [r for r in rows if r.get("wynik") in ("wygrana", "przegrana")]
+    out: dict = {"n": len(done), "trafione": sum(r["wynik"] == "wygrana" for r in done),
+                 "oczekiwane": round(sum(float(r["p_model"]) for r in done), 1),
+                 "grupy": [], "nogi": [], "przyczyny": [], "przegrane": [], "wnioski": []}
+    if not done:
+        return out
+    groups: dict[tuple, dict] = {}
+    for r in done:
+        p = r.get("payload") or {}
+        key = (p.get("rodzaj") or "bezpieczny", p.get("poziom") or "pewniej")
+        g = groups.setdefault(key, {"rodzaj": key[0], "poziom": key[1], "n": 0, "trafione": 0, "oczekiwane": 0.0, "zysk_szac": 0.0, "n_szac": 0})
+        g["n"] += 1
+        g["trafione"] += r["wynik"] == "wygrana"
+        g["oczekiwane"] += float(r["p_model"])
+        est = estimate({**p, "p_model": r["p_model"], "legs": r["legs"]}, cut)["kurs_szac"]
+        if est:
+            g["n_szac"] += 1
+            g["zysk_szac"] += 100 * (TAX_KEEP * est - 1) if r["wynik"] == "wygrana" else -100
+    out["grupy"] = [dict(g, oczekiwane=round(g["oczekiwane"], 1), zysk_szac=round(g["zysk_szac"]))
+                    for g in sorted(groups.values(), key=lambda g: (g["poziom"] != "pewniej", KIND_RANK.get(g["rodzaj"], 9)))]
+    legs: dict[str, dict] = {}
+    for r in done:
+        for l in r["legs"]:
+            if l.get("wynik") not in ("wygrana", "przegrana"):
+                continue
+            t = leg_type(l)
+            g = legs.setdefault(t, {"typ": t, "n": 0, "trafione": 0, "oczekiwane": 0.0})
+            g["n"] += 1
+            g["trafione"] += l["wynik"] == "wygrana"
+            g["oczekiwane"] += float(l.get("p_model") or 0)
+    out["nogi"] = [dict(g, oczekiwane=round(g["oczekiwane"], 1)) for g in sorted(legs.values(), key=lambda g: -g["n"])]
+    reasons: dict[str, int] = {}
+    for r in sorted(done, key=lambda r: r["start"], reverse=True):
+        if r["wynik"] != "przegrana":
+            continue
+        p = r.get("payload") or {}
+        failed = []
+        for l in r["legs"]:
+            if l.get("wynik") != "przegrana":
+                continue
+            f = {"opis": l.get("opis"), "typ": leg_type(l), "wartosc": l.get("wartosc")}
+            if l.get("side") == "over" and l.get("line") is not None and isinstance(l.get("wartosc"), (int, float)):
+                need = int(round(l["line"] + 0.5))
+                f["potrzeba"], f["zabraklo"] = need, int(need - l["wartosc"])
+            failed.append(f)
+        types = {f["typ"] for f in failed}
+        short = [f["zabraklo"] for f in failed if "zabraklo" in f]
+        if types and types <= {"wygrana", "nie przegra"}:
+            why = "wynik meczu"
+        elif types == {"gol"}:
+            why = "bez gola"
+        elif types == {"obie strzelą"}:
+            why = "obie strzelą"
+        elif short and len(short) == len(failed) and max(short) <= 2:
+            why = "o włos (zabrakło 1–2)"
+        elif short and len(short) == len(failed):
+            why = "daleko (zabrakło 3+)"
+        else:
+            why = "kilka nóg naraz"
+        reasons[why] = reasons.get(why, 0) + 1
+        out["przegrane"].append({"dzien": r["day"], "mecz": p.get("mecz"), "druzyna": p.get("druzyna"), "rodzaj": p.get("rodzaj"),
+                                 "poziom": p.get("poziom") or "pewniej", "p_model": r["p_model"], "nogi": failed, "przyczyna": why})
+    out["przyczyny"] = [{"przyczyna": k, "n": v} for k, v in sorted(reasons.items(), key=lambda kv: -kv[1])]
+    out["wnioski"] = builder_conclusions(out)
+    return out
+
+
+def builder_conclusions(a: dict) -> list[str]:
+    pc = lambda x: f"{round(100 * x)}%"  # noqa: E731
+    kind = {"bezpieczny": "bezpieczniejsze", "z_wynikiem": "z wynikiem meczu", "meczowy": "na cały mecz",
+            "mieszany": "mieszane (rożne, faule, kartki)", "obie": "obie drużyny / drużyna i mecz", "zawodnik": "z zawodnikiem"}
+    name = lambda g: kind.get(g["rodzaj"], g["rodzaj"]) + (" z wyższymi progami" if g["poziom"] == "wyzej" else "")  # noqa: E731
+    out = []
+    n, hit, exp = a["n"], a["trafione"], a["oczekiwane"]
+    if n >= 10:
+        gap = hit / n - exp / n
+        out.append(f"Zestawy wchodzą w {pc(hit / n)} przy zakładanych {pc(exp / n)}: model jest "
+                   + ("ostrożny, progi „graj od” są za wysokie." if gap > 0.04 else "za śmiały, szanse trzeba obniżyć." if gap < -0.04 else "dobrze skalibrowany."))
+    big = [g for g in a["grupy"] if g["n"] >= 8]
+    if len(big) >= 2:
+        best = max(big, key=lambda g: g["trafione"] / g["n"] - g["oczekiwane"] / g["n"])
+        worst = min(big, key=lambda g: g["trafione"] / g["n"] - g["oczekiwane"] / g["n"])
+        out.append(f"Najlepiej ponad plan: {name(best)} ({best['trafione']} z {best['n']}, zakładane {pc(best['oczekiwane'] / best['n'])}); "
+                   f"najsłabiej: {name(worst)} ({worst['trafione']} z {worst['n']}, zakładane {pc(worst['oczekiwane'] / worst['n'])}).")
+    legs = [g for g in a["nogi"] if g["n"] >= 10]
+    if legs:
+        weak = min(legs, key=lambda g: g["trafione"] / g["n"] - g["oczekiwane"] / g["n"])
+        strong = max(legs, key=lambda g: g["trafione"] / g["n"] - g["oczekiwane"] / g["n"])
+        out.append(f"Zdarzenia: najpewniejsze „{strong['typ']}” ({pc(strong['trafione'] / strong['n'])} przy zakładanych {pc(strong['oczekiwane'] / strong['n'])}), "
+                   f"najsłabsze „{weak['typ']}” ({pc(weak['trafione'] / weak['n'])} przy zakładanych {pc(weak['oczekiwane'] / weak['n'])}).")
+    lost = n - hit
+    if lost >= 5 and a["przyczyny"]:
+        top = a["przyczyny"][0]
+        share = top["n"] / lost
+        if top["przyczyna"] == "wynik meczu":
+            out.append(f"W {top['n']} z {lost} przegranych statystyki weszły, zawiódł wynik meczu: noga „wygra” albo „nie przegra” "
+                       "to zakład na faworyta, którego model nie zna lepiej niż bukmacher. Gdy kurs za wynik jest niski, graj wersję bezpieczniejszą.")
+        elif top["przyczyna"].startswith("o włos"):
+            out.append(f"{top['n']} z {lost} przegranych to brak 1–2 strzałów: progi leżą blisko granicy. Próg o 1 niżej w kalkulatorze "
+                       "kosztuje kilka punktów kursu, a zdejmuje większość takich porażek.")
+        elif top["przyczyna"].startswith("daleko"):
+            out.append(f"{top['n']} z {lost} przegranych to mecze, które poszły zupełnie inaczej (zabrakło 3+): wczesny gol, czerwona kartka, "
+                       "rywal cofnięty. Tego model nie przewidzi; to koszt stały strategii, nie błąd progu.")
+        elif top["przyczyna"] == "bez gola":
+            out.append(f"{top['n']} z {lost} przegranych przez brak gola faworyta przy trafionych statystykach: gol zależy od skuteczności, "
+                       "nie od przewagi; wersja „więcej strzałów niż rywal” zamiast „strzeli gola” wchodzi pewniej.")
+        if share < 0.5 and len(a["przyczyny"]) > 1:
+            out.append("Porażki rozkładają się na kilka przyczyn: " + ", ".join(f"{x['przyczyna']} ({x['n']})" for x in a["przyczyny"]) + ".")
+    lv = {g["poziom"]: g for g in a["grupy"] if g["poziom"] in ("pewniej", "wyzej")}
+    hi = [g for g in a["grupy"] if g["poziom"] == "wyzej"]
+    if hi and sum(g["n"] for g in hi) >= 10:
+        nh, th, eh = sum(g["n"] for g in hi), sum(g["trafione"] for g in hi), sum(g["oczekiwane"] for g in hi)
+        out.append(f"Wersje z wyższymi progami: {th} z {nh} ({pc(th / nh)}) przy zakładanych {pc(eh / nh)}.")
+    del lv
+    return out
+
+
+def load_ledger(folder: str | None) -> dict:
+    """The app's ledger dumped to a folder (ArtifactData: <folder>/kursy/*.json, <folder>/zaklady/*.json):
+    typed prices by builder key and the bets."""
+    out: dict = {"kursy": {}, "zaklady": []}
+    if not folder:
+        return out
+    base = Path(folder)
+    if not base.exists():
+        return out
+
+    def docs(name: str):
+        for f in sorted((base / name).glob("*.json")):
+            try:
+                d = json.loads(f.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(d, dict) and isinstance(d.get("data"), dict):
+                d = d["data"]
+            if isinstance(d, dict):
+                yield d
+    for d in docs("kursy"):
+        if d.get("bb") and d.get("kurs"):
+            out["kursy"][d["bb"]] = float(d["kurs"])
+    out["zaklady"] = list(docs("zaklady"))
+    return out
 
 
 def miss_analysis(items: list[dict]) -> dict:
